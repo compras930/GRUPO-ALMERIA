@@ -397,6 +397,21 @@ function render(){
   if (addBtn) addBtn.addEventListener('click', openAddPratoModal);
 }
 
+// ---------- Espelhamento entre unidades com cardápio idêntico ----------
+const UNIDADES_ESPELHADAS = {'104 Sul': 'Noroeste', 'Noroeste': '104 Sul'};
+
+function espelharPrato(unidadeOrigem, prato, mudancas){
+  const unidadeDestino = UNIDADES_ESPELHADAS[unidadeOrigem];
+  if (!unidadeDestino || !DATA[unidadeDestino]) return;
+  const destino = DATA[unidadeDestino].dishes.find(d => d.prato === prato);
+  if (!destino) return;
+  const clone = JSON.parse(JSON.stringify(mudancas));
+  Object.assign(destino, clone);
+  if (FICHA_LOOKUP[unidadeDestino] && clone.ingredientes) {
+    FICHA_LOOKUP[unidadeDestino][destino.ficha || destino.prato] = JSON.parse(JSON.stringify(clone.ingredientes));
+  }
+}
+
 function removePrato(idx){
   const item = window.__currentItems[idx];
   if (!item) return;
@@ -409,6 +424,7 @@ function removePrato(idx){
       ingrediente: '', campo: 'Ação', valor_antigo: '', valor_novo: 'REMOVER PRATO'});
     updateExportBar();
   }
+  if (currentTab === 'pratos') espelharPrato(window.__currentUnit, item.prato, { __removed: item.__removed });
   render();
 }
 
@@ -447,6 +463,12 @@ function openAddPratoModal(){
     if (!nome){ alert('Digite um nome.'); return; }
     const newItem = {categoria: cat, prato: nome, ficha: nome, custo: 0, venda: venda, cmv: null, margem: null, ingredientes: []};
     if (isWines) DATA[unit].wines.push(newItem); else DATA[unit].dishes.push(newItem);
+    if (!isWines) {
+      const unidadeEspelho = UNIDADES_ESPELHADAS[unit];
+      if (unidadeEspelho && DATA[unidadeEspelho] && !DATA[unidadeEspelho].dishes.find(d => d.prato === nome)) {
+        DATA[unidadeEspelho].dishes.push(JSON.parse(JSON.stringify(newItem)));
+      }
+    }
     pendingChanges.push({unidade: unit, prato: nome, ficha: nome, ingrediente: '', campo: 'Ação', valor_antigo: '', valor_novo: 'NOVO PRATO'});
     updateExportBar();
     closeModal();
@@ -677,6 +699,11 @@ function renderMainModal(){
       item.margem = item.venda !== null ? item.venda - item.custo : null;
       if (FICHA_LOOKUP[window.__currentUnit]) {
         FICHA_LOOKUP[window.__currentUnit][item.ficha || item.prato] = newIngredientes;
+      }
+      if (currentTab === 'pratos') {
+        espelharPrato(window.__currentUnit, item.prato, {
+          ingredientes: newIngredientes, custo: item.custo, cmv: item.cmv, margem: item.margem
+        });
       }
       updateExportBar();
       closeModal();
