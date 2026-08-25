@@ -1,0 +1,197 @@
+// Schema do sistema de Compras & Estoque — Grupo Almeria
+// Local: SQLite (arquivo). Produção: Postgres (Neon/Supabase) — só trocar DATABASE_URL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Cadastros base ----------
+
+model Unidade {
+  id        String   @id @default(cuid())
+  nome      String   @unique
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now())
+
+  usuarios       Usuario[]
+  pedidos        PedidoCompra[]
+  saldosEstoque  EstoqueSaldo[]
+  movimentos     MovimentoEstoque[]
+  contagens      ContagemEstoque[]
+}
+
+// Papel: "ADMIN" | "APROVADOR" | "SOLICITANTE" | "RECEBEDOR"
+// (SQLite não suporta enum nativo no Prisma; validação fica em src/lib/constants.ts + Zod)
+model Usuario {
+  id         String   @id @default(cuid())
+  nome       String
+  email      String   @unique
+  senhaHash  String
+  papel      String
+  ativo      Boolean  @default(true)
+  criadoEm   DateTime @default(now())
+
+  unidadeId  String?
+  unidade    Unidade? @relation(fields: [unidadeId], references: [id])
+
+  pedidosCriados     PedidoCompra[]     @relation("PedidoSolicitante")
+  pedidosAprovados   PedidoCompra[]     @relation("PedidoAprovador")
+  recebimentos       Recebimento[]      @relation("RecebimentoUsuario")
+  contagens          ContagemEstoque[]  @relation("ContagemUsuario")
+}
+
+model Fornecedor {
+  id        String   @id @default(cuid())
+  nome      String
+  cnpj      String?
+  contato   String?
+  telefone  String?
+  ativo     Boolean  @default(true)
+  criadoEm  DateTime @default(now())
+
+  pedidos   PedidoCompra[]
+}
+
+model Produto {
+  id             String  @id @default(cuid())
+  nome           String
+  categoria      String?
+  unidadeMedida  String  // ex: KG, UN, L, CX
+  ativo          Boolean @default(true)
+  criadoEm       DateTime @default(now())
+
+  itensPedido      ItemPedido[]
+  saldosEstoque    EstoqueSaldo[]
+  movimentos       MovimentoEstoque[]
+  contagens        ContagemEstoque[]
+
+  @@unique([nome, unidadeMedida])
+}
+
+// ---------- Pedido de compra ----------
+
+// Status: "RASCUNHO" | "AGUARDANDO_APROVACAO" | "APROVADO" | "REJEITADO" | "ENVIADO"
+//       | "RECEBIDO_PARCIAL" | "RECEBIDO_TOTAL" | "CANCELADO"
+model PedidoCompra {
+  id             String       @id @default(cuid())
+  numero         Int          @unique // gerado em app code (maior número + 1) ao criar o pedido
+  status         String       @default("RASCUNHO")
+  observacao     String?
+  criadoEm       DateTime     @default(now())
+  atualizadoEm   DateTime     @updatedAt
+
+  unidadeId      String
+  unidade        Unidade      @relation(fields: [unidadeId], references: [id])
+
+  fornecedorId   String
+  fornecedor     Fornecedor   @relation(fields: [fornecedorId], references: [id])
+
+  solicitanteId  String
+  solicitante    Usuario      @relation("PedidoSolicitante", fields: [solicitanteId], references: [id])
+
+  aprovadorId    String?
+  aprovador      Usuario?     @relation("PedidoAprovador", fields: [aprovadorId], references: [id])
+  aprovadoEm     DateTime?
+  motivoRejeicao String?
+
+  itens          ItemPedido[]
+  recebimentos   Recebimento[]
+}
+
+model ItemPedido {
+  id                  String       @id @default(cuid())
+  pedidoId            String
+  pedido              PedidoCompra @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+
+  produtoId           String
+  produto             Produto      @relation(fields: [produtoId], references: [id])
+
+  quantidade          Float
+  precoUnitEsperado   Float
+
+  itensRecebimento    ItemRecebimento[]
+}
+
+// ---------- Recebimento (conferência) ----------
+
+model Recebimento {
+  id             String       @id @default(cuid())
+  pedidoId       String
+  pedido         PedidoCompra @relation(fields: [pedidoId], references: [id])
+
+  recebidoPorId  String
+  recebidoPor    Usuario      @relation("RecebimentoUsuario", fields: [recebidoPorId], references: [id])
+
+  dataRecebimento DateTime    @default(now())
+  observacao      String?
+
+  itens           ItemRecebimento[]
+}
+
+model ItemRecebimento {
+  id                  String       @id @default(cuid())
+  recebimentoId       String
+  recebimento         Recebimento  @relation(fields: [recebimentoId], references: [id], onDelete: Cascade)
+
+  itemPedidoId        String
+  itemPedido          ItemPedido   @relation(fields: [itemPedidoId], references: [id])
+
+  quantidadeRecebida  Float
+  precoUnitRecebido   Float
+  // divergência é calculada em runtime a partir do itemPedido (qtd/preço esperados)
+}
+
+// ---------- Estoque ----------
+
+model EstoqueSaldo {
+  id          String   @id @default(cuid())
+  unidadeId   String
+  unidade     Unidade  @relation(fields: [unidadeId], references: [id])
+
+  produtoId   String
+  produto     Produto  @relation(fields: [produtoId], references: [id])
+
+  quantidade  Float    @default(0)
+  atualizadoEm DateTime @updatedAt
+
+  @@unique([unidadeId, produtoId])
+}
+
+// Tipo: "ENTRADA_RECEBIMENTO" | "SAIDA_CONSUMO" | "AJUSTE_CONTAGEM" | "AJUSTE_MANUAL"
+model MovimentoEstoque {
+  id           String        @id @default(cuid())
+  unidadeId    String
+  unidade      Unidade       @relation(fields: [unidadeId], references: [id])
+
+  produtoId    String
+  produto      Produto       @relation(fields: [produtoId], references: [id])
+
+  tipo         String
+  quantidade   Float         // positivo = entrada, negativo = saída
+  referencia   String?       // id do recebimento/contagem de origem, para rastreabilidade
+  observacao   String?
+  criadoEm     DateTime      @default(now())
+}
+
+model ContagemEstoque {
+  id                  String   @id @default(cuid())
+  unidadeId           String
+  unidade             Unidade  @relation(fields: [unidadeId], references: [id])
+
+  produtoId           String
+  produto             Produto  @relation(fields: [produtoId], references: [id])
+
+  quantidadeSistema   Float    // saldo de sistema no momento da contagem
+  quantidadeContada   Float    // saldo real contado
+  diferenca           Float    // contada - sistema
+
+  contadoPorId        String
+  contadoPor          Usuario  @relation("ContagemUsuario", fields: [contadoPorId], references: [id])
+
+  criadoEm            DateTime @default(now())
+}
