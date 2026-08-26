@@ -161,6 +161,7 @@
   <div class="tabbar" id="tabbar"></div>
   <div id="content"></div>
   <div id="modalRoot"></div>
+  <div id="confirmRoot"></div>
   <datalist id="listaInsumos"></datalist>
 <div id="printArea">
   <div class="print-header">
@@ -546,10 +547,33 @@ function renderSubreceitas(unit){
   });
 }
 
-function removePrato(idx){
+// Confirmação própria (não depende de window.confirm, que pode ficar sem
+// resposta visível dentro do sandbox de Artifacts). Some com um clique em
+// "Cancelar"/"Confirmar" ou clicando fora da caixa.
+function confirmarAcao(mensagem){
+  return new Promise((resolve) => {
+    const raiz = document.getElementById('confirmRoot');
+    raiz.innerHTML = `
+      <div class="modal-overlay" id="confirmOverlay" style="z-index:1100;">
+        <div class="modal-box" style="max-width:420px;">
+          <p style="font-size:14.5px;line-height:1.5;margin:0 0 22px;">${mensagem}</p>
+          <div class="modal-actions">
+            <button class="btn" id="confirmCancelBtn">Cancelar</button>
+            <button class="btn primary" id="confirmOkBtn">Confirmar</button>
+          </div>
+        </div>
+      </div>`;
+    const finalizar = (resultado) => { raiz.innerHTML = ''; resolve(resultado); };
+    document.getElementById('confirmCancelBtn').addEventListener('click', () => finalizar(false));
+    document.getElementById('confirmOkBtn').addEventListener('click', () => finalizar(true));
+    document.getElementById('confirmOverlay').addEventListener('click', (e) => { if (e.target.id === 'confirmOverlay') finalizar(false); });
+  });
+}
+
+async function removePrato(idx){
   const item = window.__currentItems[idx];
   if (!item) return;
-  if (!confirm(`Remover "${item.prato}" definitivamente desta unidade?`)) return;
+  if (!(await confirmarAcao(`Remover "${item.prato}" definitivamente desta unidade?`))) return;
   const unit = window.__currentUnit;
   const isWinesAtual = currentTab === 'vinhos';
   window.__currentItems.splice(idx, 1);
@@ -824,14 +848,14 @@ function abrirCriarSubreceita(nomeBusca){
   novaLinhaIngrediente();
 
   const modalSaveBtnNovaSub = document.getElementById('modalSaveBtn');
-  modalSaveBtnNovaSub.addEventListener('click', () => {
+  modalSaveBtnNovaSub.addEventListener('click', async () => {
     if (modalSaveBtnNovaSub.disabled) return;
     try {
     const nomeFinal = document.getElementById('novoSubNome').value.trim();
     if (!nomeFinal){ alert('Digite o nome definitivo da sub-receita.'); return; }
     const unit = window.__currentUnit;
     if (FICHA_LOOKUP[unit] && FICHA_LOOKUP[unit][nomeFinal]) {
-      if (!confirm(`Já existe uma sub-receita chamada "${nomeFinal}" nesta unidade. Substituir o conteúdo dela?`)) return;
+      if (!(await confirmarAcao(`Já existe uma sub-receita chamada "${nomeFinal}" nesta unidade. Substituir o conteúdo dela?`))) return;
     }
     const ingredientes = [];
     document.querySelectorAll('#ingBody tr').forEach(tr => {
@@ -1763,8 +1787,8 @@ async function salvarNaArtifact(){
 
 document.getElementById('exportDownload').addEventListener('click', exportChangesCsv);
 document.getElementById('exportSaveBtn').addEventListener('click', salvarNaArtifact);
-document.getElementById('exportDiscard').addEventListener('click', () => {
-  if (confirm('Descartar todas as alterações pendentes desta sessão?')){
+document.getElementById('exportDiscard').addEventListener('click', async () => {
+  if (await confirmarAcao('Descartar todas as alterações pendentes desta sessão?')){
     pendingChanges = [];
     updateExportBar();
   }
