@@ -906,6 +906,7 @@ function abrirCriarSubreceita(nomeBusca){
     updateExportBar();
     modalStack = [{nome: nomeFinal, ingredientes, readOnly: true, editMode: false}];
     renderTopModal();
+    notificar('Sub-receita criada com sucesso.', 'sucesso');
     } catch (e) {
       modalSaveBtnNovaSub.disabled = false;
       notificar('Não foi possível criar: ' + (e && e.message ? e.message : 'erro desconhecido') + '. Tente de novo — se continuar acontecendo, me avise com essa mensagem.');
@@ -1214,6 +1215,7 @@ function renderMainModal(){
       updateExportBar();
       closeModal();
       render();
+      notificar('Ficha salva com sucesso.', 'sucesso');
       } catch (e) {
         modalSaveBtnPrato.disabled = false;
         notificar('Não foi possível salvar: ' + (e && e.message ? e.message : 'erro desconhecido') + '. Tente de novo — se continuar acontecendo, me avise com essa mensagem.');
@@ -1407,6 +1409,7 @@ function renderDrillModal(state){
       state.ingredientes = FICHA_LOOKUP[unit][state.nome];
       state.editMode = false;
       renderDrillModal(state);
+      notificar('Sub-receita salva com sucesso.', 'sucesso');
       } catch (e) {
         modalSaveBtnSub.disabled = false;
         notificar('Não foi possível salvar: ' + (e && e.message ? e.message : 'erro desconhecido') + '. Tente de novo — se continuar acontecendo, me avise com essa mensagem.');
