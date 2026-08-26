@@ -534,6 +534,11 @@ function removePrato(idx){
   render();
 }
 
+function categoriasConhecidas(unit, isWines){
+  const lista = ((DATA[unit]||{})[isWines ? 'wines' : 'dishes']) || [];
+  return Array.from(new Set(lista.map(d => d.categoria).filter(Boolean))).sort((a,b) => a.localeCompare(b, 'pt-BR'));
+}
+
 function openAddPratoModal(){
   const unit = window.__currentUnit;
   const isWines = currentTab === 'vinhos';
@@ -545,8 +550,9 @@ function openAddPratoModal(){
         <p class="modal-eyebrow">${unit} · Novo ${isWines?'vinho':'prato'}</p>
         <h2 class="modal-title">Adicionar ${isWines?'vinho':'prato'}</h2>
         <div class="field-row">
-          <div class="field-group"><label>Categoria</label><input id="newCat" type="text" placeholder="Ex: Entradas"></div>
+          <div class="field-group"><label>Categoria</label><input id="newCat" type="text" placeholder="Ex: Entradas" list="listaCategoriasNovo"></div>
         </div>
+        <datalist id="listaCategoriasNovo">${categoriasConhecidas(unit, isWines).map(c => `<option value="${c.replace(/"/g,'&quot;')}">`).join('')}</datalist>
         <div class="field-row">
           <div class="field-group"><label>Nome do ${isWines?'vinho':'prato'}</label><input id="newNome" type="text" placeholder="Ex: Novo prato da casa"></div>
         </div>
@@ -853,8 +859,17 @@ function renderMainModal(){
         <button class="modal-close" id="modalCloseBtn" aria-label="Fechar">&times;</button>
         <p class="modal-eyebrow">${window.__currentUnit} · ${editMode ? 'Editando ficha técnica' : 'Ficha técnica'}</p>
         <h2 class="modal-title">${item.prato}</h2>
+        ${editMode ? `
+        <div class="field-group" style="max-width:280px;margin-bottom:14px;">
+          <label>Categoria</label>
+          <input type="text" id="categoriaInput" value="${(item.categoria||'').replace(/"/g,'&quot;')}" list="listaCategoriasModal" placeholder="Ex: Entradas">
+        </div>
+        <datalist id="listaCategoriasModal">${categoriasConhecidas(window.__currentUnit, currentTab === 'vinhos').map(c => `<option value="${c.replace(/"/g,'&quot;')}">`).join('')}</datalist>
+        ${item.ficha && item.ficha !== item.prato ? `<p class="modal-sub">Receita: ${item.ficha}</p>` : ''}
+        ` : `
         <p class="modal-sub">${item.categoria}${item.ficha && item.ficha !== item.prato ? ` · receita: ${item.ficha}` : ''}</p>
-        ${!editMode && item.foto ? `<img src="${item.foto}" alt="Foto de ${item.prato}" style="max-width:100%;max-height:260px;border:1.5px solid var(--ink);border-radius:4px;margin-bottom:16px;display:block;">` : ''}
+        ${item.foto ? `<img src="${item.foto}" alt="Foto de ${item.prato}" style="max-width:100%;max-height:260px;border:1.5px solid var(--ink);border-radius:4px;margin-bottom:16px;display:block;">` : ''}
+        `}
         <div class="modal-kpis">
           <div class="modal-kpi"><div class="l">Custo total</div><div class="v" id="modalCustoTotal">${fmtCurrency(item.custo)}</div></div>
           <div class="modal-kpi"><div class="l">Preço venda</div><div class="v">${fmtCurrency(item.venda)}</div></div>
@@ -1037,6 +1052,14 @@ function renderMainModal(){
       item.margem = item.venda !== null ? item.venda - item.custo : null;
       item.foto = window.__fotoEmEdicao || null;
 
+      const categoriaAntiga = item.categoria;
+      const categoriaNova = document.getElementById('categoriaInput').value.trim() || item.categoria || 'Sem categoria';
+      if (categoriaNova !== categoriaAntiga){
+        pendingChanges.push({unidade: window.__currentUnit, prato: item.prato, ficha: item.ficha||item.prato,
+          ingrediente: '', campo: 'Categoria', valor_antigo: categoriaAntiga, valor_novo: categoriaNova});
+      }
+      item.categoria = categoriaNova;
+
       const preparoLinhas = document.getElementById('preparoTexto').value.split('\n').map(l => l.trim()).filter(Boolean);
       const preparoNovo = preparoLinhas.length ? preparoLinhas.join(' | ') : null;
       const unit = window.__currentUnit;
@@ -1051,7 +1074,7 @@ function renderMainModal(){
       if (currentTab === 'pratos') {
         espelharPrato(unit, item.prato, {
           ingredientes: newIngredientes, custo: item.custo, cmv: item.cmv, margem: item.margem,
-          foto: item.foto, preparoTexto: preparoNovo
+          foto: item.foto, preparoTexto: preparoNovo, categoria: item.categoria
         });
       }
       atualizarListaInsumos();
