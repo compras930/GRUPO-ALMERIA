@@ -510,14 +510,118 @@ function findFichaByName(nome){
   return null;
 }
 
+const UNIDADES_ESPELHADAS_SUB = {'104 Sul': 'Noroeste', 'Noroeste': '104 Sul'};
+
+function espelharSubreceita(unidadeOrigem, nomeReceita, ingredientes, aliasOrigemNome){
+  const unidadeDestino = UNIDADES_ESPELHADAS_SUB[unidadeOrigem];
+  if (!unidadeDestino || !FICHA_LOOKUP[unidadeDestino]) return;
+  FICHA_LOOKUP[unidadeDestino][nomeReceita] = JSON.parse(JSON.stringify(ingredientes));
+  if (aliasOrigemNome && aliasOrigemNome !== nomeReceita && ALIAS_LOOKUP[unidadeDestino]) {
+    ALIAS_LOOKUP[unidadeDestino][aliasOrigemNome] = nomeReceita;
+  }
+}
+
 function openDrillDown(nome){
   const found = findFichaByName(nome);
   if (!found){
-    alert(`Não encontrei a receita de "${nome}" na base — pode ser um insumo direto sem ficha própria, ou o nome não bateu exatamente.`);
+    abrirCriarSubreceita(nome);
     return;
   }
-  modalStack.push({nome: found.resolvedName, ingredientes: found.ingredientes, readOnly: true});
+  modalStack.push({nome: found.resolvedName, ingredientes: found.ingredientes, readOnly: true, editMode: false});
   renderTopModal();
+}
+
+function abrirCriarSubreceita(nomeBusca){
+  const modalRoot = document.getElementById('modalRoot');
+  modalRoot.innerHTML = `
+    <div class="modal-overlay" id="modalOverlay">
+      <div class="modal-box">
+        <button class="modal-close" id="modalCloseBtn" aria-label="Fechar">&times;</button>
+        <p class="modal-eyebrow">${window.__currentUnit} · Sub-receita não encontrada</p>
+        <h2 class="modal-title">Criar sub-receita</h2>
+        <p class="modal-sub">Referenciada como "${nomeBusca}" — confirme o nome definitivo e monte a ficha.</p>
+        <div class="field-group" style="margin-bottom:16px;max-width:360px;">
+          <label>Nome definitivo</label>
+          <input type="text" id="novoSubNome" value="${nomeBusca.replace(/"/g,'&quot;')}">
+        </div>
+        <table class="ing-table">
+          <thead><tr><th>Ingrediente</th><th class="num">Unid.</th><th class="num">Qtd.</th><th class="num">Custo Unit.</th><th class="num">Custo Total</th><th></th></tr></thead>
+          <tbody id="ingBody"></tbody>
+          <tfoot><tr><td colspan="4">Total</td><td class="num" id="ingGrandTotal">${fmtCurrency(0)}</td><td></td></tr></tfoot>
+        </table>
+        <div class="add-ing-row"><button class="btn small" id="addIngBtn">+ Adicionar Ingrediente</button></div>
+        <div class="modal-actions">
+          <button class="btn" id="modalCancelBtn">Cancelar</button>
+          <button class="btn primary" id="modalSaveBtn">Criar sub-receita</button>
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
+  document.getElementById('modalCancelBtn').addEventListener('click', closeModal);
+  document.getElementById('modalOverlay').addEventListener('click', (e) => { if (e.target.id === 'modalOverlay') closeModal(); });
+
+  const recalc = () => {
+    let total = 0;
+    document.querySelectorAll('#ingBody tr').forEach(tr => {
+      const qtd = parseFloat(tr.querySelector('[data-field="quantidade"]').value) || 0;
+      const cu = parseFloat(tr.querySelector('[data-field="custo_unit"]').value) || 0;
+      const ct = qtd * cu;
+      tr.querySelector('.row-total').textContent = fmtCurrency(ct);
+      total += ct;
+    });
+    document.getElementById('ingGrandTotal').textContent = fmtCurrency(total);
+    return total;
+  };
+  const novaLinhaIngrediente = () => {
+    const tbody = document.getElementById('ingBody');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input class="ing-input" style="width:150px;text-align:left;" type="text" value="" data-field="ingrediente" placeholder="Nome do ingrediente" list="listaInsumos"></td>
+      <td class="num"><input class="ing-input" style="width:44px;" type="text" value="" data-field="unidade" placeholder="kg"></td>
+      <td class="num"><input class="ing-input" type="number" step="any" value="0" data-field="quantidade"></td>
+      <td class="num"><input class="ing-input" type="number" step="any" value="0" data-field="custo_unit"></td>
+      <td class="num row-total">${fmtCurrency(0)}</td>
+      <td><button class="ing-remove" data-remove-row="new" title="Remover ingrediente">&times;</button></td>`;
+    tbody.appendChild(tr);
+    tr.querySelectorAll('.ing-input').forEach(inp => inp.addEventListener('input', recalc));
+    tr.querySelector('[data-remove-row]').addEventListener('click', () => { tr.remove(); recalc(); });
+  };
+  document.getElementById('addIngBtn').addEventListener('click', novaLinhaIngrediente);
+  novaLinhaIngrediente();
+
+  document.getElementById('modalSaveBtn').addEventListener('click', () => {
+    const nomeFinal = document.getElementById('novoSubNome').value.trim();
+    if (!nomeFinal){ alert('Digite o nome definitivo da sub-receita.'); return; }
+    const unit = window.__currentUnit;
+    if (FICHA_LOOKUP[unit] && FICHA_LOOKUP[unit][nomeFinal]) {
+      if (!confirm(`Já existe uma sub-receita chamada "${nomeFinal}" nesta unidade. Substituir o conteúdo dela?`)) return;
+    }
+    const ingredientes = [];
+    document.querySelectorAll('#ingBody tr').forEach(tr => {
+      const nomeIng = tr.querySelector('[data-field="ingrediente"]').value.trim();
+      if (!nomeIng) return;
+      const unidadeIng = tr.querySelector('[data-field="unidade"]').value.trim();
+      const qtd = parseFloat(tr.querySelector('[data-field="quantidade"]').value) || 0;
+      const cu = parseFloat(tr.querySelector('[data-field="custo_unit"]').value) || 0;
+      ingredientes.push({ingrediente: nomeIng, tipo: 'Insumo', unidade: unidadeIng, quantidade: qtd, custo_unit: cu, custo_total: qtd*cu});
+    });
+    if (ingredientes.length === 0){ alert('Adicione ao menos um ingrediente.'); return; }
+
+    if (!FICHA_LOOKUP[unit]) FICHA_LOOKUP[unit] = {};
+    FICHA_LOOKUP[unit][nomeFinal] = ingredientes;
+    if (nomeFinal !== nomeBusca) {
+      if (!ALIAS_LOOKUP[unit]) ALIAS_LOOKUP[unit] = {};
+      ALIAS_LOOKUP[unit][nomeBusca] = nomeFinal;
+    }
+    espelharSubreceita(unit, nomeFinal, ingredientes, nomeFinal !== nomeBusca ? nomeBusca : null);
+    pendingChanges.push({unidade: unit, prato: nomeFinal, ficha: nomeFinal, ingrediente: '', campo: 'Ação',
+      valor_antigo: '', valor_novo: 'NOVA SUB-RECEITA'});
+    atualizarListaInsumos();
+    updateExportBar();
+    modalStack = [{nome: nomeFinal, ingredientes, readOnly: true, editMode: false}];
+    renderTopModal();
+  });
 }
 
 function renderTopModal(){
@@ -717,54 +821,74 @@ function renderMainModal(){
 function renderDrillModal(state){
   const modalRoot = document.getElementById('modalRoot');
   const ingredientes = state.ingredientes;
+  const editMode = !!state.editMode;
   const totalCusto = ingredientes.reduce((s,i) => s + (i.custo_total||0), 0);
   const breadcrumb = modalStack.map(s => s.nome || (s.item && s.item.prato)).join(' → ');
 
   let rows = '';
-  ingredientes.forEach(ing => {
+  ingredientes.forEach((ing, i) => {
     const isSub = ing.tipo === 'Subproduto';
     const tipoTag = isSub ? '<span class="tipo-sub">Subproduto</span>' : '<span class="tipo-sub" style="color:#8b8266">Insumo</span>';
-    const nomeCell = isSub
-      ? `<span class="prato-clickable" data-drill="${(ing.ingrediente||'').replace(/"/g,'&quot;')}" style="cursor:pointer;text-decoration:underline;text-decoration-color:var(--line);">${ing.ingrediente}</span>`
-      : ing.ingrediente;
-    rows += `<tr>
-      <td>${nomeCell} ${tipoTag}</td>
-      <td class="num">${ing.unidade||''}</td>
-      <td class="num">${ing.quantidade ?? ''}</td>
-      <td class="num">${fmtCurrency(ing.custo_unit)}</td>
-      <td class="num">${fmtCurrency(ing.custo_total)}</td>
-    </tr>`;
+    if (editMode){
+      rows += `<tr data-ing-idx="${i}">
+        <td><input class="ing-input" style="width:150px;text-align:left;" type="text" value="${(ing.ingrediente||'').replace(/"/g,'&quot;')}" data-field="ingrediente" list="listaInsumos"> ${tipoTag}</td>
+        <td class="num"><input class="ing-input" style="width:44px;" type="text" value="${ing.unidade||''}" data-field="unidade"></td>
+        <td class="num"><input class="ing-input" type="number" step="any" value="${ing.quantidade ?? ''}" data-field="quantidade"></td>
+        <td class="num"><input class="ing-input" type="number" step="any" value="${ing.custo_unit ?? ''}" data-field="custo_unit"></td>
+        <td class="num row-total">${fmtCurrency(ing.custo_total)}</td>
+        <td><button class="ing-remove" data-remove-row="${i}" title="Remover ingrediente">&times;</button></td>
+      </tr>`;
+    } else {
+      const nomeCell = isSub
+        ? `<span class="prato-clickable" data-drill="${(ing.ingrediente||'').replace(/"/g,'&quot;')}" style="cursor:pointer;text-decoration:underline;text-decoration-color:var(--line);">${ing.ingrediente}</span>`
+        : ing.ingrediente;
+      rows += `<tr>
+        <td>${nomeCell} ${tipoTag}</td>
+        <td class="num">${ing.unidade||''}</td>
+        <td class="num">${ing.quantidade ?? ''}</td>
+        <td class="num">${fmtCurrency(ing.custo_unit)}</td>
+        <td class="num">${fmtCurrency(ing.custo_total)}</td>
+      </tr>`;
+    }
   });
 
   const modalHtml = `
     <div class="modal-overlay" id="modalOverlay">
       <div class="modal-box">
         <button class="modal-close" id="modalCloseBtn" aria-label="Fechar">&times;</button>
-        <p class="modal-eyebrow">${window.__currentUnit} · Sub-receita · ${breadcrumb}</p>
+        <p class="modal-eyebrow">${window.__currentUnit} · ${editMode ? 'Editando sub-receita' : 'Sub-receita'} · ${breadcrumb}</p>
         <h2 class="modal-title">${state.nome}</h2>
         <div class="modal-kpis">
-          <div class="modal-kpi"><div class="l">Custo total do lote</div><div class="v">${fmtCurrency(totalCusto)}</div></div>
+          <div class="modal-kpi"><div class="l">Custo total do lote</div><div class="v" id="modalCustoTotal">${fmtCurrency(totalCusto)}</div></div>
         </div>
         <table class="ing-table">
-          <thead><tr><th>Ingrediente</th><th class="num">Unid.</th><th class="num">Qtd.</th><th class="num">Custo Unit.</th><th class="num">Custo Total</th></tr></thead>
-          <tbody>${rows}</tbody>
-          <tfoot><tr><td colspan="4">Total</td><td class="num">${fmtCurrency(totalCusto)}</td></tr></tfoot>
+          <thead><tr><th>Ingrediente</th><th class="num">Unid.</th><th class="num">Qtd.</th><th class="num">Custo Unit.</th><th class="num">Custo Total</th>${editMode?'<th></th>':''}</tr></thead>
+          <tbody id="ingBody">${rows}</tbody>
+          <tfoot><tr><td colspan="4">Total</td><td class="num" id="ingGrandTotal">${fmtCurrency(totalCusto)}</td>${editMode?'<td></td>':''}</tr></tfoot>
         </table>
+        ${editMode ? `<div class="add-ing-row"><button class="btn small" id="addIngBtn">+ Adicionar Ingrediente</button></div>` : ''}
         <div class="modal-actions">
-          <button class="btn pdf" id="modalGerarPdfBtn">🖨️ Gerar PDF</button>
-          ${modalStack.length > 1 ? `<button class="btn" id="modalBackBtn">← Voltar</button>` : ''}
-          <button class="btn primary" id="modalCloseBtn2">Fechar tudo</button>
+          ${!editMode ? `<button class="btn pdf" id="modalGerarPdfBtn">🖨️ Gerar PDF</button><button class="btn" id="modalEditBtn">Editar</button>` : ''}
+          ${editMode ? `<button class="btn" id="modalCancelBtn">Cancelar</button><button class="btn primary" id="modalSaveBtn">Salvar alterações</button>` : ''}
+          ${!editMode && modalStack.length > 1 ? `<button class="btn" id="modalBackBtn">← Voltar</button>` : ''}
+          ${!editMode ? `<button class="btn primary" id="modalCloseBtn2">Fechar tudo</button>` : ''}
         </div>
       </div>
     </div>`;
   modalRoot.innerHTML = modalHtml;
 
   document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
-  document.getElementById('modalCloseBtn2').addEventListener('click', closeModal);
   document.getElementById('modalOverlay').addEventListener('click', (e) => { if (e.target.id === 'modalOverlay') closeModal(); });
-  document.getElementById('modalGerarPdfBtn').addEventListener('click', () => {
+  const closeBtn2 = document.getElementById('modalCloseBtn2');
+  if (closeBtn2) closeBtn2.addEventListener('click', closeModal);
+  const cancelBtn = document.getElementById('modalCancelBtn');
+  if (cancelBtn) cancelBtn.addEventListener('click', () => { state.editMode = false; renderDrillModal(state); });
+  const pdfBtn = document.getElementById('modalGerarPdfBtn');
+  if (pdfBtn) pdfBtn.addEventListener('click', () => {
     gerarPDF(state.nome, ingredientes, totalCusto, null, null, true);
   });
+  const editBtn = document.getElementById('modalEditBtn');
+  if (editBtn) editBtn.addEventListener('click', () => { state.editMode = true; renderDrillModal(state); });
   const backBtn = document.getElementById('modalBackBtn');
   if (backBtn) backBtn.addEventListener('click', () => {
     modalStack.pop();
@@ -774,6 +898,72 @@ function renderDrillModal(state){
   document.querySelectorAll('[data-drill]').forEach(el => {
     el.addEventListener('click', () => openDrillDown(el.dataset.drill));
   });
+
+  if (editMode){
+    const recalc = () => {
+      let total = 0;
+      document.querySelectorAll('#ingBody tr').forEach(tr => {
+        const qtd = parseFloat(tr.querySelector('[data-field="quantidade"]').value) || 0;
+        const cu = parseFloat(tr.querySelector('[data-field="custo_unit"]').value) || 0;
+        const ct = qtd * cu;
+        tr.querySelector('.row-total').textContent = fmtCurrency(ct);
+        total += ct;
+      });
+      document.getElementById('ingGrandTotal').textContent = fmtCurrency(total);
+      document.getElementById('modalCustoTotal').textContent = fmtCurrency(total);
+      return total;
+    };
+    document.querySelectorAll('.ing-input').forEach(inp => inp.addEventListener('input', recalc));
+    document.querySelectorAll('[data-remove-row]').forEach(btn => {
+      btn.addEventListener('click', () => { btn.closest('tr').remove(); recalc(); });
+    });
+    const addIngBtn = document.getElementById('addIngBtn');
+    if (addIngBtn) addIngBtn.addEventListener('click', () => {
+      const tbody = document.getElementById('ingBody');
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input class="ing-input" style="width:150px;text-align:left;" type="text" value="" data-field="ingrediente" placeholder="Nome do ingrediente" list="listaInsumos"></td>
+        <td class="num"><input class="ing-input" style="width:44px;" type="text" value="" data-field="unidade" placeholder="kg"></td>
+        <td class="num"><input class="ing-input" type="number" step="any" value="0" data-field="quantidade"></td>
+        <td class="num"><input class="ing-input" type="number" step="any" value="0" data-field="custo_unit"></td>
+        <td class="num row-total">${fmtCurrency(0)}</td>
+        <td><button class="ing-remove" data-remove-row="new" title="Remover ingrediente">&times;</button></td>`;
+      tbody.appendChild(tr);
+      tr.querySelectorAll('.ing-input').forEach(inp => inp.addEventListener('input', recalc));
+      tr.querySelector('[data-remove-row]').addEventListener('click', () => { tr.remove(); recalc(); });
+    });
+
+    document.getElementById('modalSaveBtn').addEventListener('click', () => {
+      const newTotal = recalc();
+      const oldIngredientes = ingredientes;
+      const newIngredientes = [];
+      document.querySelectorAll('#ingBody tr').forEach(tr => {
+        const i = tr.dataset.ingIdx !== undefined ? parseInt(tr.dataset.ingIdx) : null;
+        const oldIng = (i !== null && !isNaN(i)) ? oldIngredientes[i] : null;
+        const newNome = tr.querySelector('[data-field="ingrediente"]').value.trim();
+        if (!newNome) return;
+        const newUnid = tr.querySelector('[data-field="unidade"]').value.trim();
+        const newQtd = parseFloat(tr.querySelector('[data-field="quantidade"]').value) || 0;
+        const newCu = parseFloat(tr.querySelector('[data-field="custo_unit"]').value) || 0;
+        newIngredientes.push({ingrediente: newNome, tipo: oldIng ? oldIng.tipo : 'Insumo', unidade: newUnid,
+          quantidade: newQtd, custo_unit: newCu, custo_total: newQtd*newCu});
+      });
+      if (newIngredientes.length === 0){ alert('A sub-receita precisa de ao menos um ingrediente.'); return; }
+
+      pendingChanges.push({unidade: window.__currentUnit, prato: state.nome, ficha: state.nome,
+        ingrediente: '', campo: 'Editar Sub-receita', valor_antigo: '', valor_novo: `${newIngredientes.length} ingrediente(s), custo ${fmtCurrency(newTotal)}`});
+
+      const unit = window.__currentUnit;
+      if (FICHA_LOOKUP[unit]) FICHA_LOOKUP[unit][state.nome] = newIngredientes;
+      espelharSubreceita(unit, state.nome, newIngredientes);
+      atualizarListaInsumos();
+      updateExportBar();
+
+      state.ingredientes = newIngredientes;
+      state.editMode = false;
+      renderDrillModal(state);
+    });
+  }
 }
 
 // Gerador de PDF standalone (sem bibliotecas externas) para a Ficha Técnica.
