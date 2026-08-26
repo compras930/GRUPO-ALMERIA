@@ -231,6 +231,21 @@ function fmtPct(v){
   if (v === null || v === undefined) return '—';
   return (v*100).toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1}) + '%';
 }
+// Ingredientes lançados em g/ml guardam quantidade e custo_unit nessa mesma
+// unidade (ex: 140 g a R$0,0579/g). Isso está matematicamente certo (o
+// custo_total já sai correto), mas o "custo unit." fica com um número
+// estranho (R$0,06) que não é o preço que a unidade paga por kg/L.
+// Para exibição, convertemos pra kg/L, que é o preço reconhecível.
+function exibicaoIngrediente(ing){
+  const u = (ing.unidade || '').trim().toLowerCase();
+  if (u === 'g') {
+    return { unidade: 'kg', quantidade: (ing.quantidade||0)/1000, custoUnit: (ing.custo_unit||0)*1000 };
+  }
+  if (u === 'ml') {
+    return { unidade: 'L', quantidade: (ing.quantidade||0)/1000, custoUnit: (ing.custo_unit||0)*1000 };
+  }
+  return { unidade: ing.unidade || '', quantidade: ing.quantidade, custoUnit: ing.custo_unit };
+}
 function cmvColor(v, meta){
   if (v === null || v === undefined) return '#B9AF95';
   if (v <= meta) return 'var(--ok)';
@@ -808,11 +823,12 @@ function renderMainModal(){
         <td><button class="ing-remove" data-remove-row="${i}" title="Remover ingrediente">&times;</button></td>
       </tr>`;
     } else {
+      const exib = exibicaoIngrediente(ing);
       rows += `<tr>
         <td>${nomeCell} ${tipoTag}</td>
-        <td class="num">${ing.unidade||''}</td>
-        <td class="num">${ing.quantidade ?? ''}</td>
-        <td class="num">${fmtCurrency(ing.custo_unit)}</td>
+        <td class="num">${exib.unidade}</td>
+        <td class="num">${exib.quantidade ?? ''}</td>
+        <td class="num">${fmtCurrency(exib.custoUnit)}</td>
         <td class="num">${fmtCurrency(ing.custo_total)}</td>
       </tr>`;
     }
@@ -989,11 +1005,12 @@ function renderDrillModal(state){
       const nomeCell = isSub
         ? `<span class="prato-clickable" data-drill="${(ing.ingrediente||'').replace(/"/g,'&quot;')}" style="cursor:pointer;text-decoration:underline;text-decoration-color:var(--line);">${ing.ingrediente}</span>`
         : ing.ingrediente;
+      const exib = exibicaoIngrediente(ing);
       rows += `<tr>
         <td>${nomeCell} ${tipoTag}</td>
-        <td class="num">${ing.unidade||''}</td>
-        <td class="num">${ing.quantidade ?? ''}</td>
-        <td class="num">${fmtCurrency(ing.custo_unit)}</td>
+        <td class="num">${exib.unidade}</td>
+        <td class="num">${exib.quantidade ?? ''}</td>
+        <td class="num">${fmtCurrency(exib.custoUnit)}</td>
         <td class="num">${fmtCurrency(ing.custo_total)}</td>
       </tr>`;
     }
@@ -1308,10 +1325,11 @@ function construirFichaPDF({ unidade, nome, isSubreceita, precoVenda, cmv, ingre
     linhasNome.forEach((l, li) => {
       texto(xColuna(0) + 6, y - 12 - li * LINE_H, l, 9, { color: COR_TITULO });
     });
+    const exib = exibicaoIngrediente(ing);
     const outrasCols = [
-      ing.unidade || "",
-      String(ing.quantidade ?? ""),
-      fmtCurrency(ing.custo_unit),
+      exib.unidade || "",
+      String(exib.quantidade ?? ""),
+      fmtCurrency(exib.custoUnit),
       fmtCurrency(ing.custo_total),
     ];
     outrasCols.forEach((val, i) => {
