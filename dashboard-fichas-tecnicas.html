@@ -776,42 +776,321 @@ function renderDrillModal(state){
   });
 }
 
-function gerarPDF(nome, ingredientes, custoTotal, venda, cmv, isSubreceita, fichaKey){
-  const unit = window.__currentUnit;
-  document.getElementById('printUnidade').textContent = unit + (isSubreceita ? ' — Sub-receita' : '');
-  document.getElementById('printNome').textContent = nome;
+// Gerador de PDF standalone (sem bibliotecas externas) para a Ficha Técnica.
+// Portável para o navegador tal como está (usa só recursos padrão de JS/Uint8Array).
 
-  let metaParts = [];
-  if (!isSubreceita && venda !== null && venda !== undefined) metaParts.push('Preço de Venda: ' + fmtCurrency(venda));
-  if (!isSubreceita && cmv !== null && cmv !== undefined) metaParts.push('CMV: ' + fmtPct(cmv));
-  document.getElementById('printMeta').textContent = metaParts.join('    |    ');
+function construirFichaPDF({ unidade, nome, isSubreceita, precoVenda, cmv, ingredientes, custoTotal, preparoTexto }) {
+  const PAGE_W = 595.28, PAGE_H = 841.89, MARGIN = 48;
+  const CONTENT_W = PAGE_W - 2 * MARGIN;
+  const TOP_Y = PAGE_H - MARGIN;
+  const BOTTOM_Y = MARGIN;
 
-  let rows = '';
-  ingredientes.forEach(ing => {
-    rows += `<tr>
-      <td>${ing.ingrediente}${ing.tipo === 'Subproduto' ? ' (sub-receita)' : ''}</td>
-      <td class="num">${ing.unidade || ''}</td>
-      <td class="num">${ing.quantidade ?? ''}</td>
-      <td class="num">${fmtCurrency(ing.custo_unit)}</td>
-      <td class="num">${fmtCurrency(ing.custo_total)}</td>
-    </tr>`;
-  });
-  document.getElementById('printIngBody').innerHTML = rows;
-  document.getElementById('printTotal').textContent = fmtCurrency(custoTotal);
+  const COR_TITULO = [0x1b / 255, 0x2a / 255, 0x22 / 255];
+  const COR_AZUL = [0x1f / 255, 0x4e / 255, 0x78 / 255];
+  const COR_CINZA = [0x44 / 255, 0x44 / 255, 0x44 / 255];
+  const COR_CINZA_CLARO = [0x99 / 255, 0x99 / 255, 0x99 / 255];
+  const COR_LINHA = [0xdd / 255, 0xdd / 255, 0xdd / 255];
+  const COR_BRANCO = [1, 1, 1];
 
-  const preparoDict = PREPARO_LOOKUP[unit] || {};
-  const preparo = preparoDict[fichaKey || nome];
-  const preparoBlock = document.getElementById('printPreparoBlock');
-  if (preparo) {
-    document.getElementById('printPreparo').textContent = preparo.replace(/\|/g, '\n');
-    preparoBlock.style.display = 'block';
-  } else {
-    preparoBlock.style.display = 'none';
+  function charW(ch, bold) {
+    if (ch === " ") return 0.28;
+    if ("iIl.,':;!|jf".includes(ch)) return 0.28;
+    if ("mMW".includes(ch)) return bold ? 0.94 : 0.83;
+    if (ch >= "A" && ch <= "Z") return bold ? 0.78 : 0.72;
+    if (ch >= "0" && ch <= "9") return 0.556;
+    return bold ? 0.58 : 0.5;
+  }
+  function textWidth(str, size, bold) {
+    let w = 0;
+    for (const ch of str) w += charW(ch, bold) * size;
+    return w;
+  }
+  function truncar(str, maxW, size, bold) {
+    if (textWidth(str, size, bold) <= maxW) return str;
+    let out = "";
+    for (const ch of str) {
+      if (textWidth(out + ch + "…", size, bold) > maxW) break;
+      out += ch;
+    }
+    return out + "…";
+  }
+  function wrapText(str, maxW, size, bold) {
+    const palavras = String(str || "").split(/\s+/).filter(Boolean);
+    const linhas = [];
+    let atual = "";
+    for (const palavra of palavras) {
+      const tentativa = atual ? atual + " " + palavra : palavra;
+      if (textWidth(tentativa, size, bold) > maxW && atual) {
+        linhas.push(atual);
+        atual = palavra;
+      } else {
+        atual = tentativa;
+      }
+    }
+    if (atual) linhas.push(atual);
+    return linhas.length ? linhas : [""];
   }
 
-  document.getElementById('printData').textContent = new Date().toLocaleDateString('pt-BR');
+  const WINANSI_ESPECIAIS = {
+    "—": 0x97, "–": 0x96, "‘": 0x91, "’": 0x92,
+    "“": 0x93, "”": 0x94, "…": 0x85,
+  };
+  function pdfEscapeText(str) {
+    let out = "";
+    for (const ch of String(str)) {
+      let code = ch.codePointAt(0);
+      if (WINANSI_ESPECIAIS[ch] !== undefined) code = WINANSI_ESPECIAIS[ch];
+      if (code > 255) code = 63; // '?'
+      const b = String.fromCharCode(code);
+      out += b === "(" || b === ")" || b === "\\" ? "\\" + b : b;
+    }
+    return out;
+  }
 
-  window.print();
+  // ---------- monta páginas ----------
+  const paginas = []; // cada uma é um array de comandos de content stream (strings)
+  let cmd = [];
+  let y = TOP_Y;
+
+  function novaPagina(onNovaPagina) {
+    paginas.push(cmd);
+    cmd = [];
+    y = TOP_Y;
+    if (onNovaPagina) onNovaPagina();
+  }
+  function espacoOuNovaPagina(altura, onNovaPagina) {
+    if (y - altura < BOTTOM_Y) {
+      novaPagina(onNovaPagina);
+      return true;
+    }
+    return false;
+  }
+  function texto(x, yy, str, size, { bold = false, color = COR_TITULO } = {}) {
+    const fonte = bold ? "/F2" : "/F1";
+    cmd.push(
+      `BT ${fonte} ${size} Tf ${color[0].toFixed(3)} ${color[1].toFixed(3)} ${color[2].toFixed(3)} rg 1 0 0 1 ${x.toFixed(2)} ${yy.toFixed(2)} Tm (${pdfEscapeText(str)}) Tj ET`
+    );
+  }
+  function retangulo(x, yy, w, h, color) {
+    cmd.push(`${color[0].toFixed(3)} ${color[1].toFixed(3)} ${color[2].toFixed(3)} rg ${x.toFixed(2)} ${yy.toFixed(2)} ${w.toFixed(2)} ${h.toFixed(2)} re f`);
+  }
+  function linha(x1, y1, x2, y2, color, largura) {
+    cmd.push(`${color[0].toFixed(3)} ${color[1].toFixed(3)} ${color[2].toFixed(3)} RG ${largura} w ${x1.toFixed(2)} ${y1.toFixed(2)} m ${x2.toFixed(2)} ${y2.toFixed(2)} l S`);
+  }
+
+  // ---------- cabeçalho ----------
+  texto(MARGIN, y, "GRUPO ALMERIA", 9, { bold: true, color: COR_AZUL });
+  texto(PAGE_W - MARGIN - textWidth(unidade + (isSubreceita ? " — Sub-receita" : ""), 9, false), y, unidade + (isSubreceita ? " — Sub-receita" : ""), 9, { color: COR_CINZA });
+  y -= 8;
+  linha(MARGIN, y, PAGE_W - MARGIN, y, COR_AZUL, 1.5);
+  y -= 26;
+
+  const linhasTitulo = wrapText(nome, CONTENT_W, 18, true);
+  linhasTitulo.forEach((l) => {
+    texto(MARGIN, y, l, 18, { bold: true });
+    y -= 22;
+  });
+
+  if (!isSubreceita && (precoVenda !== null && precoVenda !== undefined)) {
+    const metaTxt = `Preço de Venda: ${fmtCurrency(precoVenda)}    |    CMV: ${fmtPct(cmv)}`;
+    texto(MARGIN, y, metaTxt, 10.5, { color: COR_CINZA });
+    y -= 22;
+  } else {
+    y -= 4;
+  }
+
+  // ---------- tabela de ingredientes ----------
+  const COLS = [
+    { titulo: "Ingrediente", w: CONTENT_W * 0.4, align: "left" },
+    { titulo: "Unid.", w: CONTENT_W * 0.1, align: "right" },
+    { titulo: "Qtd.", w: CONTENT_W * 0.15, align: "right" },
+    { titulo: "Custo Unit.", w: CONTENT_W * 0.17, align: "right" },
+    { titulo: "Custo Total", w: CONTENT_W * 0.18, align: "right" },
+  ];
+  function xColuna(i) {
+    let x = MARGIN;
+    for (let k = 0; k < i; k++) x += COLS[k].w;
+    return x;
+  }
+  function desenhaCabecalhoTabela() {
+    retangulo(MARGIN, y - 20, CONTENT_W, 20, COR_AZUL);
+    COLS.forEach((c, i) => {
+      const x = c.align === "right" ? xColuna(i) + c.w - 6 - textWidth(c.titulo, 8.5, true) : xColuna(i) + 6;
+      texto(x, y - 14, c.titulo, 8.5, { bold: true, color: COR_BRANCO });
+    });
+    y -= 20;
+  }
+  espacoOuNovaPagina(20 + 16);
+  desenhaCabecalhoTabela();
+
+  ingredientes.forEach((ing, idx) => {
+    const nomeCompleto = (ing.ingrediente || "") + (ing.tipo === "Subproduto" ? " (sub-receita)" : "");
+    const linhasNome = wrapText(nomeCompleto, COLS[0].w - 12, 9, false);
+    const LINE_H = 12;
+    const PAD_V = 5;
+    const alturaLinha = Math.max(16, linhasNome.length * LINE_H + PAD_V);
+
+    // garante que a linha inteira (todas as sub-linhas do nome) caiba na página;
+    // se virar página, redesenha o cabeçalho da tabela antes de continuar
+    espacoOuNovaPagina(alturaLinha, desenhaCabecalhoTabela);
+
+    if (idx % 2 === 1) retangulo(MARGIN, y - alturaLinha, CONTENT_W, alturaLinha, [0.97, 0.97, 0.95]);
+
+    linhasNome.forEach((l, li) => {
+      texto(xColuna(0) + 6, y - 12 - li * LINE_H, l, 9, { color: COR_TITULO });
+    });
+    const outrasCols = [
+      ing.unidade || "",
+      String(ing.quantidade ?? ""),
+      fmtCurrency(ing.custo_unit),
+      fmtCurrency(ing.custo_total),
+    ];
+    outrasCols.forEach((val, i) => {
+      const colIdx = i + 1;
+      const x = xColuna(colIdx) + COLS[colIdx].w - 6 - textWidth(val, 9, false);
+      texto(x, y - 12, val, 9, { color: COR_TITULO });
+    });
+    y -= alturaLinha;
+    linha(MARGIN, y, MARGIN + CONTENT_W, y, COR_LINHA, 0.5);
+  });
+
+  espacoOuNovaPagina(22);
+  retangulo(MARGIN, y - 20, CONTENT_W, 20, [0.98, 0.97, 0.94]);
+  linha(MARGIN, y, MARGIN + CONTENT_W, y, COR_TITULO, 1);
+  texto(xColuna(3) - textWidth("Custo Total", 9.5, true) + COLS[3].w - 6, y - 14, "Custo Total", 9.5, { bold: true });
+  const totalStr = fmtCurrency(custoTotal);
+  texto(xColuna(4) + COLS[4].w - 6 - textWidth(totalStr, 9.5, true), y - 14, totalStr, 9.5, { bold: true });
+  y -= 34;
+
+  // ---------- modo de preparo ----------
+  if (preparoTexto) {
+    espacoOuNovaPagina(20);
+    texto(MARGIN, y, "MODO DE PREPARO", 11, { bold: true, color: COR_AZUL });
+    y -= 6;
+    linha(MARGIN, y, MARGIN + 140, y, COR_LINHA, 1);
+    y -= 16;
+    const passos = String(preparoTexto).split("|").map((s) => s.trim()).filter(Boolean);
+    passos.forEach((passo) => {
+      const linhasEnvolvidas = wrapText(passo, CONTENT_W, 10, false);
+      linhasEnvolvidas.forEach((l) => {
+        espacoOuNovaPagina(16);
+        texto(MARGIN, y, l, 10, { color: COR_TITULO });
+        y -= 15;
+      });
+      y -= 4;
+    });
+  }
+
+  novaPagina();
+
+  // ---------- rodapé em todas as páginas ----------
+  const dataGeracao = new Date().toLocaleDateString("pt-BR");
+  paginas.forEach((pagCmds, i) => {
+    const rodape = `Grupo Almeria — Ficha Técnica gerada em ${dataGeracao}${paginas.length > 1 ? ` — página ${i + 1}/${paginas.length}` : ""}`;
+    const fonte = "/F1";
+    pagCmds.push(
+      `BT ${fonte} 8 Tf ${COR_CINZA_CLARO[0].toFixed(3)} ${COR_CINZA_CLARO[1].toFixed(3)} ${COR_CINZA_CLARO[2].toFixed(3)} rg 1 0 0 1 ${(PAGE_W / 2 - textWidth(rodape, 8, false) / 2).toFixed(2)} ${(MARGIN - 20).toFixed(2)} Tm (${pdfEscapeText(rodape)}) Tj ET`
+    );
+  });
+
+  return montarBytesPDF(paginas, PAGE_W, PAGE_H);
+}
+
+
+// ---------- monta os bytes crus do arquivo PDF (xref/trailer) a partir das páginas ----------
+function montarBytesPDF(paginas, pageW, pageH) {
+  const objs = [];
+  function addObj(str) {
+    objs.push(str);
+    return objs.length; // id do objeto = índice 1-based
+  }
+
+  const catalogId = addObj(""); // placeholder, preenchido depois (precisa saber id de Pages)
+  const pagesId = addObj(""); // placeholder
+  const fontRegId = addObj("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>");
+  const fontBoldId = addObj("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>");
+
+  const pageIds = [];
+  const contentIds = [];
+  paginas.forEach((cmds) => {
+    const stream = cmds.join("\n");
+    const contentId = addObj(`<< /Length ${byteLength(stream)} >>\nstream\n${stream}\nendstream`);
+    contentIds.push(contentId);
+    const pageId = addObj(""); // placeholder
+    pageIds.push(pageId);
+  });
+
+  objs[catalogId - 1] = `<< /Type /Catalog /Pages ${pagesId} 0 R >>`;
+  objs[pagesId - 1] = `<< /Type /Pages /Kids [ ${pageIds.map((id) => id + " 0 R").join(" ")} ] /Count ${pageIds.length} >>`;
+  pageIds.forEach((pageId, i) => {
+    objs[pageId - 1] =
+      `<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${pageW} ${pageH}] ` +
+      `/Resources << /Font << /F1 ${fontRegId} 0 R /F2 ${fontBoldId} 0 R >> >> ` +
+      `/Contents ${contentIds[i]} 0 R >>`;
+  });
+
+  // ---------- serializa ----------
+  let out = "%PDF-1.4\n%\xE2\xE3\xCF\xD3\n";
+  const offsets = [0];
+  objs.forEach((body, i) => {
+    offsets.push(byteLength(out));
+    out += `${i + 1} 0 obj\n${body}\nendobj\n`;
+  });
+  const xrefStart = byteLength(out);
+  out += `xref\n0 ${objs.length + 1}\n`;
+  out += "0000000000 65535 f \n";
+  for (let i = 1; i <= objs.length; i++) {
+    out += String(offsets[i]).padStart(10, "0") + " 00000 n \n";
+  }
+  out += `trailer\n<< /Size ${objs.length + 1} /Root ${catalogId} 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+
+  return stringParaBytes(out);
+}
+
+function byteLength(str) {
+  // conteúdo é sempre latin1-safe (WinAnsi) neste gerador — 1 char = 1 byte
+  return str.length;
+}
+function stringParaBytes(str) {
+  const bytes = new Uint8Array(str.length);
+  for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xff;
+  return bytes;
+}
+
+async function gerarPDF(nome, ingredientes, custoTotal, venda, cmv, isSubreceita, fichaKey){
+  const unit = window.__currentUnit;
+  const preparoDict = PREPARO_LOOKUP[unit] || {};
+  const preparo = preparoDict[fichaKey || nome];
+
+  let bytesPdf;
+  try {
+    bytesPdf = construirFichaPDF({
+      unidade: unit, nome, isSubreceita: !!isSubreceita,
+      precoVenda: venda, cmv, ingredientes, custoTotal, preparoTexto: preparo,
+    });
+  } catch (e) {
+    alert('Não foi possível montar o PDF: ' + (e && e.message ? e.message : 'erro desconhecido') + '.');
+    return;
+  }
+
+  const nomeArquivo = 'ficha_' + nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) + '.pdf';
+
+  const downloadsApi = await useCapability('downloads');
+  if (downloadsApi) {
+    try {
+      await downloadsApi.save({ filename: nomeArquivo, data: new Blob([bytesPdf], { type: 'application/pdf' }) });
+    } catch (e) {
+      if (!e || e.code !== 'declined') alert('Não foi possível baixar o PDF: ' + (e && e.message ? e.message : 'erro desconhecido') + '.');
+    }
+    return;
+  }
+  // fora do visualizador de artifacts (arquivo aberto direto no navegador): baixa do jeito clássico
+  const blob = new Blob([bytesPdf], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nomeArquivo;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function updateExportBar(){
