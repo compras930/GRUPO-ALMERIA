@@ -737,7 +737,7 @@ function abrirCriarSubreceita(nomeBusca){
     const tbody = document.getElementById('ingBody');
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><input class="ing-input" style="width:150px;text-align:left;" type="text" value="" data-field="ingrediente" placeholder="Nome do ingrediente" list="listaInsumos"></td>
+      <td><input class="ing-input" style="width:150px;text-align:left;" type="text" value="" data-field="ingrediente" placeholder="Nome do ingrediente" list="listaInsumos"> <span data-tipo-tag class="tipo-sub" style="display:none;"></span><input type="hidden" data-field="tipo" value="Insumo"></td>
       <td class="num"><input class="ing-input" style="width:44px;" type="text" value="" data-field="unidade" placeholder="kg"></td>
       <td class="num"><input class="ing-input" type="number" step="any" value="0" data-field="quantidade"></td>
       <td class="num"><input class="ing-input" type="number" step="any" value="0" data-field="custo_unit"></td>
@@ -745,6 +745,7 @@ function abrirCriarSubreceita(nomeBusca){
       <td><button class="ing-remove" data-remove-row="new" title="Remover ingrediente">&times;</button></td>`;
     tbody.appendChild(tr);
     tr.querySelectorAll('.ing-input').forEach(inp => inp.addEventListener('input', recalc));
+      tr.querySelectorAll('[data-field="ingrediente"]').forEach(wireAutoFillIngrediente);
     tr.querySelector('[data-remove-row]').addEventListener('click', () => { tr.remove(); recalc(); });
   };
   document.getElementById('addIngBtn').addEventListener('click', novaLinhaIngrediente);
@@ -764,7 +765,8 @@ function abrirCriarSubreceita(nomeBusca){
       const unidadeIng = tr.querySelector('[data-field="unidade"]').value.trim();
       const qtd = parseFloat(tr.querySelector('[data-field="quantidade"]').value) || 0;
       const cu = parseFloat(tr.querySelector('[data-field="custo_unit"]').value) || 0;
-      ingredientes.push({ingrediente: nomeIng, tipo: 'Insumo', unidade: unidadeIng, quantidade: qtd, custo_unit: cu, custo_total: qtd*cu});
+      const tipoIng = (tr.querySelector('[data-field="tipo"]') || {}).value || 'Insumo';
+      ingredientes.push({ingrediente: nomeIng, tipo: tipoIng, unidade: unidadeIng, quantidade: qtd, custo_unit: cu, custo_total: qtd*cu});
     });
     if (ingredientes.length === 0){ alert('Adicione ao menos um ingrediente.'); return; }
 
@@ -809,13 +811,13 @@ function renderMainModal(){
   let rows = '';
   item.ingredientes.forEach((ing, i) => {
     const isSub = ing.tipo === 'Subproduto';
-    const tipoTag = isSub ? '<span class="tipo-sub">Subproduto</span>' : '<span class="tipo-sub" style="color:#8b8266">Insumo</span>';
+    const tipoTag = isSub ? '<span class="tipo-sub" data-tipo-tag>Subproduto</span>' : '<span class="tipo-sub" data-tipo-tag style="color:#8b8266">Insumo</span>';
     const nomeCell = (!editMode && isSub)
       ? `<span class="prato-clickable" data-drill="${(ing.ingrediente||'').replace(/"/g,'&quot;')}" style="cursor:pointer;text-decoration:underline;text-decoration-color:var(--line);">${ing.ingrediente}</span>`
       : ing.ingrediente;
     if (editMode){
       rows += `<tr data-ing-idx="${i}">
-        <td><input class="ing-input" style="width:150px;text-align:left;" type="text" value="${(ing.ingrediente||'').replace(/"/g,'&quot;')}" data-field="ingrediente" list="listaInsumos"> ${tipoTag}</td>
+        <td><input class="ing-input" style="width:150px;text-align:left;" type="text" value="${(ing.ingrediente||'').replace(/"/g,'&quot;')}" data-field="ingrediente" list="listaInsumos"> ${tipoTag}<input type="hidden" data-field="tipo" value="${ing.tipo || 'Insumo'}"></td>
         <td class="num"><input class="ing-input" style="width:44px;" type="text" value="${ing.unidade||''}" data-field="unidade"></td>
         <td class="num"><input class="ing-input" type="number" step="any" value="${ing.quantidade ?? ''}" data-field="quantidade"></td>
         <td class="num"><input class="ing-input" type="number" step="any" value="${ing.custo_unit ?? ''}" data-field="custo_unit"></td>
@@ -904,6 +906,7 @@ function renderMainModal(){
       });
     };
     document.querySelectorAll('.ing-input').forEach(inp => inp.addEventListener('input', recalc));
+    document.querySelectorAll('[data-field="ingrediente"]').forEach(wireAutoFillIngrediente);
     wireRowRemovers();
 
     const addIngBtn = document.getElementById('addIngBtn');
@@ -911,7 +914,7 @@ function renderMainModal(){
       const tbody = document.getElementById('ingBody');
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><input class="ing-input" style="width:150px;text-align:left;" type="text" value="" data-field="ingrediente" placeholder="Nome do ingrediente" list="listaInsumos"></td>
+        <td><input class="ing-input" style="width:150px;text-align:left;" type="text" value="" data-field="ingrediente" placeholder="Nome do ingrediente" list="listaInsumos"> <span data-tipo-tag class="tipo-sub" style="display:none;"></span><input type="hidden" data-field="tipo" value="Insumo"></td>
         <td class="num"><input class="ing-input" style="width:44px;" type="text" value="" data-field="unidade" placeholder="kg"></td>
         <td class="num"><input class="ing-input" type="number" step="any" value="0" data-field="quantidade"></td>
         <td class="num"><input class="ing-input" type="number" step="any" value="0" data-field="custo_unit"></td>
@@ -919,6 +922,7 @@ function renderMainModal(){
         <td><button class="ing-remove" data-remove-row="new" title="Remover ingrediente">&times;</button></td>`;
       tbody.appendChild(tr);
       tr.querySelectorAll('.ing-input').forEach(inp => inp.addEventListener('input', recalc));
+      tr.querySelectorAll('[data-field="ingrediente"]').forEach(wireAutoFillIngrediente);
       tr.querySelector('[data-remove-row]').addEventListener('click', () => { tr.remove(); recalc(); });
     });
 
@@ -950,7 +954,7 @@ function renderMainModal(){
               ingrediente: newNome, campo: 'Custo Unitário', valor_antigo: oldIng.custo_unit, valor_novo: newCu});
           }
         }
-        newIngredientes.push({ingrediente: newNome, tipo: oldIng ? oldIng.tipo : 'Insumo', unidade: newUnid,
+        newIngredientes.push({ingrediente: newNome, tipo: (tr.querySelector('[data-field="tipo"]') || {}).value || (oldIng ? oldIng.tipo : 'Insumo'), unidade: newUnid,
           quantidade: newQtd, custo_unit: newCu, custo_total: newQtd*newCu});
       });
       oldIngredientes.forEach(oldIng => {
@@ -991,10 +995,10 @@ function renderDrillModal(state){
   let rows = '';
   ingredientes.forEach((ing, i) => {
     const isSub = ing.tipo === 'Subproduto';
-    const tipoTag = isSub ? '<span class="tipo-sub">Subproduto</span>' : '<span class="tipo-sub" style="color:#8b8266">Insumo</span>';
+    const tipoTag = isSub ? '<span class="tipo-sub" data-tipo-tag>Subproduto</span>' : '<span class="tipo-sub" data-tipo-tag style="color:#8b8266">Insumo</span>';
     if (editMode){
       rows += `<tr data-ing-idx="${i}">
-        <td><input class="ing-input" style="width:150px;text-align:left;" type="text" value="${(ing.ingrediente||'').replace(/"/g,'&quot;')}" data-field="ingrediente" list="listaInsumos"> ${tipoTag}</td>
+        <td><input class="ing-input" style="width:150px;text-align:left;" type="text" value="${(ing.ingrediente||'').replace(/"/g,'&quot;')}" data-field="ingrediente" list="listaInsumos"> ${tipoTag}<input type="hidden" data-field="tipo" value="${ing.tipo || 'Insumo'}"></td>
         <td class="num"><input class="ing-input" style="width:44px;" type="text" value="${ing.unidade||''}" data-field="unidade"></td>
         <td class="num"><input class="ing-input" type="number" step="any" value="${ing.quantidade ?? ''}" data-field="quantidade"></td>
         <td class="num"><input class="ing-input" type="number" step="any" value="${ing.custo_unit ?? ''}" data-field="custo_unit"></td>
@@ -1099,6 +1103,7 @@ function renderDrillModal(state){
       return total;
     };
     document.querySelectorAll('.ing-input').forEach(inp => inp.addEventListener('input', recalc));
+    document.querySelectorAll('[data-field="ingrediente"]').forEach(wireAutoFillIngrediente);
     document.getElementById('rendQtd').addEventListener('input', recalc);
     document.querySelectorAll('[data-remove-row]').forEach(btn => {
       btn.addEventListener('click', () => { btn.closest('tr').remove(); recalc(); });
@@ -1108,7 +1113,7 @@ function renderDrillModal(state){
       const tbody = document.getElementById('ingBody');
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><input class="ing-input" style="width:150px;text-align:left;" type="text" value="" data-field="ingrediente" placeholder="Nome do ingrediente" list="listaInsumos"></td>
+        <td><input class="ing-input" style="width:150px;text-align:left;" type="text" value="" data-field="ingrediente" placeholder="Nome do ingrediente" list="listaInsumos"> <span data-tipo-tag class="tipo-sub" style="display:none;"></span><input type="hidden" data-field="tipo" value="Insumo"></td>
         <td class="num"><input class="ing-input" style="width:44px;" type="text" value="" data-field="unidade" placeholder="kg"></td>
         <td class="num"><input class="ing-input" type="number" step="any" value="0" data-field="quantidade"></td>
         <td class="num"><input class="ing-input" type="number" step="any" value="0" data-field="custo_unit"></td>
@@ -1116,6 +1121,7 @@ function renderDrillModal(state){
         <td><button class="ing-remove" data-remove-row="new" title="Remover ingrediente">&times;</button></td>`;
       tbody.appendChild(tr);
       tr.querySelectorAll('.ing-input').forEach(inp => inp.addEventListener('input', recalc));
+      tr.querySelectorAll('[data-field="ingrediente"]').forEach(wireAutoFillIngrediente);
       tr.querySelector('[data-remove-row]').addEventListener('click', () => { tr.remove(); recalc(); });
     });
 
@@ -1131,7 +1137,7 @@ function renderDrillModal(state){
         const newUnid = tr.querySelector('[data-field="unidade"]').value.trim();
         const newQtd = parseFloat(tr.querySelector('[data-field="quantidade"]').value) || 0;
         const newCu = parseFloat(tr.querySelector('[data-field="custo_unit"]').value) || 0;
-        newIngredientes.push({ingrediente: newNome, tipo: oldIng ? oldIng.tipo : 'Insumo', unidade: newUnid,
+        newIngredientes.push({ingrediente: newNome, tipo: (tr.querySelector('[data-field="tipo"]') || {}).value || (oldIng ? oldIng.tipo : 'Insumo'), unidade: newUnid,
           quantidade: newQtd, custo_unit: newCu, custo_total: newQtd*newCu});
       });
       if (newIngredientes.length === 0){ alert('A sub-receita precisa de ao menos um ingrediente.'); return; }
@@ -1567,10 +1573,99 @@ function atualizarListaInsumos(){
     [...u.dishes, ...u.wines].forEach(item => (item.ingredientes||[]).forEach(ing => { if (ing.ingrediente) nomes.add(ing.ingrediente); }));
   });
   Object.values(FICHA_LOOKUP).forEach(unidade => {
+    Object.keys(unidade).forEach(nomeReceita => nomes.add(nomeReceita));
     Object.values(unidade).forEach(lista => lista.forEach(ing => { if (ing.ingrediente) nomes.add(ing.ingrediente); }));
   });
   const datalist = document.getElementById('listaInsumos');
   datalist.innerHTML = [...nomes].sort((a,b) => a.localeCompare(b, 'pt-BR')).map(n => `<option value="${n.replace(/"/g,'&quot;')}">`).join('');
+}
+
+// Reúne o que já se conhece sobre cada nome de ingrediente/sub-receita nesta
+// unidade: em que unidade ele costuma ser lançado e a que custo unitário —
+// pra poder sugerir/preencher automaticamente ao adicionar numa ficha nova.
+// Sub-receitas cadastradas (chaves do FICHA_LOOKUP) são sempre tipo
+// "Subproduto"; o custo delas prioriza o rendimento definido, depois o uso
+// já conhecido em outras fichas, e por último o custo do lote inteiro
+// (como se 1 unidade = a receita toda, unidade "Und").
+function baseConhecimentoInsumos(unit){
+  const contagem = {};
+  function registra(nome, unidade, custo_unit){
+    if (!nome) return;
+    const key = nome.trim().toLowerCase();
+    if (!key) return;
+    if (!contagem[key]) contagem[key] = { nomeOriginal: nome, porCusto: {} };
+    const custoKey = (custo_unit || 0) + '|' + (unidade || '');
+    if (!contagem[key].porCusto[custoKey]) contagem[key].porCusto[custoKey] = { n: 0, unidade: unidade || '', custo_unit: custo_unit || 0 };
+    contagem[key].porCusto[custoKey].n++;
+  }
+  if (DATA[unit]) {
+    [...DATA[unit].dishes, ...DATA[unit].wines].forEach(item => {
+      (item.ingredientes || []).forEach(ing => registra(ing.ingrediente, ing.unidade, ing.custo_unit));
+    });
+  }
+  Object.values(FICHA_LOOKUP[unit] || {}).forEach(lista => {
+    lista.forEach(ing => registra(ing.ingrediente, ing.unidade, ing.custo_unit));
+  });
+
+  const base = {};
+  Object.keys(contagem).forEach(key => {
+    const info = contagem[key];
+    let melhor = null;
+    Object.values(info.porCusto).forEach(v => { if (!melhor || v.n > melhor.n) melhor = v; });
+    base[key] = { nome: info.nomeOriginal, unidade: melhor.unidade, custo_unit: melhor.custo_unit, tipo: 'Insumo' };
+  });
+
+  Object.keys(FICHA_LOOKUP[unit] || {}).forEach(nome => {
+    const key = nome.trim().toLowerCase();
+    const ings = FICHA_LOOKUP[unit][nome] || [];
+    const totalLote = ings.reduce((s,i) => s + (i.custo_total||0), 0);
+    const rend = (RENDIMENTO_LOOKUP[unit] || {})[nome];
+    let unidade, custo_unit;
+    if (rend && rend.quantidade > 0) {
+      unidade = rend.unidade;
+      custo_unit = totalLote / rend.quantidade;
+    } else if (base[key]) {
+      unidade = base[key].unidade;
+      custo_unit = base[key].custo_unit;
+    } else {
+      unidade = 'Und';
+      custo_unit = totalLote;
+    }
+    base[key] = { nome, unidade, custo_unit: Math.round(custo_unit * 10000) / 10000, tipo: 'Subproduto' };
+  });
+
+  return base;
+}
+
+// Ao "confirmar" (mudar/selecionar) o nome de um ingrediente numa linha em
+// edição, preenche unidade/custo/tipo com o que já se conhece sobre esse
+// nome nesta unidade. Se o nome não é conhecido, não faz nada — o usuário
+// preenche do zero e, a partir do momento em que salvar, esse nome passa a
+// ser conhecido (e sugerido) nas próximas vezes.
+function wireAutoFillIngrediente(input){
+  if (!input) return;
+  input.addEventListener('change', () => {
+    const tr = input.closest('tr');
+    if (!tr) return;
+    const nome = input.value.trim();
+    if (!nome) return;
+    const base = baseConhecimentoInsumos(window.__currentUnit);
+    const info = base[nome.toLowerCase()];
+    if (!info) return;
+    const unidInput = tr.querySelector('[data-field="unidade"]');
+    const custoInput = tr.querySelector('[data-field="custo_unit"]');
+    const tipoInput = tr.querySelector('[data-field="tipo"]');
+    const tipoTagEl = tr.querySelector('[data-tipo-tag]');
+    if (unidInput) unidInput.value = info.unidade;
+    if (custoInput) custoInput.value = info.custo_unit;
+    if (tipoInput) tipoInput.value = info.tipo;
+    if (tipoTagEl) {
+      tipoTagEl.textContent = info.tipo === 'Subproduto' ? 'Subproduto' : 'Insumo';
+      tipoTagEl.style.color = info.tipo === 'Subproduto' ? '' : '#8b8266';
+      tipoTagEl.style.display = '';
+    }
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
 }
 
 unitSelect.addEventListener('change', () => { currentTab='pratos'; currentCategory='Todas'; searchTerm=''; render(); });
