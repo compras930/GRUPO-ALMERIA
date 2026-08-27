@@ -207,13 +207,14 @@ async function main() {
         const receitaResolvida =
           nomeIng === fichaNome ? null : resolverReceita(fichaLookupUnidade, aliasLookupUnidade, nomeIng, ing.tipo);
         if (receitaResolvida) {
-          lista.push({ produtoChave: null, subReceitaNome: receitaResolvida, quantidade: ing.quantidade, unidadeMedida: ing.unidade });
+          const unidadeMedida = normalizarNome(ing.unidade || "UN").toUpperCase();
+          lista.push({ produtoChave: null, subReceitaNome: receitaResolvida, quantidade: ing.quantidade ?? 0, unidadeMedida });
         } else {
           if (ing.tipo === "Subproduto") subReceitaNaoResolvida.add(nomeIng);
-          registrarProduto(nomeIng, ing.unidade, ing.custo_unit);
+          registrarProduto(nomeIng, ing.unidade, ing.custo_unit ?? 0);
           const unidadeMedida = normalizarNome(ing.unidade || "UN").toUpperCase();
           const chave = `${nomeIng.toLowerCase()}|||${unidadeMedida}`;
-          lista.push({ produtoChave: chave, subReceitaNome: null, quantidade: ing.quantidade, unidadeMedida });
+          lista.push({ produtoChave: chave, subReceitaNome: null, quantidade: ing.quantidade ?? 0, unidadeMedida });
         }
       }
       ingredientesPorFicha.set(fichaNome, lista);
@@ -388,10 +389,18 @@ async function main() {
           for (const item of DATA[unidadeNome][chave]) {
             const nomeFicha = item.ficha ? normalizarNome(item.ficha) : null;
             const receitaId = nomeFicha ? receitaIdPorNome.get(nomeFicha) ?? null : null;
+            const categoria = item.categoria ?? null;
             await tx.itemVenda.upsert({
-              where: { unidadeId_tipo_nome: { unidadeId, tipo: tipoPorArray[chave], nome: normalizarNome(item.prato) } },
+              where: {
+                unidadeId_tipo_categoria_nome: {
+                  unidadeId,
+                  tipo: tipoPorArray[chave],
+                  categoria,
+                  nome: normalizarNome(item.prato),
+                },
+              },
               update: {
-                categoria: item.categoria ?? null,
+                categoria,
                 precoVenda: item.venda ?? 0,
                 receitaId,
                 custoImportado: item.custo,
@@ -401,7 +410,7 @@ async function main() {
                 unidadeId,
                 tipo: tipoPorArray[chave],
                 nome: normalizarNome(item.prato),
-                categoria: item.categoria ?? null,
+                categoria,
                 precoVenda: item.venda ?? 0,
                 receitaId,
                 custoImportado: item.custo,

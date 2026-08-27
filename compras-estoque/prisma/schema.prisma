@@ -287,7 +287,11 @@ model ItemVenda {
 
   itensVendaSemanal ItemVendaSemanal[]
 
-  @@unique([unidadeId, tipo, nome])
+  // Inclui categoria: existem itens com o mesmo nome no mesmo tipo mas em
+  // categorias diferentes de propósito (ex.: mesmo vinho vendido em taça e
+  // em garrafa, cada categoria com preço próprio) — sem categoria na chave,
+  // esses dois viram um só registro e um deles se perde.
+  @@unique([unidadeId, tipo, categoria, nome])
 }
 
 // ---------- Preço de insumo (ledger + cache, mesmo padrão de MovimentoEstoque/EstoqueSaldo) ----------
