@@ -37,7 +37,7 @@ export default async function PedidoDetalhePage({ params }: { params: { id: stri
     <div>
       <div className="page-header">
         <p className="eyebrow">Pedido de compra</p>
-        <h1>#{pedido.numero} — {pedido.fornecedor.nome}</h1>
+        <h1>#{pedido.numero} — {pedido.fornecedor?.nome ?? "sem fornecedor"}</h1>
       </div>
 
       <div className="kpis">

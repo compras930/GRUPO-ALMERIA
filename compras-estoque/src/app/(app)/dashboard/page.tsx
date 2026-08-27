@@ -81,7 +81,7 @@ export default async function DashboardPage() {
                 <tr key={p.id}>
                   <td className="num">#{p.numero}</td>
                   <td>{p.unidade.nome}</td>
-                  <td>{p.fornecedor.nome}</td>
+                  <td>{p.fornecedor?.nome ?? "—"}</td>
                   <td className="num">
                     <Link href={`/pedidos/${p.id}`} className="btn small">
                       Ver
@@ -152,7 +152,7 @@ export default async function DashboardPage() {
                 <tr key={p.id}>
                   <td className="num">#{p.numero}</td>
                   <td>{p.unidade.nome}</td>
-                  <td>{p.fornecedor.nome}</td>
+                  <td>{p.fornecedor?.nome ?? "—"}</td>
                   <td>{STATUS_PEDIDO_LABEL[p.status as StatusPedido]}</td>
                   <td className="num">
                     <Link href={`/pedidos/${p.id}`} className="btn small">

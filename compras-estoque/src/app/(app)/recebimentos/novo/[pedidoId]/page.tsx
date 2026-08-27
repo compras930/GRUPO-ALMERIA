@@ -35,7 +35,7 @@ export default async function NovoRecebimentoPage({ params }: { params: { pedido
     <div>
       <div className="page-header">
         <p className="eyebrow">
-          Pedido #{pedido.numero} · {pedido.unidade.nome} · {pedido.fornecedor.nome}
+          Pedido #{pedido.numero} · {pedido.unidade.nome} · {pedido.fornecedor?.nome ?? "sem fornecedor"}
         </p>
         <h1>Registrar recebimento</h1>
       </div>

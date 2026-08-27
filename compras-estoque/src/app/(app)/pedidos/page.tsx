@@ -55,7 +55,7 @@ export default async function PedidosPage() {
               <tr key={p.id}>
                 <td className="num">#{p.numero}</td>
                 <td>{p.unidade.nome}</td>
-                <td>{p.fornecedor.nome}</td>
+                <td>{p.fornecedor?.nome ?? "—"}</td>
                 <td>{p.solicitante.nome}</td>
                 <td className="num">{p.itens.length}</td>
                 <td>
