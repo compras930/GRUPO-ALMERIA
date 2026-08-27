@@ -43,3 +43,12 @@ export const TIPO_MOVIMENTO = [
 export type TipoMovimento = (typeof TIPO_MOVIMENTO)[number];
 
 export const UNIDADES_MEDIDA = ["KG", "G", "L", "ML", "UN", "CX", "PCT", "FD"] as const;
+
+export const TIPO_ITEM_VENDA = ["PRATO", "BEBIDA", "VINHO"] as const;
+export type TipoItemVenda = (typeof TIPO_ITEM_VENDA)[number];
+
+export const TIPO_ITEM_VENDA_LABEL: Record<TipoItemVenda, string> = {
+  PRATO: "Pratos",
+  BEBIDA: "Bebidas",
+  VINHO: "Vinhos",
+};
