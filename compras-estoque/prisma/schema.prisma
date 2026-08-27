@@ -1,12 +1,12 @@
 // Schema do sistema de Compras & Estoque — Grupo Almeria
-// Local: SQLite (arquivo). Produção: Postgres (Neon/Supabase) — só trocar DATABASE_URL.
+// Produção: Postgres (Neon/Supabase) — configurado via DATABASE_URL.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 

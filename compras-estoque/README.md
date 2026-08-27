@@ -54,15 +54,22 @@ Usuários não-admin só veem e operam dados da unidade a que pertencem.
 
 ## Rodando localmente
 
-Requer Node.js 18+.
+Requer Node.js 18+ e um Postgres acessível (local ou já em nuvem, ex. Neon —
+ver seção de deploy abaixo). Configure `DATABASE_URL` no `.env` (veja
+`.env.example`) antes de rodar as migrações.
 
 ```bash
 cd compras-estoque
 npm install
-npx prisma migrate dev    # cria o banco local (SQLite) e as tabelas
+npx prisma migrate dev    # cria as tabelas no Postgres apontado por DATABASE_URL
 npm run db:seed           # cria as 5 unidades e um usuário admin inicial
 npm run dev                # http://localhost:3000
 ```
+
+Pra importar os dados de fichas técnicas/CMV do `dashboard-fichas-tecnicas.html`
+(uma vez, depois do seed): `npx tsx prisma/scripts/import-fichas-tecnicas.ts`
+primeiro sem `--commit` (só mostra um relatório do que seria importado), e
+com `--commit` quando o relatório estiver ok.
 
 Credenciais do usuário admin criado pelo seed:
 - **E-mail:** `admin@grupoalmeria.com.br`
@@ -74,27 +81,24 @@ diretamente no banco.
 
 ## Colocando no ar (deploy)
 
-O app já está pronto para produção com Postgres, sem precisar mudar código —
-só a variável `DATABASE_URL`. Passo a passo recomendado:
+O app já está configurado pra Postgres — não precisa mudar nenhum código, só
+os passos abaixo:
 
 1. **Banco de dados**: crie uma conta gratuita no [Neon](https://neon.tech)
    ou [Supabase](https://supabase.com) e copie a *connection string* Postgres
    (algo como `postgresql://usuario:senha@host/banco?sslmode=require`).
-2. No arquivo `prisma/schema.prisma`, troque:
-   ```prisma
-   datasource db {
-     provider = "postgresql"
-     url      = env("DATABASE_URL")
-   }
-   ```
-3. **Hospedagem**: crie uma conta gratuita na [Vercel](https://vercel.com),
-   importe este repositório e configure:
+2. **Hospedagem**: crie uma conta gratuita na [Vercel](https://vercel.com),
+   importe este repositório (a raiz do projeto é a pasta `compras-estoque/`,
+   configure isso como "Root Directory" na Vercel) e configure as variáveis
+   de ambiente:
    - `DATABASE_URL` = a connection string do passo 1
    - `NEXTAUTH_SECRET` = um valor aleatório (gere com `openssl rand -hex 32`)
    - `NEXTAUTH_URL` = a URL pública que a Vercel atribuir ao projeto
-4. Rode a migração no banco de produção (`npx prisma migrate deploy`) e o
-   seed inicial (`npm run db:seed`) — pode ser feito localmente apontando
-   `DATABASE_URL` para o banco de produção, uma única vez.
+3. Rode a migração no banco de produção (`npx prisma migrate deploy`), o
+   seed inicial (`npm run db:seed`) e a importação das fichas técnicas
+   (`npx tsx prisma/scripts/import-fichas-tecnicas.ts --commit`) — pode ser
+   feito localmente apontando `DATABASE_URL` para o banco de produção, uma
+   única vez cada.
 
 ## Estrutura do projeto
 
