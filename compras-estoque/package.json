@@ -4,6 +4,7 @@
   "private": true,
   "description": "Sistema de compras e estoque multi-unidade do Grupo Almeria",
   "scripts": {
+    "postinstall": "prisma generate",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
