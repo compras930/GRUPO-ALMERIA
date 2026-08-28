@@ -140,6 +140,8 @@ type RelatorioUnidade = {
   itensVendaComFichaNaoEncontrada: string[];
   subReceitaNaoResolvidaViaAlias: string[]; // tipo dizia "Subproduto" mas nem FICHA_LOOKUP nem ALIAS_LOOKUP resolveram -> tratado como Insumo mesmo assim
   produtosComUnidadeMedidaDivergente: string[]; // mesmo nome, unidade de medida diferente em ocorrências distintas
+  rendimentosExplicitos: number;
+  rendimentosDerivados: number;
 };
 
 async function main() {
@@ -182,6 +184,19 @@ async function main() {
   };
   const receitasPorUnidade = new Map<string, Map<string, IngredienteResolvido[]>>();
 
+  // Rendimento derivado (fallback pra quando RENDIMENTO_LOOKUP não tem entrada pra
+  // uma ficha — caso real de 104 Sul e Noroeste, que não têm NENHUMA entrada em
+  // RENDIMENTO_LOOKUP). Achado-chave: em toda ficha auditada, o custo_unit já
+  // gravado pra uma sub-receita (em qualquer ficha que a usa) é sempre igual a
+  // custo_total-da-própria-ficha / rendimentoQtd (confirmado batendo exatamente
+  // contra RENDIMENTO_LOOKUP onde ele existe, ex. Beira Lago "MANTEIGA NOISETE":
+  // 35.99 / 0.5 = 71.98 = custo_unit observado no Couvert). Sem essa derivação,
+  // explodirReceitaPura cai no fallback "sem rendimento = qtdSolicitada já é em
+  // lotes inteiros", que é errado quando a quantidade usada é em g/kg/ml (não em
+  // lotes) — foi exatamente esse o bug que inflou o CMV de itens como "Tábua P"
+  // em 104 Sul (75g tratados como 75 lotes inteiros).
+  const rendimentoDerivadoPorUnidade = new Map<string, Map<string, { quantidade: number; unidade: string }>>();
+
   const relatorios: RelatorioUnidade[] = [];
   const nomesProdutosVistosAntes = new Set(produtosPorChave.keys());
 
@@ -192,7 +207,12 @@ async function main() {
     }
     const fichaLookupUnidade = FICHA_LOOKUP[unidadeNome] ?? {};
     const aliasLookupUnidade = ALIAS_LOOKUP[unidadeNome] ?? {};
+    const rendimentoLookupUnidade = RENDIMENTO_LOOKUP[unidadeNome] ?? {};
     const subReceitaNaoResolvida = new Set<string>();
+
+    // custo_unit observado (com sua unidade de medida) toda vez que uma ficha é
+    // referenciada como sub-receita em outra — usado pra derivar rendimento abaixo.
+    const custoUnitObservadoPorSubReceita = new Map<string, { custoUnit: number; unidade: string }[]>();
 
     const ingredientesPorFicha = new Map<string, IngredienteResolvido[]>();
     for (const [fichaNome, ingredientes] of Object.entries(fichaLookupUnidade)) {
@@ -209,6 +229,11 @@ async function main() {
         if (receitaResolvida) {
           const unidadeMedida = normalizarNome(ing.unidade || "UN").toUpperCase();
           lista.push({ produtoChave: null, subReceitaNome: receitaResolvida, quantidade: ing.quantidade ?? 0, unidadeMedida });
+          if (typeof ing.custo_unit === "number" && ing.custo_unit > 0) {
+            const arr = custoUnitObservadoPorSubReceita.get(receitaResolvida) ?? [];
+            arr.push({ custoUnit: ing.custo_unit, unidade: unidadeMedida });
+            custoUnitObservadoPorSubReceita.set(receitaResolvida, arr);
+          }
         } else {
           if (ing.tipo === "Subproduto") subReceitaNaoResolvida.add(nomeIng);
           registrarProduto(nomeIng, ing.unidade, ing.custo_unit ?? 0);
@@ -220,6 +245,23 @@ async function main() {
       ingredientesPorFicha.set(fichaNome, lista);
     }
     receitasPorUnidade.set(unidadeNome, ingredientesPorFicha);
+
+    // Deriva rendimentoQtd pra fichas sem entrada em RENDIMENTO_LOOKUP, a partir do
+    // custo_unit já observado onde a ficha é usada como sub-receita (ver comentário
+    // acima de rendimentoDerivadoPorUnidade). Só deriva quando há pelo menos uma
+    // observação e o custo_total da própria ficha é positivo; usa a mediana das
+    // observações pra ser robusto a eventual ruído de arredondamento.
+    const rendimentoDerivado = new Map<string, { quantidade: number; unidade: string }>();
+    for (const [fichaNome, ingredientesBrutos] of Object.entries(fichaLookupUnidade)) {
+      if (rendimentoLookupUnidade[fichaNome]) continue; // já tem rendimento explícito, não precisa derivar
+      const custoTotalProprio = ingredientesBrutos.reduce((soma, i) => soma + (i.custo_total ?? 0), 0);
+      const observados = custoUnitObservadoPorSubReceita.get(fichaNome);
+      if (custoTotalProprio <= 0 || !observados?.length) continue;
+      const ordenados = [...observados].sort((a, b) => a.custoUnit - b.custoUnit);
+      const mediana = ordenados[Math.floor(ordenados.length / 2)];
+      rendimentoDerivado.set(fichaNome, { quantidade: custoTotalProprio / mediana.custoUnit, unidade: mediana.unidade });
+    }
+    rendimentoDerivadoPorUnidade.set(unidadeNome, rendimentoDerivado);
 
     // Itens de venda (dishes/bebidas/wines) — conta quantos batem com uma ficha
     let itensVenda = 0;
@@ -257,6 +299,8 @@ async function main() {
       itensVendaComFichaNaoEncontrada,
       subReceitaNaoResolvidaViaAlias: [...subReceitaNaoResolvida],
       produtosComUnidadeMedidaDivergente: [], // preenchido no relatório final (é global, não por unidade)
+      rendimentosExplicitos: Object.keys(rendimentoLookupUnidade).length,
+      rendimentosDerivados: rendimentoDerivado.size,
     });
   }
 
@@ -292,6 +336,7 @@ async function main() {
     console.log(`  Receitas (fichas): ${r.receitas}`);
     console.log(`  Ingredientes: ${r.ingredientesInsumo} insumo(s) + ${r.ingredientesSubReceita} sub-receita(s)`);
     console.log(`  Itens de venda: ${r.itensVenda} (${r.itensVenda - r.itensVendaSemFicha} com ficha, ${r.itensVendaSemFicha} sem)`);
+    console.log(`  Rendimento: ${r.rendimentosExplicitos} explícito(s) (RENDIMENTO_LOOKUP) + ${r.rendimentosDerivados} derivado(s) (a partir do custo_unit observado)`);
     if (r.itensVendaComFichaNaoEncontrada.length) {
       console.log(`  ⚠ ${r.itensVendaComFichaNaoEncontrada.length} item(ns) de venda cita(m) uma ficha que não existe em FICHA_LOOKUP:`);
       r.itensVendaComFichaNaoEncontrada.forEach((s) => console.log(`     - ${s}`));
@@ -345,8 +390,9 @@ async function main() {
 
         // Passe 2 — shells de Receita (antes dos ingredientes, pra permitir subReceitaId em qualquer ordem)
         const receitaIdPorNome = new Map<string, string>();
+        const rendimentoDerivadoUnidade = rendimentoDerivadoPorUnidade.get(unidadeNome) ?? new Map();
         for (const fichaNome of Object.keys(fichaLookupUnidade)) {
-          const rendimento = rendimentoLookupUnidade[fichaNome];
+          const rendimento = rendimentoLookupUnidade[fichaNome] ?? rendimentoDerivadoUnidade.get(fichaNome);
           const receita = await tx.receita.upsert({
             where: { unidadeId_nome: { unidadeId, nome: fichaNome } },
             update: {
