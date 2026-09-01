@@ -79,10 +79,12 @@ async function main() {
       let sobrevivente = g.itens.find((i) => i.unidadeMedida === g.alvo) ?? g.itens[0];
       const perdedores = g.itens.filter((i) => i.id !== sobrevivente.id);
 
-      // garante que o sobrevivente já fica com a unidade-alvo
+      // garante que o sobrevivente já fica com a unidade-alvo (contabilizado só
+      // aqui quando há merge de verdade; grupos de 1 item só são tratados no
+      // loop de "conversões simples" abaixo, pra não contar/logar 2x)
       if (sobrevivente.unidadeMedida !== g.alvo) {
         await tx.produto.update({ where: { id: sobrevivente.id }, data: { unidadeMedida: g.alvo } });
-        produtosConvertidos++;
+        if (perdedores.length > 0) produtosConvertidos++;
       }
 
       for (const perdedor of perdedores) {
