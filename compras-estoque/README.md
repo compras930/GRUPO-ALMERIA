@@ -94,11 +94,68 @@ os passos abaixo:
    - `DATABASE_URL` = a connection string do passo 1
    - `NEXTAUTH_SECRET` = um valor aleatório (gere com `openssl rand -hex 32`)
    - `NEXTAUTH_URL` = a URL pública que a Vercel atribuir ao projeto
+   - `N8N_API_TOKEN` = outro valor aleatório (mesma forma) — só necessário se
+     for usar a integração com n8n, ver seção própria abaixo
 3. Rode a migração no banco de produção (`npx prisma migrate deploy`), o
    seed inicial (`npm run db:seed`) e a importação das fichas técnicas
    (`npx tsx prisma/scripts/import-fichas-tecnicas.ts --commit`) — pode ser
    feito localmente apontando `DATABASE_URL` para o banco de produção, uma
-   única vez cada.
+   única vez cada. O seed é seguro de rodar de novo em produção mesmo
+   depois do deploy inicial (usa `upsert`, nunca duplica) — precisa disso
+   pra criar o usuário de serviço da integração com n8n.
+
+## Integração com n8n
+
+Três rotas de API pra automação (usadas pelo n8n, sem sessão de navegador):
+autenticadas por `Authorization: Bearer <N8N_API_TOKEN>` — configure a
+variável de ambiente `N8N_API_TOKEN` (ex.: `openssl rand -hex 32`) e use o
+mesmo valor no header, no node HTTP Request do n8n. Sem o token certo, toda
+chamada responde `401`. Requer que o seed (`npm run db:seed`) já tenha
+rodado no banco de produção — ele cria o usuário de serviço usado pra
+atribuir essas gravações automáticas.
+
+### `POST /api/n8n/precos` — atualização semanal de preço (Teknisa)
+
+```json
+{
+  "unidade": "104 Sul",
+  "arquivoNome": "manutencao-ultimo-custo.xlsx",
+  "itens": [
+    { "nome": "ALCATRA BOVINO KG", "unidadeMedida": "KG", "preco": 74.9, "dataCompra": "2026-08-31" }
+  ]
+}
+```
+Casa cada item por nome+unidade (só match exato — nunca funde por
+aproximação; item não reconhecido some no relatório, não é descartado).
+Só atualiza o preço se a data for mais recente que a já registrada — reenviar
+a mesma planilha 2x não altera nada na segunda vez. Resposta traz quantos
+preços mudaram e quais pratos/bebidas/vinhos foram impactados (em cascata,
+inclusive via sub-receita), com custo/CMV antes e depois.
+
+### `POST /api/n8n/vendas-semanais` — venda da semana → lista de compras
+
+```json
+{
+  "unidade": "104 Sul",
+  "periodoInicio": "2026-09-01",
+  "periodoFim": "2026-09-07",
+  "itens": [ { "nome": "Tábua P - Barcelona", "quantidadeVendida": 12 } ]
+}
+```
+Explode a receita de cada item vendido pra somar o consumo de insumo,
+registra a saída no estoque, e gera um Pedido de Compra em status
+"Rascunho" (sem fornecedor definido ainda) com quantidade sugerida — repõe
+o consumido, ou completa até o estoque ideal se
+`ParametroEstoqueProduto.estoqueIdeal` estiver configurado pro insumo.
+Reenviar o mesmo período 2x responde `409` (não duplica consumo nem pedido).
+
+### `GET /api/n8n/cmv-alertas?unidade=104%20Sul` (parâmetro opcional)
+
+Sem body. Devolve os pratos/bebidas/vinhos com CMV acima da meta da
+unidade (`Unidade.metaCmvPratos/Bebidas/Vinhos`, configurável em
+"Unidades"). Sem `unidade` na query, roda pra todas. Pensado pra n8n
+consultar num schedule trigger e disparar alerta (WhatsApp/e-mail) quando
+`totalAlertas > 0`.
 
 ## Estrutura do projeto
 
@@ -112,9 +169,14 @@ src/
       recebimentos/novo/    conferência de recebimento por pedido
       estoque/              saldo por unidade + registro de contagem
       unidades/ usuarios/ fornecedores/ produtos/   cadastros (admin)
+      cmv/                 fichas técnicas e custo por item de venda
+      receitas/            sub-receitas soltas (molhos, marinadas, preparos-base)
     api/auth/[...nextauth]/ rota de autenticação (NextAuth)
+    api/n8n/                integração externa (preços, venda semanal, alerta de CMV)
   actions/                 server actions (mutações: criar, aprovar, receber…)
-  lib/                     prisma client, auth, permissões, constantes, formatação
+  lib/                     prisma client, auth, permissões, constantes, formatação,
+                           explosão de receita/custo, matching de nota de compra e
+                           venda semanal, autenticação por token do n8n
 prisma/
   schema.prisma            modelo de dados
   seed.ts                  cria unidades + usuário admin inicial
@@ -123,8 +185,8 @@ prisma/
 ## Próximos passos sugeridos
 
 - Edição de cadastros existentes (hoje só cria e ativa/desativa)
-- Ponto de reposição mínimo por produto/unidade (alerta de estoque baixo)
-- Histórico de preços por fornecedor/produto
+- Tela dentro do app pra revisar os itens "não reconhecidos" que a
+  integração com n8n reporta (hoje só voltam no JSON da resposta)
 - Exportação de relatórios (divergências, pedidos por período) em Excel/PDF
 - Integração com o dashboard de fichas técnicas já existente no repositório
   (compartilhar o cadastro de produtos/insumos entre os dois sistemas)

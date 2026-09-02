@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { randomUUID } from "node:crypto";
 
 const prisma = new PrismaClient();
 
@@ -26,6 +27,24 @@ async function main() {
       email: emailAdmin,
       senhaHash,
       papel: "ADMIN",
+    },
+  });
+
+  // Usuário de serviço pra atribuir as gravações feitas pelas automações via
+  // n8n (solicitanteId de PedidoCompra, importadoPorId de NotaCompra/
+  // VendaSemanal) — nunca loga pela UI (ativo:false, senha aleatória
+  // descartável que ninguém sabe).
+  const emailN8n = "integracao-n8n@grupoalmeria.com.br";
+  const senhaHashN8n = await bcrypt.hash(randomUUID(), 10);
+  await prisma.usuario.upsert({
+    where: { email: emailN8n },
+    update: {},
+    create: {
+      nome: "Integração n8n",
+      email: emailN8n,
+      senhaHash: senhaHashN8n,
+      papel: "ADMIN",
+      ativo: false,
     },
   });
 

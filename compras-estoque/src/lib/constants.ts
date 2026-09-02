@@ -52,3 +52,8 @@ export const TIPO_ITEM_VENDA_LABEL: Record<TipoItemVenda, string> = {
   BEBIDA: "Bebidas",
   VINHO: "Vinhos",
 };
+
+// E-mail do usuário de serviço usado pra atribuir gravações feitas pelas
+// automações via n8n (solicitanteId de PedidoCompra, importadoPorId de
+// NotaCompra/VendaSemanal) — nunca loga pela UI, criado em prisma/seed.ts.
+export const N8N_SERVICE_USER_EMAIL = "integracao-n8n@grupoalmeria.com.br";

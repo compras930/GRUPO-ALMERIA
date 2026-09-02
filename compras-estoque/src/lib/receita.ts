@@ -130,6 +130,50 @@ export async function carregarPrecoAtualPorProduto(unidadeId: string): Promise<M
   return new Map(precos.map((p) => [p.produtoId, p.preco]));
 }
 
+/**
+ * Dado um conjunto de Produto (insumos que tiveram o preço alterado, por
+ * exemplo), devolve o conjunto de Receita afetadas — direta (usa o insumo
+ * como ingrediente) ou indiretamente (usa, como sub-receita, alguma outra
+ * receita que por sua vez usa o insumo, em qualquer profundidade).
+ *
+ * Usa o `indice` já carregado (não bate no banco de novo) pra montar o
+ * grafo reverso ("essa sub-receita é usada por quais outras receitas") e
+ * faz uma busca a partir de quem usa o insumo direto. É a peça que torna
+ * possível responder "quais pratos/bebidas/vinhos foram impactados por
+ * essa mudança de preço" sem ter que reprocessar a árvore inteira de cada
+ * ItemVenda um por um.
+ */
+export function receitasAfetadasPor(produtoIds: Iterable<string>, indice: IndiceReceitas): Set<string> {
+  const produtoIdsSet = new Set(produtoIds);
+  const usadaPor = new Map<string, Set<string>>(); // subReceitaId -> receitas que a usam
+  const afetadas = new Set<string>();
+
+  for (const [receitaId, receita] of indice) {
+    for (const ing of receita.ingredientes) {
+      if (ing.produtoId && produtoIdsSet.has(ing.produtoId)) {
+        afetadas.add(receitaId);
+      }
+      if (ing.subReceitaId) {
+        const usuarias = usadaPor.get(ing.subReceitaId) ?? new Set<string>();
+        usuarias.add(receitaId);
+        usadaPor.set(ing.subReceitaId, usuarias);
+      }
+    }
+  }
+
+  const fila = [...afetadas];
+  while (fila.length) {
+    const atual = fila.pop()!;
+    for (const usuaria of usadaPor.get(atual) ?? []) {
+      if (!afetadas.has(usuaria)) {
+        afetadas.add(usuaria);
+        fila.push(usuaria);
+      }
+    }
+  }
+  return afetadas;
+}
+
 /** Wrapper conveniente: carrega o índice do banco e explode uma receita. */
 export async function explodirReceita(
   receitaId: string,

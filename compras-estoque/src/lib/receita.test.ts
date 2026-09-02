@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { explodirReceitaPura, CicloReceitaError, type IndiceReceitas } from "./receita";
+import { explodirReceitaPura, receitasAfetadasPor, CicloReceitaError, type IndiceReceitas } from "./receita";
 
 describe("explodirReceitaPura", () => {
   it("explosão simples: só insumos, sem sub-receita", () => {
@@ -97,5 +97,27 @@ describe("explodirReceitaPura", () => {
     const indice: IndiceReceitas = new Map();
     const totais = explodirReceitaPura("nao-existe", 1, indice);
     expect(totais.size).toBe(0);
+  });
+});
+
+describe("receitasAfetadasPor", () => {
+  it("acha receita que usa o insumo direto, e também quem usa essa receita como sub-receita (2 níveis)", () => {
+    // arvore: prato-1 -> sub-a -> sub-b -> insumo-x
+    // mudar o preço de insumo-x afeta sub-b (direto), sub-a (indireto, 1 nível) e prato-1 (indireto, 2 níveis)
+    const indice: IndiceReceitas = new Map([
+      ["sub-b", { rendimentoQtd: null, ingredientes: [{ produtoId: "insumo-x", subReceitaId: null, quantidade: 1 }] }],
+      ["sub-a", { rendimentoQtd: null, ingredientes: [{ produtoId: null, subReceitaId: "sub-b", quantidade: 1 }] }],
+      ["prato-1", { rendimentoQtd: null, ingredientes: [{ produtoId: null, subReceitaId: "sub-a", quantidade: 1 }] }],
+      ["prato-2-nao-afetado", { rendimentoQtd: null, ingredientes: [{ produtoId: "insumo-y", subReceitaId: null, quantidade: 1 }] }],
+    ]);
+    const afetadas = receitasAfetadasPor(["insumo-x"], indice);
+    expect(afetadas).toEqual(new Set(["sub-b", "sub-a", "prato-1"]));
+  });
+
+  it("nenhum insumo alterado -> nenhuma receita afetada", () => {
+    const indice: IndiceReceitas = new Map([
+      ["prato-1", { rendimentoQtd: null, ingredientes: [{ produtoId: "insumo-x", subReceitaId: null, quantidade: 1 }] }],
+    ]);
+    expect(receitasAfetadasPor(["insumo-z"], indice).size).toBe(0);
   });
 });
