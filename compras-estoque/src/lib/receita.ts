@@ -15,6 +15,10 @@
 // banco de dados rodando. As funções async ao final só carregam os dados
 // do Prisma e chamam a parte pura.
 import { prisma } from "@/lib/prisma";
+import type { Prisma, PrismaClient } from "@prisma/client";
+
+/** Cliente Prisma normal OU o `tx` de dentro de um `prisma.$transaction(async (tx) => ...)`. */
+type Cliente = PrismaClient | Prisma.TransactionClient;
 
 export type IngredienteIndexado = {
   produtoId: string | null;
@@ -90,9 +94,19 @@ export function explodirReceitaPura(
   return totais;
 }
 
-/** Carrega todas as Receitas + IngredienteReceita de uma unidade num único índice em memória. */
-export async function carregarIndiceReceitas(unidadeId: string): Promise<IndiceReceitas> {
-  const receitas = await prisma.receita.findMany({
+/**
+ * Carrega todas as Receitas + IngredienteReceita de uma unidade num único índice em memória.
+ *
+ * Aceita opcionalmente o `tx` de dentro de um `prisma.$transaction(async (tx) => ...)` —
+ * IMPORTANTE passar `tx` quando essa função é chamada para checar ciclo logo depois de
+ * escrever IngredienteReceita na MESMA transação: usando o cliente `prisma` global (uma
+ * conexão separada), a leitura roda sob isolamento READ COMMITTED e não enxerga as
+ * escritas ainda não commitadas da transação em andamento — o que faz o checador de
+ * ciclo aprovar por engano uma edição que acabou de introduzir um ciclo indireto (só
+ * pegava ciclo já commitado antes, nunca o que a própria gravação atual criou).
+ */
+export async function carregarIndiceReceitas(unidadeId: string, cliente: Cliente = prisma): Promise<IndiceReceitas> {
+  const receitas = await cliente.receita.findMany({
     where: { unidadeId },
     include: { ingredientes: true },
   });

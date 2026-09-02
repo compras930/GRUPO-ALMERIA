@@ -103,7 +103,7 @@ export async function salvarFicha(itemVendaId: string, formData: FormData) {
     // Confere que essa edição não criou um ciclo novo (a receita apontando, direta ou
     // indiretamente, de volta pra si mesma) — se criou, desfaz tudo (throw dentro da
     // transação reverte o commit) em vez de deixar a pendência piorar.
-    const indice = await carregarIndiceReceitas(item.unidadeId);
+    const indice = await carregarIndiceReceitas(item.unidadeId, tx);
     try {
       explodirReceitaPura(receitaId!, 1, indice);
     } catch (e) {

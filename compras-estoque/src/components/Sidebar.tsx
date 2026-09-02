@@ -9,6 +9,7 @@ import { PAPEL_LABEL } from "@/lib/constants";
 const NAV: Array<{ href: string; label: string; papeis?: Papel[] }> = [
   { href: "/dashboard", label: "Painel" },
   { href: "/cmv", label: "CMV", papeis: ["ADMIN"] },
+  { href: "/receitas", label: "Sub-receitas", papeis: ["ADMIN"] },
   { href: "/pedidos", label: "Pedidos de compra" },
   { href: "/estoque", label: "Estoque" },
   { href: "/fornecedores", label: "Fornecedores", papeis: ["ADMIN"] },
