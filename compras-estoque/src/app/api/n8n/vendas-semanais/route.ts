@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { verificarTokenN8n, respostaNaoAutorizada } from "@/lib/n8n-auth";
 import { N8N_SERVICE_USER_EMAIL } from "@/lib/constants";
@@ -36,6 +37,8 @@ export async function POST(request: Request) {
 
   try {
     const resultado = await processarVendaSemanal(unidade, periodoInicio, periodoFim, itens, servico.id);
+    revalidatePath("/pedidos");
+    revalidatePath("/estoque");
     return Response.json(resultado);
   } catch (e: any) {
     if (e instanceof VendaSemanalDuplicadaError) {

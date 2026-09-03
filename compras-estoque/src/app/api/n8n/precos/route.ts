@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { verificarTokenN8n, respostaNaoAutorizada } from "@/lib/n8n-auth";
 import { N8N_SERVICE_USER_EMAIL } from "@/lib/constants";
@@ -36,6 +37,9 @@ export async function POST(request: Request) {
 
   try {
     const resultado = await processarNotaCompra(unidade, arquivoNome ?? null, itens, servico.id);
+    revalidatePath("/cmv");
+    revalidatePath("/receitas");
+    revalidatePath("/produtos");
     return Response.json(resultado);
   } catch (e: any) {
     return Response.json({ erro: e?.message || "Erro ao processar." }, { status: 400 });
