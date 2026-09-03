@@ -417,11 +417,36 @@ async function main() {
           // idempotência simples: apaga e recria os ingredientes desta receita neste import
           await tx.ingredienteReceita.deleteMany({ where: { receitaId } });
           for (const ing of ingredientes) {
+            // Exige id resolvido, nunca grava linha "solta". Por construção isso
+            // não deveria falhar (todo produtoChave passou por registrarProduto,
+            // toda subReceitaNome veio de uma chave de FICHA_LOOKUP), mas o `!`
+            // que estava aqui transformava uma quebra dessa suposição num
+            // TypeError genérico em vez de dizer qual ficha/ingrediente quebrou
+            // — e uma linha sem produtoId nem subReceitaId é ignorada em
+            // silêncio por explodirReceitaPura, ou seja, custo faltando sem
+            // nenhum aviso.
+            const produtoId = ing.produtoChave ? produtoIdPorChave.get(ing.produtoChave) : undefined;
+            const subReceitaId = ing.subReceitaNome ? receitaIdPorNome.get(ing.subReceitaNome) : undefined;
+            if (ing.produtoChave && !produtoId) {
+              throw new Error(
+                `Produto não resolvido pra chave "${ing.produtoChave}" na ficha "${fichaNome}" (${unidadeNome}) — abortando import.`
+              );
+            }
+            if (ing.subReceitaNome && !subReceitaId) {
+              throw new Error(
+                `Sub-receita "${ing.subReceitaNome}" não resolvida na ficha "${fichaNome}" (${unidadeNome}) — abortando import.`
+              );
+            }
+            if (!produtoId && !subReceitaId) {
+              throw new Error(
+                `Ingrediente sem produtoId nem subReceitaId na ficha "${fichaNome}" (${unidadeNome}) — abortando import.`
+              );
+            }
             await tx.ingredienteReceita.create({
               data: {
                 receitaId,
-                produtoId: ing.produtoChave ? produtoIdPorChave.get(ing.produtoChave)! : null,
-                subReceitaId: ing.subReceitaNome ? receitaIdPorNome.get(ing.subReceitaNome)! : null,
+                produtoId: produtoId ?? null,
+                subReceitaId: subReceitaId ?? null,
                 quantidade: ing.quantidade,
                 unidadeMedida: ing.unidadeMedida,
               },

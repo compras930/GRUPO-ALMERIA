@@ -5,13 +5,11 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { normalizarNome } from "@/lib/nome-normalizado";
 import { carregarIndiceReceitas, explodirReceitaPura, CicloReceitaError } from "@/lib/receita";
+import { resolverIngredientesPura, type LinhaIngredienteBruta } from "@/lib/resolucao-ingredientes";
 
-type LinhaIngredienteInput = {
-  tipo: "INSUMO" | "SUBRECEITA";
-  nome: string;
-  unidadeMedida: string;
-  quantidade: number;
-};
+// Mesma convenção de salvarFicha: cada linha vem identificada por id
+// (produtoId/subReceitaId), nunca por nome — ver src/lib/resolucao-ingredientes.ts.
+type LinhaIngredienteInput = LinhaIngredienteBruta;
 
 /**
  * Cria ou atualiza uma "sub-receita solta" — uma Receita que existe por conta
@@ -24,6 +22,12 @@ type LinhaIngredienteInput = {
  * `receitaId` null = cria uma nova (precisa de `unidadeId` no FormData);
  * `receitaId` preenchido = edita a receita existente (nome pode mudar, mas
  * tem que continuar único dentro da unidade).
+ *
+ * Como em salvarFicha, os ingredientes são identificados por id e apenas
+ * validados aqui (esta action não cria Produto) — resolver insumo por nome
+ * gravava o ingrediente errado quando o catálogo tem nomes homônimos. Se
+ * qualquer linha não resolver, a ação falha listando todas de uma vez e nada
+ * é gravado.
  */
 export async function salvarSubReceita(receitaId: string | null, formData: FormData) {
   await requireAdmin();
@@ -41,7 +45,7 @@ export async function salvarSubReceita(receitaId: string | null, formData: FormD
   } catch {
     throw new Error("Lista de ingredientes inválida.");
   }
-  linhas = linhas.filter((l) => l.nome && l.quantidade > 0);
+  linhas = linhas.filter((l) => l.quantidade > 0);
 
   let unidadeId: string;
   if (receitaId) {
@@ -68,28 +72,32 @@ export async function salvarSubReceita(receitaId: string | null, formData: FormD
       await tx.receita.update({ where: { id }, data: { nome: novoNome, modoPreparo, rendimentoQtd, rendimentoUnidade } });
     }
 
-    const dadosIngredientes: { produtoId: string | null; subReceitaId: string | null; quantidade: number; unidadeMedida: string }[] = [];
-    for (const linha of linhas) {
-      const nome = normalizarNome(linha.nome);
-      const unidadeMedida = normalizarNome(linha.unidadeMedida || "UN").toUpperCase();
-      if (linha.tipo === "SUBRECEITA") {
-        const subReceita = await tx.receita.findUnique({ where: { unidadeId_nome: { unidadeId, nome } } });
-        if (!subReceita) {
-          throw new Error(`Sub-receita "${nome}" não existe nesta unidade ainda — crie a ficha dela primeiro.`);
-        }
-        if (subReceita.id === id) {
-          throw new Error(`Uma receita não pode usar a si mesma ("${nome}") como sub-receita.`);
-        }
-        dadosIngredientes.push({ produtoId: null, subReceitaId: subReceita.id, quantidade: linha.quantidade, unidadeMedida });
-      } else {
-        const produto = await tx.produto.upsert({
-          where: { nome_unidadeMedida: { nome, unidadeMedida } },
-          update: {},
-          create: { nome, unidadeMedida },
-        });
-        dadosIngredientes.push({ produtoId: produto.id, subReceitaId: null, quantidade: linha.quantidade, unidadeMedida });
-      }
+    const resolucao = resolverIngredientesPura(linhas, {
+      produtosPorId: new Map(
+        (
+          await tx.produto.findMany({
+            where: { id: { in: linhas.filter((l) => l.tipo === "INSUMO").map((l) => l.produtoId) } },
+            select: { id: true, nome: true, unidadeMedida: true },
+          })
+        ).map((p) => [p.id, p])
+      ),
+      receitasPorId: new Map(
+        (
+          await tx.receita.findMany({
+            where: { id: { in: linhas.filter((l) => l.tipo === "SUBRECEITA").map((l) => l.subReceitaId) } },
+            select: { id: true, nome: true, unidadeId: true, rendimentoUnidade: true },
+          })
+        ).map((r) => [r.id, r])
+      ),
+      receitaAtualId: id,
+      unidadeId,
+    });
+    if (!resolucao.ok) {
+      throw new Error(
+        `Não deu pra salvar — corrija os ingredientes abaixo e salve de novo:\n${resolucao.erros.join("\n")}`
+      );
     }
+    const dadosIngredientes = resolucao.ingredientes;
 
     await tx.ingredienteReceita.deleteMany({ where: { receitaId: id } });
     for (const d of dadosIngredientes) {

@@ -5,22 +5,28 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { normalizarNome } from "@/lib/nome-normalizado";
 import { carregarIndiceReceitas, explodirReceitaPura, CicloReceitaError } from "@/lib/receita";
+import { resolverIngredientesPura, type LinhaIngredienteBruta } from "@/lib/resolucao-ingredientes";
 
-type LinhaIngredienteInput = {
-  tipo: "INSUMO" | "SUBRECEITA";
-  nome: string;
-  unidadeMedida: string;
-  quantidade: number;
-};
+// A lista de ingredientes chega do FichaForm identificando cada linha por id
+// (produtoId/subReceitaId), nunca por nome — ver src/lib/resolucao-ingredientes.ts.
+type LinhaIngredienteInput = LinhaIngredienteBruta;
 
 /**
  * Cria (se ainda não existir) ou atualiza a ficha técnica de um ItemVenda:
  * nome/categoria/preço de venda do item, e a lista de ingredientes da
- * receita ligada a ele. Insumo referenciado por nome é criado
- * automaticamente no catálogo se ainda não existir (find-or-create); uma
- * sub-receita referenciada por nome PRECISA já existir na mesma unidade —
- * não cria um "rascunho" fantasma silenciosamente, pra não confundir com
- * uma receita de verdade esquecida a meio caminho.
+ * receita ligada a ele.
+ *
+ * Cada ingrediente chega identificado por id (produtoId ou subReceitaId) e é
+ * só VALIDADO aqui — esta action não cria Produto nem Receita. Antes ela
+ * resolvia insumo por nome com `produto.upsert`, o que num catálogo com nomes
+ * homônimos (produção tem "BURRATA" e "Burrata", as duas em KG) gravava o
+ * ingrediente errado ou criava uma terceira variante, silenciosamente. Pra
+ * cadastrar um insumo novo, a tela chama `criarProdutoInline` explicitamente
+ * antes de salvar a ficha.
+ *
+ * Se qualquer linha não resolver, a ação falha listando TODAS as linhas com
+ * problema (não só a primeira) e nada é gravado — nenhuma linha é descartada
+ * em silêncio.
  *
  * Depois de salvar, valida que a receita não ficou com um ciclo (ela
  * mesma, direta ou indiretamente, apontando de volta pra si) — se ficar,
@@ -47,7 +53,10 @@ export async function salvarFicha(itemVendaId: string, formData: FormData) {
   } catch {
     throw new Error("Lista de ingredientes inválida.");
   }
-  linhas = linhas.filter((l) => l.nome && l.quantidade > 0);
+  // Linha sem id resolvido nunca deveria chegar aqui (a tela só monta a linha
+  // depois que o usuário escolhe um produto/sub-receita do seletor); se chegar,
+  // é bug de client ou payload adulterado — a resolução abaixo falha explícito.
+  linhas = linhas.filter((l) => l.quantidade > 0);
 
   await prisma.$transaction(async (tx) => {
     // Garante que existe uma Receita ligada ao item (cria vazia na primeira vez que alguém salva).
@@ -64,31 +73,34 @@ export async function salvarFicha(itemVendaId: string, formData: FormData) {
       });
     }
 
-    // Resolve cada linha: insumo -> find-or-create Produto; sub-receita -> tem que já existir.
-    const dadosIngredientes: { produtoId: string | null; subReceitaId: string | null; quantidade: number; unidadeMedida: string }[] = [];
-    for (const linha of linhas) {
-      const nome = normalizarNome(linha.nome);
-      const unidadeMedida = normalizarNome(linha.unidadeMedida || "UN").toUpperCase();
-      if (linha.tipo === "SUBRECEITA") {
-        const subReceita = await tx.receita.findUnique({
-          where: { unidadeId_nome: { unidadeId: item.unidadeId, nome } },
-        });
-        if (!subReceita) {
-          throw new Error(`Sub-receita "${nome}" não existe nesta unidade ainda — crie a ficha dela primeiro.`);
-        }
-        if (subReceita.id === receitaId) {
-          throw new Error(`Uma receita não pode usar a si mesma ("${nome}") como sub-receita.`);
-        }
-        dadosIngredientes.push({ produtoId: null, subReceitaId: subReceita.id, quantidade: linha.quantidade, unidadeMedida });
-      } else {
-        const produto = await tx.produto.upsert({
-          where: { nome_unidadeMedida: { nome, unidadeMedida } },
-          update: {},
-          create: { nome, unidadeMedida },
-        });
-        dadosIngredientes.push({ produtoId: produto.id, subReceitaId: null, quantidade: linha.quantidade, unidadeMedida });
-      }
+    // Resolve todas as linhas por id, em lote (2 consultas, não 1 por linha), e
+    // valida tudo ANTES de escrever qualquer coisa.
+    const resolucao = resolverIngredientesPura(linhas, {
+      produtosPorId: new Map(
+        (
+          await tx.produto.findMany({
+            where: { id: { in: linhas.filter((l) => l.tipo === "INSUMO").map((l) => l.produtoId) } },
+            select: { id: true, nome: true, unidadeMedida: true },
+          })
+        ).map((p) => [p.id, p])
+      ),
+      receitasPorId: new Map(
+        (
+          await tx.receita.findMany({
+            where: { id: { in: linhas.filter((l) => l.tipo === "SUBRECEITA").map((l) => l.subReceitaId) } },
+            select: { id: true, nome: true, unidadeId: true, rendimentoUnidade: true },
+          })
+        ).map((r) => [r.id, r])
+      ),
+      receitaAtualId: receitaId,
+      unidadeId: item.unidadeId,
+    });
+    if (!resolucao.ok) {
+      throw new Error(
+        `Não deu pra salvar — corrija os ingredientes abaixo e salve de novo:\n${resolucao.erros.join("\n")}`
+      );
     }
+    const dadosIngredientes = resolucao.ingredientes;
 
     await tx.ingredienteReceita.deleteMany({ where: { receitaId } });
     for (const d of dadosIngredientes) {

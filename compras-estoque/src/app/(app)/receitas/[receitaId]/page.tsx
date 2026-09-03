@@ -19,16 +19,22 @@ export default async function EditarReceitaPage({ params }: { params: { receitaI
   if (!receita) notFound();
 
   const [produtos, subReceitas] = await Promise.all([
-    prisma.produto.findMany({ orderBy: { nome: "asc" }, select: { nome: true } }),
+    prisma.produto.findMany({
+      where: { ativo: true },
+      orderBy: { nome: "asc" },
+      select: { id: true, nome: true, unidadeMedida: true },
+    }),
     prisma.receita.findMany({
       where: { unidadeId: receita.unidadeId, NOT: { id: receita.id } },
       orderBy: { nome: "asc" },
-      select: { nome: true },
+      select: { id: true, nome: true, rendimentoUnidade: true },
     }),
   ]);
 
   const ingredientesIniciais = receita.ingredientes.map((i) => ({
     tipo: (i.produtoId ? "INSUMO" : "SUBRECEITA") as "INSUMO" | "SUBRECEITA",
+    produtoId: i.produtoId,
+    subReceitaId: i.subReceitaId,
     nome: i.produto?.nome ?? i.subReceita?.nome ?? "",
     unidadeMedida: i.unidadeMedida,
     quantidade: i.quantidade,
@@ -76,8 +82,8 @@ export default async function EditarReceitaPage({ params }: { params: { receitaI
           rendimentoQtdInicial={receita.rendimentoQtd}
           rendimentoUnidadeInicial={receita.rendimentoUnidade ?? ""}
           ingredientesIniciais={ingredientesIniciais}
-          nomesInsumos={produtos.map((p) => p.nome)}
-          nomesSubReceitas={subReceitas.map((r) => r.nome)}
+          opcoesProduto={produtos}
+          opcoesSubReceita={subReceitas}
         />
       </div>
     </div>

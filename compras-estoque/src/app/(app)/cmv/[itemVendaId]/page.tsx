@@ -25,17 +25,25 @@ export default async function ItemVendaPage({ params }: { params: { itemVendaId:
           include: { ingredientes: { include: { produto: true, subReceita: true } } },
         })
       : Promise.resolve(null),
-    prisma.produto.findMany({ orderBy: { nome: "asc" }, select: { nome: true } }),
+    // id junto do nome: o formulário identifica o ingrediente pelo id (o
+    // catálogo tem nomes homônimos, então nome não serve como identificador).
+    prisma.produto.findMany({
+      where: { ativo: true },
+      orderBy: { nome: "asc" },
+      select: { id: true, nome: true, unidadeMedida: true },
+    }),
     prisma.receita.findMany({
       where: { unidadeId: item.unidadeId, NOT: { id: item.receitaId ?? undefined } },
       orderBy: { nome: "asc" },
-      select: { nome: true },
+      select: { id: true, nome: true, rendimentoUnidade: true },
     }),
     prisma.itemVenda.findMany({ where: { unidadeId: item.unidadeId, tipo: item.tipo }, select: { categoria: true } }),
   ]);
 
   const ingredientesIniciais = (receita?.ingredientes ?? []).map((i) => ({
     tipo: (i.produtoId ? "INSUMO" : "SUBRECEITA") as "INSUMO" | "SUBRECEITA",
+    produtoId: i.produtoId,
+    subReceitaId: i.subReceitaId,
     nome: i.produto?.nome ?? i.subReceita?.nome ?? "",
     unidadeMedida: i.unidadeMedida,
     quantidade: i.quantidade,
@@ -91,8 +99,8 @@ export default async function ItemVendaPage({ params }: { params: { itemVendaId:
           rendimentoQtdInicial={receita?.rendimentoQtd ?? null}
           rendimentoUnidadeInicial={receita?.rendimentoUnidade ?? ""}
           ingredientesIniciais={ingredientesIniciais}
-          nomesInsumos={produtos.map((p) => p.nome)}
-          nomesSubReceitas={subReceitas.map((r) => r.nome)}
+          opcoesProduto={produtos}
+          opcoesSubReceita={subReceitas}
           categoriasConhecidas={categoriasConhecidas}
         />
       </div>

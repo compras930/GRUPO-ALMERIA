@@ -12,8 +12,16 @@ export default async function NovaReceitaPage({ searchParams }: { searchParams: 
   if (!unidade) notFound();
 
   const [produtos, subReceitas] = await Promise.all([
-    prisma.produto.findMany({ orderBy: { nome: "asc" }, select: { nome: true } }),
-    prisma.receita.findMany({ where: { unidadeId: unidade.id }, orderBy: { nome: "asc" }, select: { nome: true } }),
+    prisma.produto.findMany({
+      where: { ativo: true },
+      orderBy: { nome: "asc" },
+      select: { id: true, nome: true, unidadeMedida: true },
+    }),
+    prisma.receita.findMany({
+      where: { unidadeId: unidade.id },
+      orderBy: { nome: "asc" },
+      select: { id: true, nome: true, rendimentoUnidade: true },
+    }),
   ]);
 
   return (
@@ -34,8 +42,8 @@ export default async function NovaReceitaPage({ searchParams }: { searchParams: 
           rendimentoQtdInicial={null}
           rendimentoUnidadeInicial=""
           ingredientesIniciais={[]}
-          nomesInsumos={produtos.map((p) => p.nome)}
-          nomesSubReceitas={subReceitas.map((r) => r.nome)}
+          opcoesProduto={produtos}
+          opcoesSubReceita={subReceitas}
         />
       </div>
     </div>

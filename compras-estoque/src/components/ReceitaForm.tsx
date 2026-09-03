@@ -3,15 +3,26 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { salvarSubReceita } from "@/actions/receitas";
+import SeletorIngrediente, { type OpcaoProduto, type OpcaoSubReceita, type Selecao } from "./SeletorIngrediente";
 
 type IngredienteExistente = {
   tipo: "INSUMO" | "SUBRECEITA";
+  produtoId: string | null;
+  subReceitaId: string | null;
   nome: string;
   unidadeMedida: string;
   quantidade: number;
 };
 
-type Linha = { tipo: "INSUMO" | "SUBRECEITA"; nome: string; unidadeMedida: string; quantidade: string };
+// Mesma convenção do FichaForm: a linha guarda o ID do ingrediente escolhido,
+// nunca o nome digitado (nome digitado era ambíguo no catálogo de produção).
+type Linha = {
+  tipo: "INSUMO" | "SUBRECEITA";
+  ingredienteId: string | null;
+  nomeExibicao: string;
+  unidadeMedida: string;
+  quantidade: string;
+};
 
 export default function ReceitaForm({
   receitaId,
@@ -21,8 +32,8 @@ export default function ReceitaForm({
   rendimentoQtdInicial,
   rendimentoUnidadeInicial,
   ingredientesIniciais,
-  nomesInsumos,
-  nomesSubReceitas,
+  opcoesProduto,
+  opcoesSubReceita,
 }: {
   receitaId: string | null;
   unidadeId: string;
@@ -31,8 +42,8 @@ export default function ReceitaForm({
   rendimentoQtdInicial: number | null;
   rendimentoUnidadeInicial: string;
   ingredientesIniciais: IngredienteExistente[];
-  nomesInsumos: string[];
-  nomesSubReceitas: string[];
+  opcoesProduto: OpcaoProduto[];
+  opcoesSubReceita: OpcaoSubReceita[];
 }) {
   const router = useRouter();
   const [nome, setNome] = useState(nomeInicial);
@@ -40,18 +51,26 @@ export default function ReceitaForm({
   const [rendimentoQtd, setRendimentoQtd] = useState(rendimentoQtdInicial ? String(rendimentoQtdInicial) : "");
   const [rendimentoUnidade, setRendimentoUnidade] = useState(rendimentoUnidadeInicial);
   const [linhas, setLinhas] = useState<Linha[]>(
-    ingredientesIniciais.length
-      ? ingredientesIniciais.map((i) => ({ tipo: i.tipo, nome: i.nome, unidadeMedida: i.unidadeMedida, quantidade: String(i.quantidade) }))
-      : [{ tipo: "INSUMO", nome: "", unidadeMedida: "", quantidade: "" }]
+    ingredientesIniciais.length ? ingredientesIniciais.map(linhaDeExistente) : [linhaVazia()]
   );
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
 
-  function atualizarLinha(idx: number, campo: keyof Linha, valor: string) {
-    setLinhas((prev) => prev.map((l, i) => (i === idx ? { ...l, [campo]: valor } : l)));
+  function atualizarLinha(idx: number, patch: Partial<Linha>) {
+    setLinhas((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
+  }
+  function trocarTipo(idx: number, tipo: "INSUMO" | "SUBRECEITA") {
+    atualizarLinha(idx, { tipo, ingredienteId: null, nomeExibicao: "", unidadeMedida: "" });
+  }
+  function selecionarIngrediente(idx: number, selecao: Selecao) {
+    atualizarLinha(idx, {
+      ingredienteId: selecao.id,
+      nomeExibicao: selecao.nome,
+      unidadeMedida: selecao.unidadeMedida ?? "",
+    });
   }
   function adicionarLinha() {
-    setLinhas((prev) => [...prev, { tipo: "INSUMO", nome: "", unidadeMedida: "", quantidade: "" }]);
+    setLinhas((prev) => [...prev, linhaVazia()]);
   }
   function removerLinha(idx: number) {
     setLinhas((prev) => prev.filter((_, i) => i !== idx));
@@ -60,34 +79,40 @@ export default function ReceitaForm({
   async function handleSubmit(formData: FormData) {
     setErro(null);
     if (salvando) return;
-    const ingredientesValidos = linhas
-      .filter((l) => l.nome.trim() && Number(l.quantidade) > 0)
-      .map((l) => ({ tipo: l.tipo, nome: l.nome.trim(), unidadeMedida: l.unidadeMedida.trim() || "UN", quantidade: Number(l.quantidade) }));
-    formData.set("ingredientes", JSON.stringify(ingredientesValidos));
+
+    const semIngrediente = linhas.filter((l) => !l.ingredienteId && Number(l.quantidade) > 0).length;
+    if (semIngrediente) {
+      setErro(
+        `${semIngrediente} linha(s) têm quantidade mas nenhum ingrediente escolhido — escolha o ingrediente ou remova a linha.`
+      );
+      return;
+    }
+    const ingredientes = linhas
+      .filter((l) => l.ingredienteId && Number(l.quantidade) > 0)
+      .map((l) =>
+        l.tipo === "INSUMO"
+          ? { tipo: "INSUMO" as const, produtoId: l.ingredienteId!, unidadeMedida: l.unidadeMedida, quantidade: Number(l.quantidade) }
+          : { tipo: "SUBRECEITA" as const, subReceitaId: l.ingredienteId!, unidadeMedida: l.unidadeMedida, quantidade: Number(l.quantidade) }
+      );
+    formData.set("ingredientes", JSON.stringify(ingredientes));
     formData.set("unidadeId", unidadeId);
+
     setSalvando(true);
     try {
       await salvarSubReceita(receitaId, formData);
       router.push(`/receitas?unidade=${unidadeId}`);
     } catch (e: any) {
-      setSalvando(false);
       setErro(e?.message || "Não foi possível salvar a sub-receita.");
+    } finally {
+      // No caminho de sucesso o router.push desmonta este componente logo em
+      // seguida; o reset aqui cobre o caso do push demorar/falhar, pra o botão
+      // nunca ficar preso em "Salvando...".
+      setSalvando(false);
     }
   }
 
   return (
     <form action={handleSubmit}>
-      <datalist id="lista-insumos">
-        {nomesInsumos.map((n) => (
-          <option key={n} value={n} />
-        ))}
-      </datalist>
-      <datalist id="lista-subreceitas">
-        {nomesSubReceitas.map((n) => (
-          <option key={n} value={n} />
-        ))}
-      </datalist>
-
       <div className="field-row">
         <div className="field-group">
           <label htmlFor="nome">Nome</label>
@@ -113,27 +138,38 @@ export default function ReceitaForm({
           {linhas.map((linha, idx) => (
             <tr key={idx}>
               <td>
-                <select value={linha.tipo} onChange={(e) => atualizarLinha(idx, "tipo", e.target.value)}>
+                <select
+                  value={linha.tipo}
+                  onChange={(e) => trocarTipo(idx, e.target.value as "INSUMO" | "SUBRECEITA")}
+                >
                   <option value="INSUMO">Insumo</option>
                   <option value="SUBRECEITA">Sub-receita</option>
                 </select>
               </td>
               <td>
-                <input
-                  list={linha.tipo === "INSUMO" ? "lista-insumos" : "lista-subreceitas"}
-                  value={linha.nome}
-                  placeholder={linha.tipo === "INSUMO" ? "Nome do insumo" : "Nome da sub-receita (já cadastrada)"}
-                  onChange={(e) => atualizarLinha(idx, "nome", e.target.value)}
-                  style={{ width: "100%" }}
+                <SeletorIngrediente
+                  tipo={linha.tipo}
+                  opcoesProduto={opcoesProduto}
+                  opcoesSubReceita={opcoesSubReceita}
+                  selecionado={
+                    linha.ingredienteId
+                      ? { id: linha.ingredienteId, nome: linha.nomeExibicao, unidadeMedida: linha.unidadeMedida || null }
+                      : null
+                  }
+                  onSelecionar={(selecao) => selecionarIngrediente(idx, selecao)}
                 />
               </td>
               <td className="num">
-                <input
-                  style={{ width: 70 }}
-                  value={linha.unidadeMedida}
-                  placeholder="KG"
-                  onChange={(e) => atualizarLinha(idx, "unidadeMedida", e.target.value)}
-                />
+                {linha.tipo === "INSUMO" || linha.unidadeMedida ? (
+                  <span className="combobox-unidade">{linha.unidadeMedida || "—"}</span>
+                ) : (
+                  <input
+                    style={{ width: 70 }}
+                    value={linha.unidadeMedida}
+                    placeholder="KG"
+                    onChange={(e) => atualizarLinha(idx, { unidadeMedida: e.target.value.toUpperCase() })}
+                  />
+                )}
               </td>
               <td className="num">
                 <input
@@ -142,7 +178,7 @@ export default function ReceitaForm({
                   min="0"
                   style={{ width: 90, textAlign: "right" }}
                   value={linha.quantidade}
-                  onChange={(e) => atualizarLinha(idx, "quantidade", e.target.value)}
+                  onChange={(e) => atualizarLinha(idx, { quantidade: e.target.value })}
                 />
               </td>
               <td>
@@ -185,7 +221,8 @@ export default function ReceitaForm({
       </div>
       <p className="sub" style={{ marginTop: -8, marginBottom: 18 }}>
         Ex.: "essa manteiga temperada rende 0,5kg" — deixa quem for usar essa sub-receita em outra
-        ficha saber quanto do lote está usando (não precisa preencher se não souber ainda).
+        ficha saber quanto do lote está usando. Quando preenchido, a unidade do rendimento passa a
+        ser a unidade exigida de quem usar essa sub-receita como ingrediente.
       </p>
 
       <div className="field-group" style={{ marginBottom: 18 }}>
@@ -200,4 +237,18 @@ export default function ReceitaForm({
       </button>
     </form>
   );
+}
+
+function linhaVazia(): Linha {
+  return { tipo: "INSUMO", ingredienteId: null, nomeExibicao: "", unidadeMedida: "", quantidade: "" };
+}
+
+function linhaDeExistente(i: IngredienteExistente): Linha {
+  return {
+    tipo: i.tipo,
+    ingredienteId: i.produtoId ?? i.subReceitaId,
+    nomeExibicao: i.nome,
+    unidadeMedida: i.unidadeMedida,
+    quantidade: String(i.quantidade),
+  };
 }
