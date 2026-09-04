@@ -113,14 +113,22 @@ describe("resolverIngredientesPura", () => {
     expect(r.erros[0]).toContain("KG");
   });
 
-  it("erro quando a unidade da linha não bate com o rendimento da sub-receita", () => {
+  // Contraparte deliberada do teste acima (que exige unidade batendo pro
+  // INSUMO): pra sub-receita a unidade da linha NÃO bloqueia. O custo de uma
+  // sub-receita é quantidade / rendimentoQtd, sem olhar rótulo de unidade, e no
+  // dado real 26 linhas divergem por conta de rendimento derivado na
+  // importação — bloquear travaria a edição dessas fichas sem proteger conta
+  // nenhuma. Ver comentário em resolucao-ingredientes.ts.
+  it("unidade divergente do rendimento da sub-receita NÃO bloqueia o salvamento", () => {
     const r = resolverIngredientesPura(
       [{ tipo: "SUBRECEITA", subReceitaId: "rec-molho", unidadeMedida: "LT", quantidade: 1 }],
       contexto()
     );
-    expect(r.ok).toBe(false);
-    if (r.ok) return;
-    expect(r.erros[0]).toContain("MOLHO PESTO");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.ingredientes).toEqual([
+      { produtoId: null, subReceitaId: "rec-molho", quantidade: 1, unidadeMedida: "LT" },
+    ]);
   });
 
   it("sub-receita sem rendimentoUnidade: não valida unidade, passa", () => {

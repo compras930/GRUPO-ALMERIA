@@ -72,13 +72,24 @@ export function resolverIngredientesPura(
         erros.push(`Linha ${n}: uma receita não pode usar a si mesma ("${sub.nome}") como sub-receita.`);
         return;
       }
-      // rendimentoUnidade é o único "contrato de unidade" que uma sub-receita tem
-      // hoje. Quando ela não tem rendimento definido, não há com o que comparar —
-      // deixa passar (limitação pré-existente, não é o que este fix resolve).
-      if (sub.rendimentoUnidade && linha.unidadeMedida !== sub.rendimentoUnidade) {
-        erros.push(`Linha ${n}: a unidade "${linha.unidadeMedida}" não bate com o rendimento de "${sub.nome}", que é em ${sub.rendimentoUnidade}.`);
-        return;
-      }
+      // Aqui NÃO se valida a unidade da linha contra o rendimentoUnidade da
+      // sub-receita, de propósito — diferente do caso INSUMO abaixo.
+      //
+      // Motivo: no dado real, 26 linhas (de 1311) divergem, e a divergência é
+      // de rótulo, não de conta. São sub-receitas cujo rendimento veio derivado
+      // da importação do dashboard antigo (ex.: "CAFÉ COADO" com rendimentoQtd
+      // 1482.88 "ML", "FRANGO DESFIADO" com 11559.93 "G") e que as fichas
+      // consomem escrevendo outro rótulo ("UNIDADE", "UN", "LT"). Como
+      // explodirReceitaPura só divide quantidade por rendimentoQtd, sem olhar
+      // unidade nenhuma, o custo dessas fichas não depende desse rótulo.
+      //
+      // Bloquear aqui não protegeria nada e impediria de salvar 26 fichas que
+      // hoje funcionam: uma linha NOVA já nasce com a unidade certa (o seletor
+      // preenche a partir do rendimentoUnidade da sub-receita escolhida), então
+      // a checagem só dispararia em dado legado — travando quem só queria
+      // corrigir outra linha da mesma ficha. A limpeza desses 26 rótulos é
+      // parte da frente de saneamento das fichas, onde dá pra revisar todos de
+      // uma vez, e não uma cobrança a cada salvamento.
       ingredientes.push({
         produtoId: null,
         subReceitaId: sub.id,
