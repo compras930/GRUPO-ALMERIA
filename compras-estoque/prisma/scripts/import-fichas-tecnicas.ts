@@ -413,7 +413,15 @@ async function main() {
 
         // Passe 3 — IngredienteReceita
         for (const [fichaNome, ingredientes] of ingredientesPorFicha) {
-          const receitaId = receitaIdPorNome.get(fichaNome)!;
+          const receitaId = receitaIdPorNome.get(fichaNome);
+          if (!receitaId) {
+            // Mesmo princípio dos ingredientes abaixo: o passe 2 cria uma Receita
+            // pra cada chave de FICHA_LOOKUP, então não deveria faltar — mas se
+            // faltasse, o `!` que estava aqui passava `undefined` como receitaId
+            // pro deleteMany, que apagaria ingrediente de receita nenhuma e
+            // seguiria como se tivesse dado certo.
+            throw new Error(`Receita "${fichaNome}" (${unidadeNome}) não foi criada no passe 2 — abortando import.`);
+          }
           // idempotência simples: apaga e recria os ingredientes desta receita neste import
           await tx.ingredienteReceita.deleteMany({ where: { receitaId } });
           for (const ing of ingredientes) {
