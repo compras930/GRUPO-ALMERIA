@@ -214,6 +214,29 @@ SET "produtoId" = m.keep_id, "unidadeMedida" = m.keep_unidade
 FROM "_produtos_mesclados_unidade" m
 WHERE i."produtoId" = m.dup_id;
 
+-- Normaliza rótulo de unidade LEGADO em linhas que já apontavam pro cadastro que
+-- ficou — essas não passam pelo UPDATE acima (o produtoId delas não mudou), então
+-- ficariam com a divergência intacta. Caso real em produção: duas linhas da ficha
+-- CALDO VERDE escritas em "UNIDADE" contra o produto em "UND".
+--
+-- Só troca entre grafias da MESMA unidade. Não encosta em G x KG nem ML x LT de
+-- propósito: ali a diferença é de escala (1000x), e reescrever o rótulo faria a
+-- linha parecer correta escondendo uma quantidade que pode estar errada — o
+-- oposto do que se quer. Esses casos têm que aparecer na verificação 5c e ser
+-- revisados um a um.
+UPDATE "IngredienteReceita" i
+SET "unidadeMedida" = p."unidadeMedida"
+FROM "Produto" p
+WHERE p.id = i."produtoId"
+  AND upper(btrim(i."unidadeMedida")) <> upper(btrim(p."unidadeMedida"))
+  AND (
+    (upper(btrim(i."unidadeMedida")) IN ('UN', 'UNI', 'UNID', 'UNIDADE', 'UND')
+     AND upper(btrim(p."unidadeMedida")) IN ('UN', 'UNI', 'UNID', 'UNIDADE', 'UND'))
+    OR
+    (upper(btrim(i."unidadeMedida")) IN ('L', 'LT', 'LITRO')
+     AND upper(btrim(p."unidadeMedida")) IN ('L', 'LT', 'LITRO'))
+  );
+
 -- Histórico de preço acompanha o produto que fica (não se perde nada).
 UPDATE "HistoricoPrecoProduto" t SET "produtoId" = m.keep_id
   FROM "_produtos_mesclados_unidade" m WHERE t."produtoId" = m.dup_id;
