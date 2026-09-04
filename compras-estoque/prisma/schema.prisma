@@ -92,6 +92,15 @@ model Produto {
   itensNotaCompra     ItemNotaCompra[]
   parametrosEstoque   ParametroEstoqueProduto[]
 
+  // Atenção: esta constraint é case-sensitive (texto em Postgres compara byte a
+  // byte), então ela NÃO impede "BURRATA" e "Burrata" de coexistirem — brecha que
+  // causou o bug de gravação de ficha técnica quando o ingrediente era resolvido
+  // por nome. Quem fecha isso é o índice funcional
+  // "Produto_nome_ignorando_caixa_unidadeMedida_key", criado na migração
+  // 20260904123000_produto_nome_unico_ignorando_caixa: um índice sobre
+  // lower(btrim(nome)) não é declarável aqui no schema, então ele existe só no
+  // banco. Se algum `prisma migrate dev` gerar uma migração apagando esse índice,
+  // é pra recusar — não é lixo, é a única garantia de banco contra o bug voltar.
   @@unique([nome, unidadeMedida])
 }
 

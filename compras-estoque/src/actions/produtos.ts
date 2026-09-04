@@ -8,15 +8,29 @@ import { UNIDADES_MEDIDA } from "@/lib/constants";
 
 export async function criarProduto(formData: FormData) {
   await requireAdmin();
-  const nome = String(formData.get("nome") || "").trim();
+  const nome = normalizarNome(String(formData.get("nome") || ""));
   const unidadeMedida = String(formData.get("unidadeMedida") || "").trim();
   if (!nome || !unidadeMedida) throw new Error("Informe nome e unidade de medida.");
+
+  // Mesmo dedupe ignorando caixa que criarProdutoInline faz — aqui a diferença é
+  // que reaproveitar o cadastro existente em silêncio seria confuso (a pessoa
+  // veio pra cadastrar um produto), então avisa e não cria. Sem isso, o índice
+  // Produto_nome_ignorando_caixa_unidadeMedida_key devolveria um erro cru do
+  // Postgres nesta tela.
+  const existente = await prisma.produto.findFirst({
+    where: { unidadeMedida, nome: { equals: nome, mode: "insensitive" } },
+  });
+  if (existente) {
+    throw new Error(
+      `Já existe o produto "${existente.nome}" em ${existente.unidadeMedida} — é o mesmo cadastro, só com outra grafia. Use ele em vez de criar um novo.`
+    );
+  }
 
   await prisma.produto.create({
     data: {
       nome,
       unidadeMedida,
-      categoria: String(formData.get("categoria") || "").trim() || null,
+      categoria: normalizarNome(String(formData.get("categoria") || "")) || null,
     },
   });
   revalidatePath("/produtos");

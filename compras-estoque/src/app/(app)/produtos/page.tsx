@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
-import { criarProduto, alternarProduto } from "@/actions/produtos";
-import { UNIDADES_MEDIDA } from "@/lib/constants";
+import { alternarProduto } from "@/actions/produtos";
+import ProdutoForm from "@/components/ProdutoForm";
 
 export default async function ProdutosPage() {
   await requireAdmin();
@@ -16,34 +16,7 @@ export default async function ProdutosPage() {
 
       <div className="card">
         <h2 style={{ fontSize: 15, marginBottom: 14 }}>Novo produto</h2>
-        <form action={criarProduto}>
-          <div className="field-row">
-            <div className="field-group">
-              <label htmlFor="nome">Nome</label>
-              <input id="nome" name="nome" required />
-            </div>
-            <div className="field-group">
-              <label htmlFor="categoria">Categoria</label>
-              <input id="categoria" name="categoria" placeholder="Ex: Carnes, Hortifruti, Bebidas" />
-            </div>
-            <div className="field-group">
-              <label htmlFor="unidadeMedida">Unidade de medida</label>
-              <select id="unidadeMedida" name="unidadeMedida" required defaultValue="">
-                <option value="" disabled>
-                  Selecione
-                </option>
-                {UNIDADES_MEDIDA.map((u) => (
-                  <option key={u} value={u}>
-                    {u}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <button className="btn primary" type="submit">
-            Adicionar
-          </button>
-        </form>
+        <ProdutoForm />
       </div>
 
       <table>
