@@ -33,10 +33,24 @@
 --     hoje está certo.
 --
 -- Rode o produtos-duplicados-01-diagnostico.sql antes se quiser rever o quadro.
--- Seguro de rodar mais de uma vez. Tudo numa transação. Faça o branch de backup
--- no Neon antes.
-
-BEGIN;
+--
+-- SEM BEGIN/COMMIT de propósito, e isso muda como se recupera de uma falha: o
+-- SQL Editor do Neon não mantém transação explícita entre os comandos de um
+-- script (cada um roda em autocommit), então um BEGIN aqui daria uma sensação
+-- falsa de "tudo ou nada" que o ambiente não cumpre. Foi assim que o script de
+-- preço de cortesia falhou na primeira execução real: a tabela temporária que
+-- ele criava era descartada no fim do próprio comando que a criava.
+--
+-- A rede de segurança, então, é outra: (a) faça um branch de backup no Neon
+-- imediatamente antes de rodar — é o que permite voltar atrás de verdade; e
+-- (b) o script é idempotente e dirigido pela tabela de auditoria
+-- _produtos_mesclados_unidade, que é gravada no primeiro passo. Se algo falhar
+-- no meio, rodar de novo retoma de onde parou: os passos seguintes trabalham
+-- sobre o mapa já registrado, e o que já foi repontado não é repontado de novo.
+--
+-- Só o passo 5 (apagar os Produto satélites) é irreversível sem o backup — e ele
+-- é o último justamente por isso: enquanto não roda, tudo que veio antes pode ser
+-- reconferido com as consultas de verificação no fim do arquivo.
 
 -- ---------------------------------------------------------------------------
 -- Passo 1 — Escolhe o cadastro que fica em cada grupo e registra o mapa.
@@ -277,10 +291,8 @@ WHERE "produtoId" IN (SELECT dup_id FROM "_produtos_mesclados_unidade");
 -- ---------------------------------------------------------------------------
 DELETE FROM "Produto" WHERE id IN (SELECT dup_id FROM "_produtos_mesclados_unidade");
 
-COMMIT;
-
 -- ---------------------------------------------------------------------------
--- Verificação (roda junto; resultados saem depois do COMMIT)
+-- Verificação (roda junto, no fim)
 -- ---------------------------------------------------------------------------
 
 -- 5a) O que foi unificado, com quantas fichas cada satélite carregava.
