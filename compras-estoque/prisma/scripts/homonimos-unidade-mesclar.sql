@@ -69,7 +69,11 @@ WITH decisao_manual(grupo, unidade) AS (
   --             0,04 — 40 g de couve num caldo verde, não 4% de uma couve.
   --   salsão  : 1 ficha em UND usando 0,06 (60 g).
   --   gengibre: 2 fichas em LT/UND usando 0,016 e 0,04 (16 g e 40 g).
-  VALUES ('couve', 'KG'), ('salsão', 'KG'), ('gengibre', 'KG')
+  --   tahine  : 1 ficha de cada lado, empate que o desempate por histórico de
+  --             preço resolveria em UND — mas o próprio nome do produto termina
+  --             em "KG". Fixado pra não deixar o acaso decidir.
+  VALUES ('couve', 'KG'), ('salsão', 'KG'), ('gengibre', 'KG'),
+         ('tahine - pasta de gergelim kg', 'KG')
 ),
 nao_mexer(grupo) AS (
   -- Duas unidades reais, não erro de cadastro (ver cabeçalho).
