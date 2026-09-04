@@ -42,7 +42,21 @@ export const TIPO_MOVIMENTO = [
 ] as const;
 export type TipoMovimento = (typeof TIPO_MOVIMENTO)[number];
 
-export const UNIDADES_MEDIDA = ["KG", "G", "L", "ML", "UN", "CX", "PCT", "FD"] as const;
+// Unidades oferecidas pra CADASTRO NOVO de produto. KG/LT/UND é o padrão do
+// catálogo desde a padronização (G e ML foram convertidos dividindo por 1000; as
+// variantes de "unidade" — UN, UNIDADE, UNI, UNID — só trocaram de nome). CX
+// continua porque embalagem/descartável não tem como converter sem saber o
+// tamanho do pacote, e alguns produtos ficaram legitimamente assim.
+//
+// A lista anterior ("KG","G","L","ML","UN","CX","PCT","FD") não tinha nem UND nem
+// LT — justamente as duas unidades do padrão — então a tela de produtos nunca
+// permitiu cadastrar nelas, e a validação que passou a usar esta lista rejeitava
+// criar produto em UND/LT pela ficha técnica.
+//
+// Isto NÃO valida dado existente: o catálogo tem valores legados (G, ML, UN,
+// UNIDADE, BOB, PT...) que continuam funcionando. Restringe só o que entra de
+// novo, pra não voltar a crescer a colcha de retalhos.
+export const UNIDADES_MEDIDA = ["KG", "LT", "UND", "CX"] as const;
 
 export const TIPO_ITEM_VENDA = ["PRATO", "BEBIDA", "VINHO"] as const;
 export type TipoItemVenda = (typeof TIPO_ITEM_VENDA)[number];
