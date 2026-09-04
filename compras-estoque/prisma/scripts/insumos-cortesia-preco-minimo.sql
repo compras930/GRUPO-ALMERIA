@@ -18,68 +18,68 @@
 -- Idempotente: só mexe onde o preço está zerado, então a segunda execução não
 -- faz nada. Não sobrescreve preço de verdade que venha a ser cadastrado depois.
 
-BEGIN;
+-- IMPORTANTE: sem tabela temporária de propósito. O SQL Editor do Neon roda cada
+-- comando do script numa conexão do pool, e tabela temporária vive por sessão —
+-- a criada num comando não existe no seguinte. Por isso o ajuste inteiro é UM
+-- comando só, encadeado por CTE, o que de quebra o torna atômico sem precisar de
+-- BEGIN/COMMIT explícito.
 
 -- ---------------------------------------------------------------------------
--- Passo 1 — Quais produtos entram (confira esta lista antes de seguir).
--- Casar por nome exato, não por ILIKE '%agua%': "ÁGUA COM GÁS" e "ÁGUA DE COCO"
--- são compra de verdade e não podem cair aqui.
+-- Passo 1 — Confira esta lista antes de rodar o passo 2: são os produtos que vão
+-- receber R$ 0,01. Casar por nome exato, nunca por ILIKE '%agua%' — "ÁGUA COM
+-- GÁS" e "ÁGUA DE COCO" são compra de verdade e não podem cair aqui.
 -- ---------------------------------------------------------------------------
-CREATE TEMP TABLE _cortesia ON COMMIT DROP AS
-SELECT p.id, p.nome, p."unidadeMedida"
+SELECT p.nome, p."unidadeMedida",
+       (SELECT count(*) FROM "IngredienteReceita" i WHERE i."produtoId" = p.id) AS fichas,
+       (SELECT count(*) FROM "PrecoAtualProduto" x WHERE x."produtoId" = p.id AND x.preco = 0) AS precos_zerados
 FROM "Produto" p
-WHERE lower(btrim(p.nome)) IN ('água', 'agua', 'gelo', 'agua coccão', 'água cocção', 'agua cocção');
-
-SELECT c.nome, c."unidadeMedida",
-       (SELECT count(*) FROM "IngredienteReceita" i WHERE i."produtoId" = c.id) AS fichas
-FROM _cortesia c ORDER BY c.nome;
-
--- Guarda só o que ESTE script alterou, pra o histórico do passo 4 registrar
--- exatamente isso. Sem essa separação, o histórico marcaria como ajuste nosso
--- qualquer linha que já estivesse em 0,01 por outro motivo (a importação
--- original já deixou algumas assim).
-CREATE TEMP TABLE _aplicado (unidade_id text, produto_id text) ON COMMIT DROP;
+WHERE lower(btrim(p.nome)) IN ('água', 'agua', 'gelo', 'agua coccão', 'água cocção', 'agua cocção')
+ORDER BY p.nome;
 
 -- ---------------------------------------------------------------------------
--- Passo 2 — Preço 0,01 onde já existe linha de preço zerada.
+-- Passo 2 — O ajuste. Um comando, três efeitos encadeados:
+--
+--   atualizadas: põe 0,01 nas linhas de preço que estão zeradas;
+--   inseridas:   cria linha de preço nas casas onde o insumo é USADO em ficha
+--                mas não tem preço nenhum — o cálculo usa `preço ?? 0`, então
+--                sem isso o custo seguiria zero justamente onde ninguém olhou;
+--   histórico:   registra SÓ o que foi alterado acima (por isso o RETURNING).
+--                Sem essa separação, o histórico marcaria como ajuste nosso
+--                qualquer linha que já estivesse em 0,01 por outro motivo — a
+--                importação original deixou algumas assim.
+--
+-- A origem própria (AJUSTE_INSUMO_CORTESIA) segue o padrão das correções
+-- anteriores, que já criaram origens próprias como IMPORTACAO_TEKNISA_MANUAL.
 -- ---------------------------------------------------------------------------
-WITH atualizadas AS (
+WITH cortesia AS (
+  SELECT p.id
+  FROM "Produto" p
+  WHERE lower(btrim(p.nome)) IN ('água', 'agua', 'gelo', 'agua coccão', 'água cocção', 'agua cocção')
+),
+atualizadas AS (
   UPDATE "PrecoAtualProduto" pa
   SET preco = 0.01, "dataCompra" = now(), "atualizadoEm" = now()
-  FROM _cortesia c
-  WHERE pa."produtoId" = c.id AND pa.preco = 0
+  WHERE pa."produtoId" IN (SELECT id FROM cortesia) AND pa.preco = 0
   RETURNING pa."unidadeId", pa."produtoId"
-)
-INSERT INTO _aplicado SELECT * FROM atualizadas;
-
--- ---------------------------------------------------------------------------
--- Passo 3 — Cria linha de preço nas casas onde o insumo é USADO em ficha mas
--- não tem preço cadastrado nenhum. Sem isso, o custo continua zero nessas casas
--- (o cálculo usa `preço ?? 0`) e o problema seguiria invisível justamente onde
--- ninguém olhou.
--- ---------------------------------------------------------------------------
-WITH inseridas AS (
+),
+inseridas AS (
   INSERT INTO "PrecoAtualProduto" (id, "unidadeId", "produtoId", preco, "dataCompra", "atualizadoEm")
   SELECT DISTINCT gen_random_uuid()::text, r."unidadeId", c.id, 0.01, now(), now()
-  FROM _cortesia c
+  FROM cortesia c
   JOIN "IngredienteReceita" i ON i."produtoId" = c.id
   JOIN "Receita" r ON r.id = i."receitaId"
   ON CONFLICT ("unidadeId", "produtoId") DO NOTHING
   RETURNING "unidadeId", "produtoId"
+),
+aplicadas AS (
+  SELECT * FROM atualizadas
+  UNION ALL
+  SELECT * FROM inseridas
 )
-INSERT INTO _aplicado SELECT * FROM inseridas;
-
--- ---------------------------------------------------------------------------
--- Passo 4 — Registra no histórico, com origem própria pra ficar claro depois
--- que não veio de compra. Mesmo padrão das correções anteriores, que já criaram
--- origens próprias (IMPORTACAO_TEKNISA_MANUAL).
--- ---------------------------------------------------------------------------
 INSERT INTO "HistoricoPrecoProduto" (id, "unidadeId", "produtoId", preco, origem, "origemId", "dataCompra", "criadoEm")
-SELECT gen_random_uuid()::text, a.unidade_id, a.produto_id, 0.01,
+SELECT gen_random_uuid()::text, a."unidadeId", a."produtoId", 0.01,
        'AJUSTE_INSUMO_CORTESIA', 'insumo que a casa não custeia', now(), now()
-FROM _aplicado a;
-
-COMMIT;
+FROM aplicadas a;
 
 -- ---------------------------------------------------------------------------
 -- Verificação

@@ -103,19 +103,28 @@ UPDATE "ItemNotaCompra" t SET "produtoId" = m.keep_id
 -- escolheria num UPDATE ... FROM ambíguo.
 -- ---------------------------------------------------------------------------
 
+-- Cada uma é UM comando só, encadeado por CTE: calcula o estado final, apaga as
+-- linhas da duplicada e grava na canônica de uma vez. Nada de tabela temporária
+-- — o SQL Editor do Neon roda cada comando do script numa conexão do pool, e
+-- tabela temporária vive por sessão, então a criada num comando não existiria no
+-- seguinte.
+
 -- 3a) EstoqueSaldo: saldo é quantidade física do MESMO insumo cadastrado duas
 --     vezes, então SOMA (o ledger MovimentoEstoque já foi todo repontado no
 --     passo 2, e a soma mantém saldo e ledger coerentes entre si).
-CREATE TEMP TABLE _saldo_final ON COMMIT DROP AS
-SELECT m.keep_id AS produto_id, d."unidadeId" AS unidade_id, sum(d.quantidade) AS quantidade
-FROM "EstoqueSaldo" d
-JOIN "_produtos_mesclados" m ON m.dup_id = d."produtoId"
-GROUP BY m.keep_id, d."unidadeId";
-
-DELETE FROM "EstoqueSaldo" WHERE "produtoId" IN (SELECT dup_id FROM "_produtos_mesclados");
-
+WITH final AS (
+  SELECT m.keep_id AS produto_id, d."unidadeId" AS unidade_id, sum(d.quantidade) AS quantidade
+  FROM "EstoqueSaldo" d
+  JOIN "_produtos_mesclados" m ON m.dup_id = d."produtoId"
+  GROUP BY m.keep_id, d."unidadeId"
+),
+removidas AS (
+  DELETE FROM "EstoqueSaldo"
+  WHERE "produtoId" IN (SELECT dup_id FROM "_produtos_mesclados")
+  RETURNING 1
+)
 INSERT INTO "EstoqueSaldo" (id, "unidadeId", "produtoId", quantidade, "atualizadoEm")
-SELECT gen_random_uuid()::text, unidade_id, produto_id, quantidade, now() FROM _saldo_final
+SELECT gen_random_uuid()::text, unidade_id, produto_id, quantidade, now() FROM final
 ON CONFLICT ("unidadeId", "produtoId") DO UPDATE
 SET quantidade = "EstoqueSaldo".quantidade + EXCLUDED.quantidade, "atualizadoEm" = now();
 
@@ -123,17 +132,20 @@ SET quantidade = "EstoqueSaldo".quantidade + EXCLUDED.quantidade, "atualizadoEm"
 --     dataCompra mais nova — mesma regra que o schema já documenta ("só é
 --     sobrescrito se a nova dataCompra for mais recente"). O histórico completo
 --     não se perde: HistoricoPrecoProduto foi todo repontado no passo 2.
-CREATE TEMP TABLE _preco_final ON COMMIT DROP AS
-SELECT DISTINCT ON (m.keep_id, d."unidadeId")
-       m.keep_id AS produto_id, d."unidadeId" AS unidade_id, d.preco, d."dataCompra" AS data_compra
-FROM "PrecoAtualProduto" d
-JOIN "_produtos_mesclados" m ON m.dup_id = d."produtoId"
-ORDER BY m.keep_id, d."unidadeId", d."dataCompra" DESC;
-
-DELETE FROM "PrecoAtualProduto" WHERE "produtoId" IN (SELECT dup_id FROM "_produtos_mesclados");
-
+WITH final AS (
+  SELECT DISTINCT ON (m.keep_id, d."unidadeId")
+         m.keep_id AS produto_id, d."unidadeId" AS unidade_id, d.preco, d."dataCompra" AS data_compra
+  FROM "PrecoAtualProduto" d
+  JOIN "_produtos_mesclados" m ON m.dup_id = d."produtoId"
+  ORDER BY m.keep_id, d."unidadeId", d."dataCompra" DESC
+),
+removidas AS (
+  DELETE FROM "PrecoAtualProduto"
+  WHERE "produtoId" IN (SELECT dup_id FROM "_produtos_mesclados")
+  RETURNING 1
+)
 INSERT INTO "PrecoAtualProduto" (id, "unidadeId", "produtoId", preco, "dataCompra", "atualizadoEm")
-SELECT gen_random_uuid()::text, unidade_id, produto_id, preco, data_compra, now() FROM _preco_final
+SELECT gen_random_uuid()::text, unidade_id, produto_id, preco, data_compra, now() FROM final
 ON CONFLICT ("unidadeId", "produtoId") DO UPDATE
 SET preco = EXCLUDED.preco, "dataCompra" = EXCLUDED."dataCompra", "atualizadoEm" = now()
 WHERE EXCLUDED."dataCompra" > "PrecoAtualProduto"."dataCompra";
@@ -141,17 +153,21 @@ WHERE EXCLUDED."dataCompra" > "PrecoAtualProduto"."dataCompra";
 -- 3c) ParametroEstoqueProduto: estoque mínimo/ideal é parâmetro definido a mão.
 --     Se a canônica já tem parâmetro pra essa unidade, ele MANDA (DO NOTHING);
 --     o da duplicada só é aproveitado quando a canônica não tinha nenhum.
-CREATE TEMP TABLE _param_final ON COMMIT DROP AS
-SELECT DISTINCT ON (m.keep_id, d."unidadeId")
-       m.keep_id AS produto_id, d."unidadeId" AS unidade_id, d."estoqueMinimo" AS minimo, d."estoqueIdeal" AS ideal
-FROM "ParametroEstoqueProduto" d
-JOIN "_produtos_mesclados" m ON m.dup_id = d."produtoId"
-ORDER BY m.keep_id, d."unidadeId", d.id;
-
-DELETE FROM "ParametroEstoqueProduto" WHERE "produtoId" IN (SELECT dup_id FROM "_produtos_mesclados");
-
+WITH final AS (
+  SELECT DISTINCT ON (m.keep_id, d."unidadeId")
+         m.keep_id AS produto_id, d."unidadeId" AS unidade_id,
+         d."estoqueMinimo" AS minimo, d."estoqueIdeal" AS ideal
+  FROM "ParametroEstoqueProduto" d
+  JOIN "_produtos_mesclados" m ON m.dup_id = d."produtoId"
+  ORDER BY m.keep_id, d."unidadeId", d.id
+),
+removidas AS (
+  DELETE FROM "ParametroEstoqueProduto"
+  WHERE "produtoId" IN (SELECT dup_id FROM "_produtos_mesclados")
+  RETURNING 1
+)
 INSERT INTO "ParametroEstoqueProduto" (id, "unidadeId", "produtoId", "estoqueMinimo", "estoqueIdeal")
-SELECT gen_random_uuid()::text, unidade_id, produto_id, minimo, ideal FROM _param_final
+SELECT gen_random_uuid()::text, unidade_id, produto_id, minimo, ideal FROM final
 ON CONFLICT ("unidadeId", "produtoId") DO NOTHING;
 
 -- ---------------------------------------------------------------------------
