@@ -2,13 +2,22 @@
 -- com os valores informados pelo setor de compras.
 --
 -- Contexto: o levantamento dos insumos zerados separou 19 produtos em quatro
--- grupos. Estes três são o grupo "compra de verdade, só falta preço" — as
+-- grupos. Estes quatro são o grupo "compra de verdade, só falta preço" — as
 -- quantidades nas fichas já estão corretas e em KG (0,001 a 0,13), então o preço
 -- entra direto, sem precisar corrigir nada antes:
 --
---   MOSTARDA DIJON  R$  70,42/KG   (16 linhas de ficha, 104 Sul e Noroeste)
---   OREGANO         R$ 133,33/KG   ( 2 linhas, 104 Sul e Noroeste)
---   TAHINE          R$  51,05/KG   ( 2 linhas, Wine Garden)
+--   MOSTARDA DIJON     R$  70,42/KG   (16 linhas de ficha, 104 Sul e Noroeste)
+--   OREGANO            R$ 133,33/KG   ( 2 linhas, 104 Sul e Noroeste)
+--   TAHINE             R$  51,05/KG   ( 2 linhas, Wine Garden)
+--   REQUEIJÃO CREMOSO  R$  39,90/KG   ( 1 linha, Matri)
+--
+-- O requeijão é um caso instrutivo de por que a regra "só preenche onde está
+-- zero" importa: ele tem 7 linhas de ficha, mas está zerado só em Matri — nas
+-- outras casas já tem preço vindo de compra. Espalhar os 39,90 pelas 5 casas
+-- sobrescreveria dado bom. Existe também uma Receita "REQUEIJÃO CREMOSO" em
+-- Matri que é casca (1 ingrediente, o próprio produto de mesmo nome) e não é
+-- usada por ninguém — zero referências como sub-receita, zero itens de venda.
+-- Não atrapalha o custo, só polui o /receitas; fica pra uma limpeza à parte.
 --
 -- A mostarda é a que mais pesa: 16 fichas contando esse ingrediente como zero.
 --
@@ -27,14 +36,15 @@
 -- autocommit e não honra transação explícita entre eles.
 
 -- ---------------------------------------------------------------------------
--- Passo 1 — Confira o que casou antes de aplicar. Espere exatamente 3 linhas,
+-- Passo 1 — Confira o que casou antes de aplicar. Espere exatamente 4 linhas,
 -- todas em KG. Se algum produto não aparecer, o nome no banco é diferente do
 -- esperado e o passo 2 ignoraria ele em silêncio.
 -- ---------------------------------------------------------------------------
 WITH informado(nome_chave, unidade, preco) AS (
   VALUES ('mostarda dijon',                'KG',  70.42),
          ('oregano',                       'KG', 133.33),
-         ('tahine - pasta de gergelim kg', 'KG',  51.05)
+         ('tahine - pasta de gergelim kg', 'KG',  51.05),
+         ('requeijão cremoso',             'KG',  39.90)
 )
 SELECT
   inf.nome_chave                                                            AS procurado,
@@ -62,7 +72,8 @@ ORDER BY 1;
 WITH informado(nome_chave, unidade, preco) AS (
   VALUES ('mostarda dijon',                'KG',  70.42),
          ('oregano',                       'KG', 133.33),
-         ('tahine - pasta de gergelim kg', 'KG',  51.05)
+         ('tahine - pasta de gergelim kg', 'KG',  51.05),
+         ('requeijão cremoso',             'KG',  39.90)
 ),
 alvo AS (
   SELECT p.id AS produto_id, inf.preco
@@ -108,12 +119,12 @@ FROM aplicadas a;
 -- Verificação
 -- ---------------------------------------------------------------------------
 
--- 2a) Preço por casa dos três insumos.
+-- 2a) Preço por casa dos quatro insumos.
 SELECT p.nome, p."unidadeMedida", un.nome AS casa, pa.preco
 FROM "PrecoAtualProduto" pa
 JOIN "Produto" p  ON p.id = pa."produtoId"
 JOIN "Unidade" un ON un.id = pa."unidadeId"
-WHERE lower(btrim(p.nome)) IN ('mostarda dijon', 'oregano', 'tahine - pasta de gergelim kg')
+WHERE lower(btrim(p.nome)) IN ('mostarda dijon', 'oregano', 'tahine - pasta de gergelim kg', 'requeijão cremoso')
 ORDER BY p.nome, un.nome;
 
 -- 2b) Efeito no custo: quanto cada ficha que usa esses insumos passou a contar.
@@ -126,7 +137,7 @@ JOIN "Produto" p  ON p.id = i."produtoId"
 JOIN "Receita" r  ON r.id = i."receitaId"
 JOIN "Unidade" un ON un.id = r."unidadeId"
 JOIN "PrecoAtualProduto" pa ON pa."produtoId" = p.id AND pa."unidadeId" = r."unidadeId"
-WHERE lower(btrim(p.nome)) IN ('mostarda dijon', 'oregano', 'tahine - pasta de gergelim kg')
+WHERE lower(btrim(p.nome)) IN ('mostarda dijon', 'oregano', 'tahine - pasta de gergelim kg', 'requeijão cremoso')
 ORDER BY custo_da_linha DESC;
 
 -- 2c) Quantas linhas de ficha ainda custam zero (era 67 antes deste script e do
