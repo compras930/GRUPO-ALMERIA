@@ -139,15 +139,37 @@ inclusive via sub-receita), com custo/CMV antes e depois.
   "unidade": "104 Sul",
   "periodoInicio": "2026-09-01",
   "periodoFim": "2026-09-07",
-  "itens": [ { "nome": "Tábua P - Barcelona", "quantidadeVendida": 12 } ]
+  "itens": [
+    { "codigo": "735000000098", "nome": "FRANGO A PARMEGIANA", "quantidadeVendida": 12 }
+  ]
 }
 ```
+**Mande `codigo` sempre que a origem tiver.** É o código do produto no PDV
+(coluna `Código` no export do Teknisa, idem no Xmenu do Beira Lago), e é o
+que casa a venda com o item cadastrado. O nome não serve: o PDV vende
+"FILE AU POIVRE WINE" e o cadastro tem "Filé au Poivre" — no levantamento de
+setembro/2026, R$ 169 mil de faturamento tinham ficha pronta e não casavam só
+por diferença de grafia. O código não muda quando alguém renomeia o prato.
+
+`codigo` é opcional (planilha antiga não tem) e, sem ele, o casamento cai pro
+nome, como antes. A resposta diz quantos itens casaram por cada via
+(`casadosPorCodigo` / `casadosPorNome`), lista os não reconhecidos com o
+motivo, e traz em `codigosASugerir` os itens que casaram por nome trazendo um
+código que o cadastro ainda não tem — pra alguém confirmar e gravar. O
+sistema não grava código sozinho a partir de casamento por nome: seria
+congelar um palpite como se fosse identidade.
+
 Explode a receita de cada item vendido pra somar o consumo de insumo,
 registra a saída no estoque, e gera um Pedido de Compra em status
 "Rascunho" (sem fornecedor definido ainda) com quantidade sugerida — repõe
 o consumido, ou completa até o estoque ideal se
 `ParametroEstoqueProduto.estoqueIdeal` estiver configurado pro insumo.
 Reenviar o mesmo período 2x responde `409` (não duplica consumo nem pedido).
+
+Estoque e pedido vão pra unidade FÍSICA, não pra casa: uma venda lançada como
+"Matri" consome da despensa do Noroeste, porque é a mesma. A venda em si fica
+registrada na casa, que é o que permite medir cada cardápio em separado.
+Ver `src/lib/unidade-fisica.ts`.
 
 ### `GET /api/n8n/cmv-alertas?unidade=104%20Sul` (parâmetro opcional)
 
