@@ -1,13 +1,21 @@
 // Lógica da automação 1 (preço automático via n8n): recebe a planilha
 // "última compra" do Teknisa, casa cada linha contra o catálogo de Produto
-// por nome (só match exato — nunca funde por aproximação, mesmo princípio
-// já usado nas outras importações desta base), atualiza PrecoAtualProduto/
+// pelo código do Teknisa e, na falta dele, por nome exato (nunca por
+// aproximação, mesmo princípio já usado nas outras importações desta base —
+// ver src/lib/resolucao-produto-compra.ts), atualiza PrecoAtualProduto/
 // HistoricoPrecoProduto respeitando "só sobrescreve se a data for mais
 // recente", e reporta quais ItemVenda foram impactados (em cascata, via
 // sub-receita) comparando o custo antes/depois da atualização.
 import { prisma } from "@/lib/prisma";
-import { normalizarNome, chaveComparacao } from "@/lib/nome-normalizado";
+import { normalizarNome } from "@/lib/nome-normalizado";
 import { idDaUnidadeFisica, casasDaUnidadeFisica } from "@/lib/unidade-fisica";
+import {
+  montarIndiceProdutos,
+  resolverLinhaCompraPura,
+  normalizarCodigo,
+  normalizarUnidade,
+  type MotivoNaoCasou,
+} from "@/lib/resolucao-produto-compra";
 import {
   carregarIndiceReceitas,
   carregarPrecoAtualPorProduto,
@@ -16,30 +24,43 @@ import {
   type IndiceReceitas,
 } from "@/lib/receita";
 
-// Sinônimos de unidade que o catálogo já usa (ver padronização KG/LT/UND
-// feita nesta conversa) — normaliza a unidade que vier da planilha antes
-// de tentar casar, pra "UN"/"UNIDADE" da planilha não falhar em bater com
-// um produto já cadastrado em "UND".
-const SINONIMO_UNIDADE: Record<string, string> = {
-  UN: "UND",
-  UNIDADE: "UND",
-  UNI: "UND",
-  UNID: "UND",
-  PC: "UND",
+export type ItemPrecoInput = {
+  nome: string;
+  unidadeMedida: string;
+  preco: number;
+  dataCompra: string;
+  /** Código do produto no Teknisa. Opcional: origem antiga não manda. */
+  codigo?: string | null;
 };
-
-function normalizarUnidade(unidadeBruta: string): string {
-  const u = normalizarNome(unidadeBruta).toUpperCase();
-  return SINONIMO_UNIDADE[u] ?? u;
-}
-
-export type ItemPrecoInput = { nome: string; unidadeMedida: string; preco: number; dataCompra: string };
 
 export type ResultadoNotaCompra = {
   notaCompraId: string;
   totalRecebido: number;
   precosAtualizados: number;
   precosIgnoradosMaisAntigos: number;
+  /** Quantas linhas casaram pelo código do Teknisa e quantas só pelo nome. */
+  casadosPorCodigo: number;
+  casadosPorNome: number;
+  /**
+   * Casou por nome, o produto não tem código gravado e a linha trouxe um.
+   * NÃO foi gravado: quem grava é um SQL revisado. É esta lista que faz o
+   * pareamento se alimentar sozinho, uma carga de cada vez.
+   */
+  codigosSugeridos: { produtoId: string; nome: string; unidadeMedida: string; codigo: string }[];
+  /**
+   * Linha que tinha como casar mas foi recusada por contradição — código
+   * diferente do cadastrado, ou unidade diferente da do produto. Não vira
+   * preço; precisa de gente.
+   */
+  recusadasPorCodigo: {
+    motivo: MotivoNaoCasou;
+    nomeNaPlanilha: string;
+    unidadeNaPlanilha: string;
+    codigoNaPlanilha: string | null;
+    produtoNome: string;
+    produtoUnidade: string;
+    produtoCodigo: string | null;
+  }[];
   /**
    * Preços recusados por salto absurdo contra o preço atual — quase sempre
    * unidade trocada na origem (preço da caixa contra um `un` que diz KG).
@@ -71,27 +92,6 @@ export type ResultadoNotaCompra = {
  * 12x ou 1000x.
  */
 const LIMITE_SALTO_PRECO = 5;
-
-/** Acha o Produto correspondente a uma linha da planilha, só por match exato de nome+unidade. */
-function encontrarProduto(
-  porChave: Map<string, { id: string; nome: string }>,
-  nomeBruto: string,
-  unidadeBruta: string
-): { id: string; nome: string } | null {
-  const nome = normalizarNome(nomeBruto);
-  const unidade = normalizarUnidade(unidadeBruta);
-  const direto = porChave.get(`${chaveComparacao(nome)}|||${unidade}`);
-  if (direto) return direto;
-
-  // Teknisa às vezes repete a unidade dentro do próprio nome (ex.: "ALCATRA
-  // BOVINO KG" com unidade "KG") — tenta de novo tirando esse sufixo redundante.
-  const sufixo = ` ${unidade}`;
-  if (nome.toUpperCase().endsWith(sufixo)) {
-    const semSufixo = nome.slice(0, nome.length - sufixo.length).trim();
-    return porChave.get(`${chaveComparacao(semSufixo)}|||${unidade}`) ?? null;
-  }
-  return null;
-}
 
 /**
  * Custo de uma receita a partir de um mapa de preços já carregado (não bate
@@ -127,8 +127,10 @@ export async function processarNotaCompra(
   // ...e o custo que ela mexe é o das fichas de TODAS as casas dessa despensa.
   const casas = await casasDaUnidadeFisica(unidadeFisicaId);
 
-  const produtos = await prisma.produto.findMany({ select: { id: true, nome: true, unidadeMedida: true } });
-  const porChave = new Map(produtos.map((p) => [`${chaveComparacao(p.nome)}|||${p.unidadeMedida}`, { id: p.id, nome: p.nome }]));
+  const produtos = await prisma.produto.findMany({
+    select: { id: true, nome: true, unidadeMedida: true, codigoTeknisa: true },
+  });
+  const indiceProdutos = montarIndiceProdutos(produtos);
 
   // Snapshot do índice/preços ANTES de qualquer escrita, pra poder comparar
   // custo antes/depois sem precisar de uma segunda ida ao banco no final.
@@ -144,7 +146,13 @@ export async function processarNotaCompra(
   const precosDepois = new Map(precosAntes);
   let precosAtualizados = 0;
   let precosIgnoradosMaisAntigos = 0;
+  let casadosPorCodigo = 0;
+  let casadosPorNome = 0;
   const precosSuspeitos: ResultadoNotaCompra["precosSuspeitos"] = [];
+  const recusadasPorCodigo: ResultadoNotaCompra["recusadasPorCodigo"] = [];
+  // Chaveado por produtoId: a mesma compra aparece várias vezes no mês e a
+  // sugestão é sempre a mesma — não vale repetir na resposta.
+  const codigosSugeridos = new Map<string, ResultadoNotaCompra["codigosSugeridos"][number]>();
 
   const notaCompraId = await prisma.$transaction(async (tx) => {
     const notaCompra = await tx.notaCompra.create({
@@ -152,21 +160,53 @@ export async function processarNotaCompra(
     });
 
     for (const item of itens) {
-      const produto = encontrarProduto(porChave, item.nome, item.unidadeMedida);
+      const resolucao = resolverLinhaCompraPura(item, indiceProdutos);
       const dataCompra = new Date(item.dataCompra);
+      const codigoBruto = normalizarCodigo(item.codigo);
+      const unidadeBruta = normalizarUnidade(item.unidadeMedida);
 
-      if (!produto) {
-        naoReconhecidos.push(item);
+      // Toda linha que não virou preço é gravada em ItemNotaCompra sem
+      // produtoId — inclusive as recusadas por contradição de código. A linha
+      // nunca é descartada em silêncio, e com codigoBruto/unidadeBruta dá pra
+      // montar depois a lista de pareamento sem voltar na planilha.
+      if (!resolucao.produto || resolucao.via === null) {
+        if (resolucao.produto && resolucao.motivo) {
+          recusadasPorCodigo.push({
+            motivo: resolucao.motivo,
+            nomeNaPlanilha: normalizarNome(item.nome),
+            unidadeNaPlanilha: unidadeBruta,
+            codigoNaPlanilha: codigoBruto,
+            produtoNome: resolucao.produto.nome,
+            produtoUnidade: resolucao.produto.unidadeMedida,
+            produtoCodigo: resolucao.produto.codigoTeknisa,
+          });
+        } else {
+          naoReconhecidos.push(item);
+        }
         await tx.itemNotaCompra.create({
           data: {
             notaCompraId: notaCompra.id,
             produtoId: null,
             nomeBruto: normalizarNome(item.nome),
+            codigoBruto,
+            unidadeBruta,
             precoUnitNovo: item.preco,
             dataCompra,
           },
         });
         continue;
+      }
+
+      const produto = resolucao.produto;
+      if (resolucao.via === "CODIGO") casadosPorCodigo++;
+      else casadosPorNome++;
+      if (resolucao.codigoSugerido && !codigosSugeridos.has(produto.id)) {
+        codigosSugeridos.set(produto.id, {
+          produtoId: produto.id,
+          nome: produto.nome,
+          unidadeMedida: produto.unidadeMedida,
+          codigo: resolucao.codigoSugerido,
+        });
       }
 
       const existente = await tx.precoAtualProduto.findUnique({
@@ -178,6 +218,8 @@ export async function processarNotaCompra(
           notaCompraId: notaCompra.id,
           produtoId: produto.id,
           nomeBruto: normalizarNome(item.nome),
+          codigoBruto,
+          unidadeBruta,
           precoUnitNovo: item.preco,
           precoUnitAnterior: existente?.preco ?? null,
           dataCompra,
@@ -263,6 +305,10 @@ export async function processarNotaCompra(
     totalRecebido: itens.length,
     precosAtualizados,
     precosIgnoradosMaisAntigos,
+    casadosPorCodigo,
+    casadosPorNome,
+    codigosSugeridos: [...codigosSugeridos.values()],
+    recusadasPorCodigo,
     precosSuspeitos,
     naoReconhecidos,
     itensImpactados,

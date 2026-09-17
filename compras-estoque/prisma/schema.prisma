@@ -95,6 +95,13 @@ model Produto {
   ativo          Boolean @default(true)
   criadoEm       DateTime @default(now())
 
+  // Código do produto no Teknisa (12 dígitos). Casa linha de compra por
+  // identificador em vez de por nome — ver src/lib/resolucao-produto-compra.ts.
+  // Único GLOBAL (não por casa como o codigoPdv do ItemVenda): a compra de
+  // todas as casas do Grupo sai do mesmo cadastro do Teknisa.
+  // Nullable: quem não foi pareado ainda continua casando por nome.
+  codigoTeknisa  String? @unique
+
   itensPedido      ItemPedido[]
   saldosEstoque    EstoqueSaldo[]
   movimentos       MovimentoEstoque[]
@@ -392,6 +399,11 @@ model ItemNotaCompra {
   produto           Produto?   @relation(fields: [produtoId], references: [id])
 
   nomeBruto         String     // texto exato da planilha, pra auditoria/correção
+  // Código e unidade exatos da planilha. Guardados mesmo quando a linha casou:
+  // é o que permite montar depois a lista de pareamento das não reconhecidas
+  // (o nome sozinho não serve — é justamente o que não bate).
+  codigoBruto       String?
+  unidadeBruta      String?
   precoUnitNovo     Float
   precoUnitAnterior Float?     // snapshot no momento do import, pra o relatório de variação
   dataCompra        DateTime
