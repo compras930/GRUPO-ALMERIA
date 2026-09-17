@@ -12,9 +12,11 @@
 // aqui é pior que não preencher — um código errado faz a venda de um prato
 // entrar na ficha de outro, silenciosamente, toda semana.
 //
-// Dry-run por padrão. Passe --commit pra gravar.
+// Dry-run por padrão. Passe --commit pra gravar, ou --sql pra imprimir o
+// comando a colar no console do Neon (produção não é alcançável daqui, o
+// mesmo motivo de todo script SQL deste diretório).
 //
-//   npx tsx prisma/scripts/backfill-codigo-pdv.ts "<casa>" <planilha.xlsx> [--commit]
+//   npx tsx prisma/scripts/backfill-codigo-pdv.ts "<casa>" <planilha.xlsx> [--commit|--sql]
 //
 // Formatos aceitos (detectado pelo cabeçalho):
 //   Teknisa  — colunas Unidade/Modalidade/Código/Produto/... (104 Sul, Wine Garden, Noroeste)
@@ -128,9 +130,52 @@ function lerPlanilha(caminho: string): LinhaPdv[] {
   return out;
 }
 
+/**
+ * Imprime o UPDATE pra colar no console do Neon.
+ *
+ * Casa por (casa, nome do item) e não por id: os ids de produção e os do banco
+ * local são cuids gerados em importações separadas, não são os mesmos. O nome
+ * usado é o do CADASTRO (não o da planilha), então o casamento aqui é
+ * literalmente exato — o folding de acento já foi resolvido antes.
+ *
+ * O guard `EXISTS ... HAVING count(*) = 1` recusa gravar num nome que exista
+ * duas vezes na casa: em produção pode haver homônimo que o banco local não
+ * tem, e gravar código no item errado é o pior desfecho possível aqui.
+ */
+function sqlEscape(s: string) {
+  return s.replace(/'/g, "''");
+}
+
+function imprimirSql(casa: string, aGravar: { nome: string; codigo: string }[]) {
+  if (aGravar.length === 0) {
+    console.log(`-- ${casa}: nada a gravar.`);
+    return;
+  }
+  const valores = aGravar
+    .map((g) => `  ('${sqlEscape(casa)}', '${sqlEscape(g.nome)}', '${sqlEscape(g.codigo)}')`)
+    .join(",\n");
+  console.log(`
+-- ${casa} — ${aGravar.length} códigos
+WITH mapa(casa, item, codigo) AS (VALUES
+${valores}
+)
+UPDATE "ItemVenda" iv
+SET "codigoPdv" = m.codigo
+FROM mapa m
+JOIN "Unidade" un ON un.nome = m.casa
+WHERE iv."unidadeId" = un.id
+  AND lower(btrim(iv.nome)) = lower(btrim(m.item))
+  AND iv."codigoPdv" IS NULL          -- nunca sobrescreve código já gravado
+  AND 1 = (SELECT count(*) FROM "ItemVenda" x
+            WHERE x."unidadeId" = un.id
+              AND lower(btrim(x.nome)) = lower(btrim(m.item)));
+`);
+}
+
 async function main() {
   const [casa, caminho] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
   const commit = process.argv.includes("--commit");
+  const comoSql = process.argv.includes("--sql");
   if (!casa || !caminho) {
     console.error('Uso: npx tsx prisma/scripts/backfill-codigo-pdv.ts "<casa>" <planilha.xlsx> [--commit]');
     process.exit(1);
@@ -204,6 +249,11 @@ async function main() {
     }
     codigoPorItem.set(item.id, codigo);
     aGravar.push({ id: item.id, nome: item.nome, codigo, viaAcento });
+  }
+
+  if (comoSql) {
+    imprimirSql(unidade.nome, aGravar);
+    return;
   }
 
   console.log(`\nCasa: ${unidade.nome}`);
