@@ -14,14 +14,14 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   if (!verificarTokenN8n(request)) return respostaNaoAutorizada();
 
-  let body: { unidade?: string; arquivoNome?: string; itens?: ItemPrecoInput[] };
+  let body: { unidade?: string; arquivoNome?: string; aprenderCodigos?: boolean; itens?: ItemPrecoInput[] };
   try {
     body = await request.json();
   } catch {
     return Response.json({ erro: "Corpo da requisição não é um JSON válido." }, { status: 400 });
   }
 
-  const { unidade, arquivoNome, itens } = body;
+  const { unidade, arquivoNome, aprenderCodigos, itens } = body;
   if (!unidade || !Array.isArray(itens) || itens.length === 0) {
     return Response.json({ erro: "Informe 'unidade' e uma lista não-vazia de 'itens'." }, { status: 400 });
   }
@@ -50,7 +50,13 @@ export async function POST(request: Request) {
   }
 
   try {
-    const resultado = await processarNotaCompra(unidade, arquivoNome ?? null, itens, servico.id);
+    const resultado = await processarNotaCompra(
+      unidade,
+      arquivoNome ?? null,
+      itens,
+      servico.id,
+      aprenderCodigos === true
+    );
     revalidatePath("/cmv");
     revalidatePath("/receitas");
     revalidatePath("/produtos");

@@ -43,10 +43,14 @@ export type ResultadoNotaCompra = {
   casadosPorNome: number;
   /**
    * Casou por nome, o produto não tem código gravado e a linha trouxe um.
-   * NÃO foi gravado: quem grava é um SQL revisado. É esta lista que faz o
-   * pareamento se alimentar sozinho, uma carga de cada vez.
+   * É esta lista que faz o pareamento se alimentar sozinho, uma carga de cada
+   * vez. Só vira escrita se quem chamou pedir (`aprenderCodigos`).
    */
   codigosSugeridos: { produtoId: string; nome: string; unidadeMedida: string; codigo: string }[];
+  /** Quantos códigos foram efetivamente gravados (0 quando `aprenderCodigos` é falso). */
+  codigosGravados: number;
+  /** Sugestão que não virou gravação, e por quê. */
+  codigosNaoGravados: { nome: string; codigo: string; motivo: string }[];
   /**
    * Linha que tinha como casar mas foi recusada por contradição — código
    * diferente do cadastrado, ou unidade diferente da do produto. Não vira
@@ -116,7 +120,23 @@ export async function processarNotaCompra(
   unidadeNome: string,
   arquivoNome: string | null,
   itens: ItemPrecoInput[],
-  importadoPorId: string
+  importadoPorId: string,
+  /**
+   * Grava o código do Teknisa no Produto quando a linha casou por nome+unidade
+   * exatos e o produto ainda não tem código.
+   *
+   * Por que isto é um parâmetro e não o padrão: aprender identificador a partir
+   * de texto é exatamente o atalho que resolucao-produto-compra.ts existe pra
+   * evitar. Aqui ele é aceitável porque o casamento por nome+unidade é o mesmo
+   * que já autoriza gravar PREÇO naquele produto — quem confia num pra mudar
+   * dinheiro não tem motivo pra desconfiar do outro pra gravar um número. Mas
+   * é uma escrita de cadastro, não de movimento, e quem chama tem que pedir.
+   *
+   * Nunca sobrescreve código existente, e nunca grava um código que já está em
+   * outro produto: nesses dois casos a sugestão vai pra `codigosNaoGravados` e
+   * alguém olha.
+   */
+  aprenderCodigos = false
 ): Promise<ResultadoNotaCompra> {
   const unidade = await prisma.unidade.findUnique({ where: { nome: unidadeNome } });
   if (!unidade) throw new Error(`Unidade "${unidadeNome}" não encontrada.`);
@@ -153,6 +173,8 @@ export async function processarNotaCompra(
   // Chaveado por produtoId: a mesma compra aparece várias vezes no mês e a
   // sugestão é sempre a mesma — não vale repetir na resposta.
   const codigosSugeridos = new Map<string, ResultadoNotaCompra["codigosSugeridos"][number]>();
+  const codigosNaoGravados: ResultadoNotaCompra["codigosNaoGravados"] = [];
+  let codigosGravados = 0;
 
   const notaCompraId = await prisma.$transaction(async (tx) => {
     const notaCompra = await tx.notaCompra.create({
@@ -273,6 +295,31 @@ export async function processarNotaCompra(
       precosDepois.set(produto.id, item.preco);
     }
 
+    if (aprenderCodigos) {
+      for (const s of codigosSugeridos.values()) {
+        const ocupado = await tx.produto.findUnique({
+          where: { codigoTeknisa: s.codigo },
+          select: { nome: true },
+        });
+        if (ocupado) {
+          codigosNaoGravados.push({
+            nome: s.nome,
+            codigo: s.codigo,
+            motivo: `código já está no produto "${ocupado.nome}"`,
+          });
+          continue;
+        }
+        // updateMany com codigoTeknisa: null no where: se outra carga gravou um
+        // código nesse produto no meio do caminho, esta não sobrescreve.
+        const r = await tx.produto.updateMany({
+          where: { id: s.produtoId, codigoTeknisa: null },
+          data: { codigoTeknisa: s.codigo },
+        });
+        if (r.count === 1) codigosGravados++;
+        else codigosNaoGravados.push({ nome: s.nome, codigo: s.codigo, motivo: "produto já tinha código" });
+      }
+    }
+
     return notaCompra.id;
   }, { timeout: 60_000 });
 
@@ -308,6 +355,8 @@ export async function processarNotaCompra(
     casadosPorCodigo,
     casadosPorNome,
     codigosSugeridos: [...codigosSugeridos.values()],
+    codigosGravados,
+    codigosNaoGravados,
     recusadasPorCodigo,
     precosSuspeitos,
     naoReconhecidos,
