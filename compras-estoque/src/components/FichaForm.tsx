@@ -58,6 +58,17 @@ export default function FichaForm({
   const [modoPreparo, setModoPreparo] = useState(modoPreparoInicial);
   const [rendimentoQtd, setRendimentoQtd] = useState(rendimentoQtdInicial ? String(rendimentoQtdInicial) : "");
   const [rendimentoUnidade, setRendimentoUnidade] = useState(rendimentoUnidadeInicial);
+  // Rendimento numa ficha de PRATO é a armadilha mais cara desta tela. O custo
+  // exibido é o de UMA unidade do rendimento: com "0,3 KG" o sistema calcula o
+  // custo de 1 KG do prato (divide a receita por 0,3), não o de uma porção.
+  // Caso real: a pizza CABRISSIMA E FIGO aparecia com CMV de 49% por causa
+  // disso, contra 13,5% depois de corrigido — e nada na tela denunciava.
+  // "UND" é o único rendimento que significa porção.
+  const rendimentoEmPeso =
+    Number(rendimentoQtd) > 0 &&
+    !!rendimentoUnidade.trim() &&
+    !["UND", "UN", "UNID", "UNIDADE", "PORCAO", "PORÇÃO"].includes(rendimentoUnidade.trim().toUpperCase());
+
   const [linhas, setLinhas] = useState<Linha[]>(
     ingredientesIniciais.length ? ingredientesIniciais.map(linhaDeExistente) : [linhaVazia()]
   );
@@ -282,10 +293,24 @@ export default function FichaForm({
           />
         </div>
       </div>
-      <p className="sub" style={{ marginTop: -8, marginBottom: 18 }}>
+      <p className="sub" style={{ marginTop: -8, marginBottom: rendimentoEmPeso ? 8 : 18 }}>
         Só preencha se essa ficha é uma sub-receita que rende um lote (ex.: "essa manteiga
         temperada rende 0,5kg"). Deixe em branco pra fichas de prato/bebida/vinho vendidas direto.
       </p>
+      {rendimentoEmPeso && (
+        <p className="error-msg" style={{ marginBottom: 18 }}>
+          Atenção: com rendimento de {rendimentoQtd} {rendimentoUnidade.trim().toUpperCase()}, o custo
+          mostrado vai ser o de <strong>1 {rendimentoUnidade.trim().toUpperCase()} deste prato</strong>, não o de
+          uma porção — a receita inteira é dividida por {rendimentoQtd}
+          {Number(rendimentoQtd) > 0 && Number(rendimentoQtd) < 1
+            ? `, ou seja, o custo aparece ${(1 / Number(rendimentoQtd)).toFixed(1)}x maior que o real`
+            : ""}
+          .{" "}
+          Se {rendimentoQtd} {rendimentoUnidade.trim().toUpperCase()} é o <strong>peso de uma porção</strong>, apague
+          este campo ou escreva 1 UND. Só preencha em peso quando a receita render um lote que
+          outras fichas consomem.
+        </p>
+      )}
 
       <div className="field-group" style={{ marginBottom: 18 }}>
         <label htmlFor="modoPreparo">Modo de preparo (opcional)</label>
