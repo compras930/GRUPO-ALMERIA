@@ -112,13 +112,12 @@ export async function processarNotaCompra(
 
   // Snapshot do índice/preços ANTES de qualquer escrita, pra poder comparar
   // custo antes/depois sem precisar de uma segunda ida ao banco no final.
-  const [indices, precosAntes] = await Promise.all([
-    Promise.all(casas.map((c) => carregarIndiceReceitas(c))),
+  // carregarIndiceReceitas já cobre a cozinha inteira (as duas casas, quando
+  // for o caso), então uma chamada basta.
+  const [indice, precosAntes] = await Promise.all([
+    carregarIndiceReceitas(unidadeFisicaId),
     carregarPrecoAtualPorProduto(unidadeFisicaId),
   ]);
-  // Receita ainda é por casa, então o índice de uma despensa com duas casas é
-  // a união dos dois. Ids de receita são únicos, então juntar é seguro.
-  const indice = new Map(indices.flatMap((i) => [...i]));
 
   const naoReconhecidos: ItemPrecoInput[] = [];
   const produtosAlterados = new Set<string>();

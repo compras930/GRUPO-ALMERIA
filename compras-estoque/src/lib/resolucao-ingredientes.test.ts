@@ -13,14 +13,17 @@ const azeite: ProdutoResumo = { id: "prod-azeite", nome: "AZEITE EXTRA VIRGEM", 
 const molho: ReceitaResumo = { id: "rec-molho", nome: "MOLHO PESTO", unidadeId: "un-1", rendimentoUnidade: "KG" };
 const marinada: ReceitaResumo = { id: "rec-marinada", nome: "MARINADA", unidadeId: "un-1", rendimentoUnidade: null };
 const molhoDeOutraCasa: ReceitaResumo = { id: "rec-outra", nome: "MOLHO DA OUTRA CASA", unidadeId: "un-2", rendimentoUnidade: "KG" };
+// Noroeste e Matri dividem a cozinha: a fonduta está cadastrada numa casa e é
+// usada pelas pizzas da outra.
+const fondutaDaCozinhaVizinha: ReceitaResumo = { id: "rec-fonduta", nome: "FONDUTA DE PARMESÃO", unidadeId: "un-matri", rendimentoUnidade: "KG" };
 const fichaAtual: ReceitaResumo = { id: "rec-atual", nome: "BURRATA COM PESTO", unidadeId: "un-1", rendimentoUnidade: null };
 
 function contexto(over: Partial<ContextoResolucao> = {}): ContextoResolucao {
   return {
     produtosPorId: new Map([burrataMaiuscula, burrataMinuscula, azeite].map((p) => [p.id, p])),
-    receitasPorId: new Map([molho, marinada, molhoDeOutraCasa, fichaAtual].map((r) => [r.id, r])),
+    receitasPorId: new Map([molho, marinada, molhoDeOutraCasa, fondutaDaCozinhaVizinha, fichaAtual].map((r) => [r.id, r])),
     receitaAtualId: "rec-atual",
-    unidadeId: "un-1",
+    unidadesPermitidas: ["un-1"],
     ...over,
   };
 }
@@ -172,5 +175,26 @@ describe("resolverIngredientesPura", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.ingredientes).toEqual([]);
+  });
+
+  it("aceita sub-receita de outra casa da MESMA cozinha", () => {
+    // Noroeste e Matri: uma pizza do Matri usando a fonduta cadastrada do outro
+    // lado é a mesma panela, não outra unidade.
+    const r = resolverIngredientesPura(
+      [{ tipo: "SUBRECEITA", subReceitaId: "rec-fonduta", unidadeMedida: "KG", quantidade: 0.08 }],
+      contexto({ unidadesPermitidas: ["un-1", "un-matri"] })
+    );
+    expect(r.ok).toBe(true);
+  });
+
+  it("continua barrando sub-receita de outra cozinha", () => {
+    // 104 Sul é outra cozinha, com outro preço de insumo.
+    const r = resolverIngredientesPura(
+      [{ tipo: "SUBRECEITA", subReceitaId: "rec-outra", unidadeMedida: "KG", quantidade: 0.05 }],
+      contexto({ unidadesPermitidas: ["un-1", "un-matri"] })
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.erros[0]).toMatch(/outra unidade/);
   });
 });

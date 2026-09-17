@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { normalizarNome } from "@/lib/nome-normalizado";
+import { casasDaCozinha } from "@/lib/unidade-fisica";
 import { carregarIndiceReceitas, explodirReceitaPura, CicloReceitaError } from "@/lib/receita";
 import { resolverIngredientesPura, type LinhaIngredienteBruta } from "@/lib/resolucao-ingredientes";
 
@@ -110,7 +111,7 @@ export async function salvarFicha(itemVendaId: string, formData: FormData) {
         ).map((r) => [r.id, r])
       ),
       receitaAtualId: receitaId,
-      unidadeId: item.unidadeId,
+      unidadesPermitidas: await casasDaCozinha(item.unidadeId, tx),
     });
     if (!resolucao.ok) {
       throw new Error(

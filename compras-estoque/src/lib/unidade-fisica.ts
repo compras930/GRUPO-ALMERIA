@@ -77,6 +77,22 @@ export async function casasDaUnidadeFisica(
 }
 
 /**
+ * As casas que dividem a cozinha com esta — incluindo ela mesma.
+ *
+ * Diferente de casasDaUnidadeFisica, aceita QUALQUER casa: passando Matri ou
+ * passando Noroeste, devolve as duas. É o que o cálculo de custo precisa, que
+ * recebe a casa da ficha e não sabe (nem deveria saber) qual delas guarda o
+ * estoque.
+ *
+ * Receita continua sendo cadastrada por casa — o que muda é que uma ficha do
+ * Matri pode usar uma sub-receita do Noroeste, porque é a mesma panela.
+ */
+export async function casasDaCozinha(unidadeId: string, cliente: Cliente = prisma): Promise<string[]> {
+  const cozinhaId = await idDaUnidadeFisica(unidadeId, cliente);
+  return casasDaUnidadeFisica(cozinhaId, cliente);
+}
+
+/**
  * As unidades que guardam estoque próprio — é o que deve aparecer num seletor
  * de "onde contar / onde receber / pra onde comprar".
  *

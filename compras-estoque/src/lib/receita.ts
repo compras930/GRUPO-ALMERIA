@@ -15,7 +15,7 @@
 // banco de dados rodando. As funções async ao final só carregam os dados
 // do Prisma e chamam a parte pura.
 import { prisma } from "@/lib/prisma";
-import { idDaUnidadeFisica } from "@/lib/unidade-fisica";
+import { idDaUnidadeFisica, casasDaCozinha } from "@/lib/unidade-fisica";
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 /** Cliente Prisma normal OU o `tx` de dentro de um `prisma.$transaction(async (tx) => ...)`. */
@@ -107,8 +107,13 @@ export function explodirReceitaPura(
  * pegava ciclo já commitado antes, nunca o que a própria gravação atual criou).
  */
 export async function carregarIndiceReceitas(unidadeId: string, cliente: Cliente = prisma): Promise<IndiceReceitas> {
+  // O índice cobre a COZINHA, não só a casa: Noroeste e Matri dividem a mesma,
+  // e uma pizza do Matri usa a FONDUTA DE PARMESÃO cadastrada no Noroeste. Sem
+  // isso, explodirReceitaPura não acharia a sub-receita e a ficha custaria
+  // menos do que custa. Ver src/lib/unidade-fisica.ts.
+  const casas = await casasDaCozinha(unidadeId, cliente);
   const receitas = await cliente.receita.findMany({
-    where: { unidadeId },
+    where: { unidadeId: { in: casas } },
     include: { ingredientes: true },
   });
   const indice: IndiceReceitas = new Map();

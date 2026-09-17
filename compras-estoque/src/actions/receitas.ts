@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { casasDaCozinha } from "@/lib/unidade-fisica";
 import { requireAdmin } from "@/lib/session";
 import { normalizarNome } from "@/lib/nome-normalizado";
 import { carregarIndiceReceitas, explodirReceitaPura, CicloReceitaError } from "@/lib/receita";
@@ -90,7 +91,7 @@ export async function salvarSubReceita(receitaId: string | null, formData: FormD
         ).map((r) => [r.id, r])
       ),
       receitaAtualId: id,
-      unidadeId,
+      unidadesPermitidas: await casasDaCozinha(unidadeId, tx),
     });
     if (!resolucao.ok) {
       throw new Error(

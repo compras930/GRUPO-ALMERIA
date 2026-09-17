@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { casasDaCozinha } from "@/lib/unidade-fisica";
 import { requireAdmin } from "@/lib/session";
 import { custoItemVenda } from "@/lib/cmv";
 import { fmtCurrency } from "@/lib/format";
@@ -33,7 +34,7 @@ export default async function ItemVendaPage({ params }: { params: { itemVendaId:
       select: { id: true, nome: true, unidadeMedida: true },
     }),
     prisma.receita.findMany({
-      where: { unidadeId: item.unidadeId, NOT: { id: item.receitaId ?? undefined } },
+      where: { unidadeId: { in: await casasDaCozinha(item.unidadeId) }, NOT: { id: item.receitaId ?? undefined } },
       orderBy: { nome: "asc" },
       select: { id: true, nome: true, rendimentoUnidade: true },
     }),

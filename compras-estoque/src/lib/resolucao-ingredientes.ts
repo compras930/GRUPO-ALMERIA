@@ -42,8 +42,16 @@ export type ContextoResolucao = {
   receitasPorId: Map<string, ReceitaResumo>;
   /** Receita sendo editada, pra barrar auto-referência. null quando ela ainda não existe. */
   receitaAtualId: string | null;
-  /** Unidade (casa) da receita sendo editada — sub-receita de outra unidade é erro. */
-  unidadeId: string;
+  /**
+   * As casas cujas receitas podem ser usadas como sub-receita aqui: a casa da
+   * ficha e as outras casas da MESMA unidade física.
+   *
+   * Noroeste e Matri dividem a cozinha, então uma pizza do Matri pode usar a
+   * FONDUTA DE PARMESÃO que está cadastrada no Noroeste — é a mesma panela.
+   * Já uma receita do 104 Sul continua barrada, porque é outra cozinha, com
+   * outro preço de insumo. Ver src/lib/unidade-fisica.ts.
+   */
+  unidadesPermitidas: string[];
 };
 
 export function resolverIngredientesPura(
@@ -63,8 +71,8 @@ export function resolverIngredientesPura(
         return;
       }
       // Com lookup por nome (unidadeId_nome) isso vinha de graça; por id precisa
-      // ser explícito, senão um id de outra casa passaria.
-      if (sub.unidadeId !== contexto.unidadeId) {
+      // ser explícito, senão um id de outra cozinha passaria.
+      if (!contexto.unidadesPermitidas.includes(sub.unidadeId)) {
         erros.push(`Linha ${n}: a sub-receita "${sub.nome}" pertence a outra unidade — não pode ser usada nesta ficha.`);
         return;
       }

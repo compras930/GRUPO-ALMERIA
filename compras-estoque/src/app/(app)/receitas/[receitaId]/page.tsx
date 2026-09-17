@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { casasDaCozinha } from "@/lib/unidade-fisica";
 import { requireAdmin } from "@/lib/session";
 import { carregarIndiceReceitas, explodirReceitaPura, CicloReceitaError } from "@/lib/receita";
 import ReceitaForm from "@/components/ReceitaForm";
@@ -25,7 +26,7 @@ export default async function EditarReceitaPage({ params }: { params: { receitaI
       select: { id: true, nome: true, unidadeMedida: true },
     }),
     prisma.receita.findMany({
-      where: { unidadeId: receita.unidadeId, NOT: { id: receita.id } },
+      where: { unidadeId: { in: await casasDaCozinha(receita.unidadeId) }, NOT: { id: receita.id } },
       orderBy: { nome: "asc" },
       select: { id: true, nome: true, rendimentoUnidade: true },
     }),

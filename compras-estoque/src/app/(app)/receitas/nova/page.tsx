@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { casasDaCozinha } from "@/lib/unidade-fisica";
 import { requireAdmin } from "@/lib/session";
 import ReceitaForm from "@/components/ReceitaForm";
 
@@ -18,7 +19,7 @@ export default async function NovaReceitaPage({ searchParams }: { searchParams: 
       select: { id: true, nome: true, unidadeMedida: true },
     }),
     prisma.receita.findMany({
-      where: { unidadeId: unidade.id },
+      where: { unidadeId: { in: await casasDaCozinha(unidade.id) } },
       orderBy: { nome: "asc" },
       select: { id: true, nome: true, rendimentoUnidade: true },
     }),
