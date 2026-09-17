@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { idDaUnidadeFisica } from "@/lib/unidade-fisica";
 import { requireSession } from "@/lib/session";
 import { unidadeVisivel } from "@/lib/permissions";
 
@@ -18,16 +19,21 @@ export async function registrarContagem(formData: FormData) {
     throw new Error("Informe produto e quantidade contada válidos.");
   }
 
+  // A contagem é da DESPENSA. O seletor já só oferece unidade com estoque
+  // próprio, mas o id vem da URL: resolver aqui impede que uma contagem
+  // digitada à mão vá parar num saldo que ninguém lê.
+  const unidadeFisicaId = await idDaUnidadeFisica(unidadeId);
+
   await prisma.$transaction(async (tx) => {
     const saldo = await tx.estoqueSaldo.findUnique({
-      where: { unidadeId_produtoId: { unidadeId, produtoId } },
+      where: { unidadeId_produtoId: { unidadeId: unidadeFisicaId, produtoId } },
     });
     const quantidadeSistema = saldo?.quantidade ?? 0;
     const diferenca = quantidadeContada - quantidadeSistema;
 
     await tx.contagemEstoque.create({
       data: {
-        unidadeId,
+        unidadeId: unidadeFisicaId,
         produtoId,
         quantidadeSistema,
         quantidadeContada,
@@ -37,15 +43,15 @@ export async function registrarContagem(formData: FormData) {
     });
 
     await tx.estoqueSaldo.upsert({
-      where: { unidadeId_produtoId: { unidadeId, produtoId } },
+      where: { unidadeId_produtoId: { unidadeId: unidadeFisicaId, produtoId } },
       update: { quantidade: quantidadeContada },
-      create: { unidadeId, produtoId, quantidade: quantidadeContada },
+      create: { unidadeId: unidadeFisicaId, produtoId, quantidade: quantidadeContada },
     });
 
     if (diferenca !== 0) {
       await tx.movimentoEstoque.create({
         data: {
-          unidadeId,
+          unidadeId: unidadeFisicaId,
           produtoId,
           tipo: "AJUSTE_CONTAGEM",
           quantidade: diferenca,

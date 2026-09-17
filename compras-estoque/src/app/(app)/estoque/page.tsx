@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { unidadesComEstoqueProprio, idDaUnidadeFisica } from "@/lib/unidade-fisica";
 import { requireSession } from "@/lib/session";
 
 export default async function EstoquePage({
@@ -11,10 +12,13 @@ export default async function EstoquePage({
   const isAdmin = user.papel === "ADMIN";
 
   const unidades = isAdmin
-    ? await prisma.unidade.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } })
+    ? await unidadesComEstoqueProprio()
     : [];
 
-  const unidadeId = isAdmin ? searchParams.unidadeId || unidades[0]?.id : user.unidadeId;
+  const unidadeIdEscolhida = isAdmin ? searchParams.unidadeId || unidades[0]?.id : user.unidadeId;
+  // Estoque é da despensa: um usuário lotado numa casa que não guarda estoque
+  // (Matri) tem que ver a despensa de verdade, não uma tela vazia.
+  const unidadeId = unidadeIdEscolhida ? await idDaUnidadeFisica(unidadeIdEscolhida) : unidadeIdEscolhida;
 
   const saldos = unidadeId
     ? await prisma.estoqueSaldo.findMany({

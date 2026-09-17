@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { idDaUnidadeFisica } from "@/lib/unidade-fisica";
 import { requireSession } from "@/lib/session";
 import { unidadeVisivel } from "@/lib/permissions";
 import ContagemForm from "@/components/ContagemForm";
@@ -19,9 +20,11 @@ export default async function ContagemPage({
     return <div className="empty">Você não tem acesso a essa unidade.</div>;
   }
 
+  // Estoque é da despensa — ver src/lib/unidade-fisica.ts.
+  const unidadeFisicaId = await idDaUnidadeFisica(unidadeId);
   const [produtos, saldos] = await Promise.all([
     prisma.produto.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } }),
-    prisma.estoqueSaldo.findMany({ where: { unidadeId } }),
+    prisma.estoqueSaldo.findMany({ where: { unidadeId: unidadeFisicaId } }),
   ]);
   const saldoPorProduto = new Map(saldos.map((s) => [s.produtoId, s.quantidade]));
 

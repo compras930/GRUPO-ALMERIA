@@ -15,6 +15,7 @@
 // banco de dados rodando. As funções async ao final só carregam os dados
 // do Prisma e chamam a parte pura.
 import { prisma } from "@/lib/prisma";
+import { idDaUnidadeFisica } from "@/lib/unidade-fisica";
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 /** Cliente Prisma normal OU o `tx` de dentro de um `prisma.$transaction(async (tx) => ...)`. */
@@ -126,7 +127,11 @@ export async function carregarIndiceReceitas(unidadeId: string, cliente: Cliente
 
 /** Carrega o preço atual (por unidade) de cada Produto, pra usar na precificação da explosão. */
 export async function carregarPrecoAtualPorProduto(unidadeId: string): Promise<Map<string, number>> {
-  const precos = await prisma.precoAtualProduto.findMany({ where: { unidadeId } });
+  // Preço segue a unidade FÍSICA: Matri lê o preço do Noroeste, porque a compra
+  // é a mesma. Este é o único ponto por onde o custo lê preço, então resolver
+  // aqui cobre ficha, CMV, alerta e lista de compras de uma vez.
+  const unidadeFisicaId = await idDaUnidadeFisica(unidadeId);
+  const precos = await prisma.precoAtualProduto.findMany({ where: { unidadeId: unidadeFisicaId } });
   return new Map(precos.map((p) => [p.produtoId, p.preco]));
 }
 

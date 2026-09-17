@@ -7,6 +7,7 @@
 import { prisma } from "@/lib/prisma";
 import { normalizarNome } from "@/lib/nome-normalizado";
 import { carregarIndiceReceitas, carregarPrecoAtualPorProduto, explodirReceitaPura } from "@/lib/receita";
+import { idDaUnidadeFisica } from "@/lib/unidade-fisica";
 import { resolverItensVendaPura, EXPLICACAO_MOTIVO } from "@/lib/resolucao-item-venda";
 
 export type ItemVendaSemanalInput = {
@@ -50,6 +51,10 @@ export async function processarVendaSemanal(
   const unidade = await prisma.unidade.findUnique({ where: { nome: unidadeNome } });
   if (!unidade) throw new Error(`Unidade "${unidadeNome}" não encontrada.`);
 
+  // A venda é da CASA (é o caixa dela), mas o consumo de estoque e a compra
+  // que ela gera são da DESPENSA — no caso de Matri, a do Noroeste.
+  const unidadeFisicaId = await idDaUnidadeFisica(unidade.id);
+
   const periodoInicio = new Date(periodoInicioStr);
   const periodoFim = new Date(periodoFimStr);
 
@@ -66,7 +71,7 @@ export async function processarVendaSemanal(
   const [indice, precos, parametros] = await Promise.all([
     carregarIndiceReceitas(unidade.id),
     carregarPrecoAtualPorProduto(unidade.id),
-    prisma.parametroEstoqueProduto.findMany({ where: { unidadeId: unidade.id } }),
+    prisma.parametroEstoqueProduto.findMany({ where: { unidadeId: unidadeFisicaId } }),
   ]);
   const idealPorProduto = new Map(parametros.filter((p) => p.estoqueIdeal != null).map((p) => [p.produtoId, p.estoqueIdeal!]));
 
@@ -116,7 +121,7 @@ export async function processarVendaSemanal(
     }
   }
 
-  const saldosAtuais = await prisma.estoqueSaldo.findMany({ where: { unidadeId: unidade.id } });
+  const saldosAtuais = await prisma.estoqueSaldo.findMany({ where: { unidadeId: unidadeFisicaId } });
   const saldoPorProduto = new Map(saldosAtuais.map((s) => [s.produtoId, s.quantidade]));
 
   const { vendaSemanalId, pedidoCompraId, itensListaCompra } = await prisma.$transaction(async (tx) => {
@@ -133,13 +138,13 @@ export async function processarVendaSemanal(
     for (const [produtoId, quantidadeConsumida] of consumoTotal) {
       if (quantidadeConsumida <= 0) continue;
       await tx.estoqueSaldo.upsert({
-        where: { unidadeId_produtoId: { unidadeId: unidade.id, produtoId } },
+        where: { unidadeId_produtoId: { unidadeId: unidadeFisicaId, produtoId } },
         update: { quantidade: { decrement: quantidadeConsumida } },
-        create: { unidadeId: unidade.id, produtoId, quantidade: -quantidadeConsumida },
+        create: { unidadeId: unidadeFisicaId, produtoId, quantidade: -quantidadeConsumida },
       });
       await tx.movimentoEstoque.create({
         data: {
-          unidadeId: unidade.id,
+          unidadeId: unidadeFisicaId,
           produtoId,
           tipo: "SAIDA_CONSUMO",
           quantidade: -quantidadeConsumida,
@@ -177,7 +182,7 @@ export async function processarVendaSemanal(
       const pedido = await tx.pedidoCompra.create({
         data: {
           numero,
-          unidadeId: unidade.id,
+          unidadeId: unidadeFisicaId,
           fornecedorId: null,
           solicitanteId: importadoPorId,
           status: "RASCUNHO",

@@ -23,6 +23,20 @@ model Unidade {
   metaCmvBebidas  Float?
   metaCmvVinhos   Float?
 
+  // Quando duas "casas" são a MESMA unidade física — Noroeste e Matri: cardápio
+  // próprio e caixa próprio, mas uma cozinha, uma despensa, uma compra — a casa
+  // que não guarda estoque aponta pra que guarda.
+  //
+  // Null = guarda o próprio estoque (o caso das outras três).
+  //
+  // O que segue a unidade FÍSICA: preço de insumo, saldo, movimento, contagem,
+  // nota de compra, pedido, parâmetro de estoque. O que segue a CASA: item de
+  // venda e venda semanal — é o cardápio e o caixa, a razão de existirem duas.
+  // Ver src/lib/unidade-fisica.ts.
+  estoqueEmId     String?
+  estoqueEm       Unidade?  @relation("EstoqueCompartilhado", fields: [estoqueEmId], references: [id])
+  casasNoMeuEstoque Unidade[] @relation("EstoqueCompartilhado")
+
   usuarios       Usuario[]
   pedidos        PedidoCompra[]
   saldosEstoque  EstoqueSaldo[]

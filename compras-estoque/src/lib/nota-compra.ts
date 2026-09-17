@@ -7,6 +7,7 @@
 // sub-receita) comparando o custo antes/depois da atualização.
 import { prisma } from "@/lib/prisma";
 import { normalizarNome, chaveComparacao } from "@/lib/nome-normalizado";
+import { idDaUnidadeFisica, casasDaUnidadeFisica } from "@/lib/unidade-fisica";
 import {
   carregarIndiceReceitas,
   carregarPrecoAtualPorProduto,
@@ -100,15 +101,24 @@ export async function processarNotaCompra(
   const unidade = await prisma.unidade.findUnique({ where: { nome: unidadeNome } });
   if (!unidade) throw new Error(`Unidade "${unidadeNome}" não encontrada.`);
 
+  // A nota é da DESPENSA, não da casa: se a nota vier lançada como "Matri",
+  // ela pertence ao estoque do Noroeste, que é onde a mercadoria entra.
+  const unidadeFisicaId = await idDaUnidadeFisica(unidade.id);
+  // ...e o custo que ela mexe é o das fichas de TODAS as casas dessa despensa.
+  const casas = await casasDaUnidadeFisica(unidadeFisicaId);
+
   const produtos = await prisma.produto.findMany({ select: { id: true, nome: true, unidadeMedida: true } });
   const porChave = new Map(produtos.map((p) => [`${chaveComparacao(p.nome)}|||${p.unidadeMedida}`, { id: p.id }]));
 
   // Snapshot do índice/preços ANTES de qualquer escrita, pra poder comparar
   // custo antes/depois sem precisar de uma segunda ida ao banco no final.
-  const [indice, precosAntes] = await Promise.all([
-    carregarIndiceReceitas(unidade.id),
-    carregarPrecoAtualPorProduto(unidade.id),
+  const [indices, precosAntes] = await Promise.all([
+    Promise.all(casas.map((c) => carregarIndiceReceitas(c))),
+    carregarPrecoAtualPorProduto(unidadeFisicaId),
   ]);
+  // Receita ainda é por casa, então o índice de uma despensa com duas casas é
+  // a união dos dois. Ids de receita são únicos, então juntar é seguro.
+  const indice = new Map(indices.flatMap((i) => [...i]));
 
   const naoReconhecidos: ItemPrecoInput[] = [];
   const produtosAlterados = new Set<string>();
@@ -118,7 +128,7 @@ export async function processarNotaCompra(
 
   const notaCompraId = await prisma.$transaction(async (tx) => {
     const notaCompra = await tx.notaCompra.create({
-      data: { unidadeId: unidade.id, arquivoNome: arquivoNome ?? "n8n", importadoPorId },
+      data: { unidadeId: unidadeFisicaId, arquivoNome: arquivoNome ?? "n8n", importadoPorId },
     });
 
     for (const item of itens) {
@@ -140,7 +150,7 @@ export async function processarNotaCompra(
       }
 
       const existente = await tx.precoAtualProduto.findUnique({
-        where: { unidadeId_produtoId: { unidadeId: unidade.id, produtoId: produto.id } },
+        where: { unidadeId_produtoId: { unidadeId: unidadeFisicaId, produtoId: produto.id } },
       });
 
       await tx.itemNotaCompra.create({
@@ -160,12 +170,12 @@ export async function processarNotaCompra(
       }
 
       await tx.precoAtualProduto.upsert({
-        where: { unidadeId_produtoId: { unidadeId: unidade.id, produtoId: produto.id } },
+        where: { unidadeId_produtoId: { unidadeId: unidadeFisicaId, produtoId: produto.id } },
         update: { preco: item.preco, dataCompra },
-        create: { unidadeId: unidade.id, produtoId: produto.id, preco: item.preco, dataCompra },
+        create: { unidadeId: unidadeFisicaId, produtoId: produto.id, preco: item.preco, dataCompra },
       });
       await tx.historicoPrecoProduto.create({
-        data: { unidadeId: unidade.id, produtoId: produto.id, preco: item.preco, origem: "NOTA_COMPRA", origemId: notaCompra.id, dataCompra },
+        data: { unidadeId: unidadeFisicaId, produtoId: produto.id, preco: item.preco, origem: "NOTA_COMPRA", origemId: notaCompra.id, dataCompra },
       });
 
       precosAtualizados++;
@@ -183,7 +193,7 @@ export async function processarNotaCompra(
   const itensImpactados: ResultadoNotaCompra["itensImpactados"] = [];
   if (receitasAfetadas.size > 0) {
     const itensVenda = await prisma.itemVenda.findMany({
-      where: { unidadeId: unidade.id, receitaId: { in: [...receitasAfetadas] } },
+      where: { unidadeId: { in: casas }, receitaId: { in: [...receitasAfetadas] } },
     });
     for (const item of itensVenda) {
       const antes = custoComPrecos(item.receitaId!, indice, precosAntes);

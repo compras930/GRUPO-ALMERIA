@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { idDaUnidadeFisica } from "@/lib/unidade-fisica";
 import { requireSession } from "@/lib/session";
 import { podeReceber, unidadeVisivel } from "@/lib/permissions";
 
@@ -37,6 +38,12 @@ export async function registrarRecebimento(pedidoId: string, formData: FormData)
 
   const itemPedidoPorId = new Map(pedido.itens.map((i) => [i.id, i]));
 
+  // O recebimento entra na DESPENSA do pedido. Hoje todo pedido já nasce na
+  // unidade física (o seletor só oferece essas), mas um pedido antigo pode
+  // carregar uma casa — resolver aqui evita mercadoria entrando num estoque
+  // paralelo.
+  const unidadeFisicaId = await idDaUnidadeFisica(pedido.unidadeId);
+
   await prisma.$transaction(async (tx) => {
     const recebimento = await tx.recebimento.create({
       data: {
@@ -58,10 +65,10 @@ export async function registrarRecebimento(pedidoId: string, formData: FormData)
       if (!itemPedido) continue;
 
       await tx.estoqueSaldo.upsert({
-        where: { unidadeId_produtoId: { unidadeId: pedido.unidadeId, produtoId: itemPedido.produtoId } },
+        where: { unidadeId_produtoId: { unidadeId: unidadeFisicaId, produtoId: itemPedido.produtoId } },
         update: { quantidade: { increment: item.quantidadeRecebida } },
         create: {
-          unidadeId: pedido.unidadeId,
+          unidadeId: unidadeFisicaId,
           produtoId: itemPedido.produtoId,
           quantidade: item.quantidadeRecebida,
         },
@@ -69,7 +76,7 @@ export async function registrarRecebimento(pedidoId: string, formData: FormData)
 
       await tx.movimentoEstoque.create({
         data: {
-          unidadeId: pedido.unidadeId,
+          unidadeId: unidadeFisicaId,
           produtoId: itemPedido.produtoId,
           tipo: "ENTRADA_RECEBIMENTO",
           quantidade: item.quantidadeRecebida,

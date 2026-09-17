@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { unidadesComEstoqueProprio } from "@/lib/unidade-fisica";
 import { requireSession } from "@/lib/session";
 import { podeCriarPedido } from "@/lib/permissions";
 import NovoPedidoForm from "@/components/NovoPedidoForm";
@@ -10,7 +11,7 @@ export default async function NovoPedidoPage() {
   }
 
   const [unidades, fornecedores, produtos] = await Promise.all([
-    prisma.unidade.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } }),
+    unidadesComEstoqueProprio(),
     prisma.fornecedor.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } }),
     prisma.produto.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } }),
   ]);
