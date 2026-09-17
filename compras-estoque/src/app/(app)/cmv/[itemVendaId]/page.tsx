@@ -95,6 +95,7 @@ export default async function ItemVendaPage({ params }: { params: { itemVendaId:
           nomeInicial={item.nome}
           categoriaInicial={item.categoria ?? ""}
           precoVendaInicial={item.precoVenda}
+          codigoPdvInicial={item.codigoPdv ?? ""}
           modoPreparoInicial={receita?.modoPreparo ?? ""}
           rendimentoQtdInicial={receita?.rendimentoQtd ?? null}
           rendimentoUnidadeInicial={receita?.rendimentoUnidade ?? ""}

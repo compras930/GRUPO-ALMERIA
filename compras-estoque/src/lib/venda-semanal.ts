@@ -5,16 +5,31 @@
 // src/actions/recebimentos.ts) e gera um Pedido de Compra rascunho com
 // quantidade e preço sugeridos.
 import { prisma } from "@/lib/prisma";
-import { normalizarNome, chaveComparacao } from "@/lib/nome-normalizado";
+import { normalizarNome } from "@/lib/nome-normalizado";
 import { carregarIndiceReceitas, carregarPrecoAtualPorProduto, explodirReceitaPura } from "@/lib/receita";
+import { resolverItensVendaPura, EXPLICACAO_MOTIVO } from "@/lib/resolucao-item-venda";
 
-export type ItemVendaSemanalInput = { nome: string; quantidadeVendida: number };
+export type ItemVendaSemanalInput = {
+  nome: string;
+  /** Código do produto no PDV, quando a origem manda. Casa por aqui de preferência. */
+  codigo?: string | null;
+  quantidadeVendida: number;
+};
 
 export type ResultadoVendaSemanal = {
   vendaSemanalId: string;
   pedidoCompraId: string | null;
   totalItensVendidos: number;
-  naoReconhecidos: ItemVendaSemanalInput[];
+  casadosPorCodigo: number;
+  casadosPorNome: number;
+  naoReconhecidos: (ItemVendaSemanalInput & { motivo: string })[];
+  /**
+   * Itens que casaram por nome e trouxeram um código que o cadastro ainda não
+   * tem. Não gravamos automaticamente — casamento por nome é palpite, e gravar
+   * o código a partir dele congelaria o palpite como se fosse identidade.
+   * Vem na resposta pra alguém confirmar (prisma/scripts/backfill-codigo-pdv.ts).
+   */
+  codigosASugerir: { itemVendaId: string; nome: string; codigo: string }[];
   itensListaCompra: { produto: string; unidadeMedida: string; quantidadeSugerida: number; precoUnitEsperado: number }[];
 };
 
@@ -46,13 +61,7 @@ export async function processarVendaSemanal(
   if (jaExiste) throw new VendaSemanalDuplicadaError(unidadeNome, periodoInicioStr, periodoFimStr);
 
   const itensVenda = await prisma.itemVenda.findMany({ where: { unidadeId: unidade.id } });
-  const porNome = new Map<string, typeof itensVenda[number][]>();
-  for (const iv of itensVenda) {
-    const chave = chaveComparacao(iv.nome);
-    const lista = porNome.get(chave) ?? [];
-    lista.push(iv);
-    porNome.set(chave, lista);
-  }
+  const itemVendaPorId = new Map(itensVenda.map((iv) => [iv.id, iv]));
 
   const [indice, precos, parametros] = await Promise.all([
     carregarIndiceReceitas(unidade.id),
@@ -61,20 +70,44 @@ export async function processarVendaSemanal(
   ]);
   const idealPorProduto = new Map(parametros.filter((p) => p.estoqueIdeal != null).map((p) => [p.produtoId, p.estoqueIdeal!]));
 
-  const naoReconhecidos: ItemVendaSemanalInput[] = [];
+  const naoReconhecidos: ResultadoVendaSemanal["naoReconhecidos"] = [];
+  const codigosASugerir: ResultadoVendaSemanal["codigosASugerir"] = [];
   const consumoTotal = new Map<string, number>(); // produtoId -> quantidade consumida
-  const linhasParaGravar: { itemVendaId: string | null; nomeBruto: string; quantidadeVendida: number }[] = [];
+  const linhasParaGravar: {
+    itemVendaId: string | null;
+    nomeBruto: string;
+    codigoBruto: string | null;
+    quantidadeVendida: number;
+  }[] = [];
+  let casadosPorCodigo = 0;
+  let casadosPorNome = 0;
 
-  for (const item of itens) {
-    const candidatos = porNome.get(chaveComparacao(item.nome)) ?? [];
-    if (candidatos.length !== 1) {
-      // 0 = não encontrado; >1 = ambíguo (mesmo nome em tipo/categoria diferente) — os dois casos precisam de revisão humana
-      naoReconhecidos.push(item);
-      linhasParaGravar.push({ itemVendaId: null, nomeBruto: normalizarNome(item.nome), quantidadeVendida: item.quantidadeVendida });
+  // Casa por código quando a origem manda um, por nome quando não — toda a
+  // decisão está em src/lib/resolucao-item-venda.ts, que é puro e testado.
+  const resolucoes = resolverItensVendaPura(itens, itensVenda);
+
+  for (const r of resolucoes) {
+    const item = r.linha as ItemVendaSemanalInput;
+    const codigoBruto = String(item.codigo ?? "").trim() || null;
+    const nomeBruto = normalizarNome(item.nome);
+
+    if (!r.itemVendaId) {
+      // A linha fica gravada mesmo sem casar: é o registro de que aquela venda
+      // existiu, e o que permite reconciliar depois sem pedir a planilha de novo.
+      naoReconhecidos.push({ ...item, motivo: EXPLICACAO_MOTIVO[r.motivo!] });
+      linhasParaGravar.push({ itemVendaId: null, nomeBruto, codigoBruto, quantidadeVendida: item.quantidadeVendida });
       continue;
     }
-    const itemVenda = candidatos[0];
-    linhasParaGravar.push({ itemVendaId: itemVenda.id, nomeBruto: normalizarNome(item.nome), quantidadeVendida: item.quantidadeVendida });
+
+    if (r.via === "CODIGO") casadosPorCodigo++;
+    else casadosPorNome++;
+    if (r.codigoSugerido) {
+      codigosASugerir.push({ itemVendaId: r.itemVendaId, nome: nomeBruto, codigo: r.codigoSugerido });
+    }
+
+    linhasParaGravar.push({ itemVendaId: r.itemVendaId, nomeBruto, codigoBruto, quantidadeVendida: item.quantidadeVendida });
+
+    const itemVenda = itemVendaPorId.get(r.itemVendaId)!;
     if (!itemVenda.receitaId) continue; // sem ficha técnica — não dá pra explodir consumo, mas a venda ainda fica registrada
 
     const insumos = explodirReceitaPura(itemVenda.receitaId, item.quantidadeVendida, indice);
@@ -162,7 +195,10 @@ export async function processarVendaSemanal(
     vendaSemanalId,
     pedidoCompraId,
     totalItensVendidos: itens.length,
+    casadosPorCodigo,
+    casadosPorNome,
     naoReconhecidos,
+    codigosASugerir,
     itensListaCompra,
   };
 }

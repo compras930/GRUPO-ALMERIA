@@ -29,6 +29,7 @@ export default function FichaForm({
   nomeInicial,
   categoriaInicial,
   precoVendaInicial,
+  codigoPdvInicial,
   modoPreparoInicial,
   rendimentoQtdInicial,
   rendimentoUnidadeInicial,
@@ -41,6 +42,7 @@ export default function FichaForm({
   nomeInicial: string;
   categoriaInicial: string;
   precoVendaInicial: number;
+  codigoPdvInicial: string;
   modoPreparoInicial: string;
   rendimentoQtdInicial: number | null;
   rendimentoUnidadeInicial: string;
@@ -52,6 +54,7 @@ export default function FichaForm({
   const [nome, setNome] = useState(nomeInicial);
   const [categoria, setCategoria] = useState(categoriaInicial);
   const [precoVenda, setPrecoVenda] = useState(String(precoVendaInicial || ""));
+  const [codigoPdv, setCodigoPdv] = useState(codigoPdvInicial);
   const [modoPreparo, setModoPreparo] = useState(modoPreparoInicial);
   const [rendimentoQtd, setRendimentoQtd] = useState(rendimentoQtdInicial ? String(rendimentoQtdInicial) : "");
   const [rendimentoUnidade, setRendimentoUnidade] = useState(rendimentoUnidadeInicial);
@@ -160,6 +163,20 @@ export default function FichaForm({
             value={precoVenda}
             onChange={(e) => setPrecoVenda(e.target.value)}
           />
+        </div>
+        <div className="field-group">
+          <label htmlFor="codigoPdv">Código no PDV</label>
+          <input
+            id="codigoPdv"
+            name="codigoPdv"
+            value={codigoPdv}
+            onChange={(e) => setCodigoPdv(e.target.value)}
+            placeholder="opcional"
+          />
+          <p className="sub" style={{ marginTop: 4 }}>
+            Com o código preenchido, a venda importada casa com este item mesmo que o nome no
+            PDV seja diferente.
+          </p>
         </div>
       </div>
 

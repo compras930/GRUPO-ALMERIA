@@ -42,10 +42,27 @@ export async function salvarFicha(itemVendaId: string, formData: FormData) {
   const novoNome = normalizarNome(String(formData.get("nome") || "")) || item.nome;
   const novaCategoria = normalizarNome(String(formData.get("categoria") || "")) || null;
   const novoPrecoVenda = Number(formData.get("precoVenda")) || 0;
+  // Vazio grava null (e não ""), senão dois itens "sem código" colidiriam no
+  // índice único (unidadeId, codigoPdv) — NULL é distinto, "" não é.
+  const novoCodigoPdv = String(formData.get("codigoPdv") || "").trim() || null;
   const modoPreparo = String(formData.get("modoPreparo") || "").trim() || null;
   const rendimentoQtdRaw = formData.get("rendimentoQtd");
   const rendimentoQtd = rendimentoQtdRaw ? Number(rendimentoQtdRaw) || null : null;
   const rendimentoUnidade = normalizarNome(String(formData.get("rendimentoUnidade") || "")) || null;
+
+  // O código é único por casa. Sem esta checagem, digitar um código que já é de
+  // outro prato estoura o índice único e a tela mostra o erro cru do Postgres.
+  if (novoCodigoPdv) {
+    const jaUsado = await prisma.itemVenda.findFirst({
+      where: { unidadeId: item.unidadeId, codigoPdv: novoCodigoPdv, NOT: { id: itemVendaId } },
+      select: { nome: true },
+    });
+    if (jaUsado) {
+      throw new Error(
+        `O código de PDV "${novoCodigoPdv}" já está cadastrado em "${jaUsado.nome}" nesta casa. Cada código pertence a um item só.`
+      );
+    }
+  }
 
   let linhas: LinhaIngredienteInput[];
   try {
@@ -109,7 +126,7 @@ export async function salvarFicha(itemVendaId: string, formData: FormData) {
 
     await tx.itemVenda.update({
       where: { id: itemVendaId },
-      data: { nome: novoNome, categoria: novaCategoria, precoVenda: novoPrecoVenda, receitaId },
+      data: { nome: novoNome, categoria: novaCategoria, precoVenda: novoPrecoVenda, codigoPdv: novoCodigoPdv, receitaId },
     });
 
     // Confere que essa edição não criou um ciclo novo (a receita apontando, direta ou

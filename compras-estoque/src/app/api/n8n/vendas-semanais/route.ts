@@ -25,6 +25,12 @@ export async function POST(request: Request) {
     if (!item.nome || typeof item.quantidadeVendida !== "number") {
       return Response.json({ erro: "Cada item precisa de nome e quantidadeVendida (número)." }, { status: 400 });
     }
+    // `codigo` é opcional (planilha antiga não tem) mas, quando vem, é o que
+    // manda no casamento — então tem que ser texto. Excel devolve código como
+    // número às vezes; aceitamos e convertemos, em vez de recusar a carga toda.
+    if (item.codigo != null && typeof item.codigo !== "string") {
+      item.codigo = String(item.codigo);
+    }
   }
 
   const servico = await prisma.usuario.findUnique({ where: { email: N8N_SERVICE_USER_EMAIL } });

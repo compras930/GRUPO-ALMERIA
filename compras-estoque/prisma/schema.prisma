@@ -284,6 +284,12 @@ model ItemVenda {
   precoVenda     Float
   ativo          Boolean  @default(true)
 
+  // Código do produto no PDV da casa. É o identificador estável do item na
+  // venda: o nome muda quando alguém renomeia o prato no cardápio ("FILE AU
+  // POIVRE WINE" x "Filé au Poivre"), o código não. Ver src/lib/resolucao-item-venda.ts.
+  // Null = ainda não mapeado; nesse caso a venda continua casando por nome.
+  codigoPdv      String?
+
   receitaId      String?  // null = ainda sem ficha técnica (equivalente ao "Criar Ficha" do dashboard)
   receita        Receita? @relation(fields: [receitaId], references: [id])
 
@@ -301,6 +307,12 @@ model ItemVenda {
   // em garrafa, cada categoria com preço próprio) — sem categoria na chave,
   // esses dois viram um só registro e um deles se perde.
   @@unique([unidadeId, tipo, categoria, nome])
+
+  // Por casa, não global: cada unidade roda um PDV só (Teknisa nas três do
+  // Grupo, Xmenu no Beira Lago) e os espaços de código não se comunicam.
+  // Postgres trata NULL como distinto num índice único, então os 863 itens
+  // ainda sem código convivem sem conflito — é o que queremos.
+  @@unique([unidadeId, codigoPdv])
 }
 
 // ---------- Preço de insumo (ledger + cache, mesmo padrão de MovimentoEstoque/EstoqueSaldo) ----------
@@ -397,6 +409,11 @@ model ItemVendaSemanal {
   itemVenda         ItemVenda?   @relation(fields: [itemVendaId], references: [id])
 
   nomeBruto         String
+  // Código que veio na linha do PDV, mesmo quando não casou com nenhum
+  // ItemVenda. Guardar o bruto é o que permite reconciliar depois: preencheu
+  // o codigoPdv do item, as linhas antigas daquele código ficam
+  // identificáveis sem ter que adivinhar pelo nome de novo.
+  codigoBruto       String?
   quantidadeVendida Float
 }
 
