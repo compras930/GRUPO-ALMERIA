@@ -16,6 +16,9 @@
 --   LINGUIÇA DE FRANGO / CROQUETA DE SOBREASSADA / IOGURTE NATURAL
 --                   -> proteína ou insumo comprado + um preparo pequeno.
 --                      É o mesmo padrão das aparas. LEGÍTIMO.
+--                      (IOGURTE NATURAL é o caso didático: 180 G de iogurte
+--                       como cultura pra 2 L de leite. É assim que se faz
+--                       iogurte — o produto homônimo é o fermento.)
 --
 -- Sobram dois casos em que a linha não tem leitura possível como ingrediente,
 -- porque os outros ingredientes JÁ constituem o produto inteiro:
@@ -30,20 +33,17 @@
 --     rendendo 15 UND. A linha diz "1 UND de SALADA DE FRUTAS" — um lote de
 --     15 porções contendo 1 porção de si mesmo.
 --
--- Peso: R$ 0,93 por lote de brigadeiro (1,8% do custo da receita) e R$ 1,93
--- por lote de salada (8,6%, ou R$ 0,13 por porção). Pequeno — o que justifica
--- mexer não é o valor, é que esses centavos são custo CONGELADO: vêm do preço
--- de um Produto que a importação derivou, e que nenhuma nota de compra
--- atualiza. É a mesma família do que já foi corrigido nas cascas do Matri.
+-- O peso é pequeno — centavos por lote. O que justifica mexer não é o valor:
+-- esses centavos são custo CONGELADO, vêm do preço de um Produto que a
+-- importação derivou e que nenhuma nota de compra atualiza. É a mesma família
+-- do que foi corrigido nas cascas do Matri. O passo 1 imprime o valor exato
+-- em produção antes de qualquer alteração.
 --
--- NÃO ENTRA AQUI, e é o achado mais caro deste levantamento: a sub-receita
--- IOGURTE NATURAL diz 180 KG de iogurte pra render 1,9 kg. O lote sai a
--- R$ 659, ou R$ 344/kg de iogurte, quando o produto custa R$ 3,60/kg. Vaza
--- pra COALHADA (R$ 664 por lote), MOLHO TZATZIKI (R$ 189), COMBO BONJOUR
--- (R$ 45) e SALADA DE FRUTAS (R$ 15), nas duas casas. Os 180 quase certamente
--- deveriam ser 180 G (180 G + 2000 ML rendendo 1915 G fecha com ~12% de
--- perda; 180 KG não fecha com nada). Mas "quase certamente" não basta pra
--- reescrever quantidade de ficha: é decisão da cozinha, não minha.
+-- (Uma versão anterior deste cabeçalho trazia um "achado maior" sobre a
+-- sub-receita IOGURTE NATURAL custar R$ 344/kg. Era falso: veio do meu banco
+-- local, corrompido por um teste antigo meu do script de unificação de
+-- homônimos. A varredura quantidades-infladas-diagnostico.sql rodou em
+-- produção e voltou ZERO linhas. Em produção a receita está correta.)
 --
 -- Idempotente. Sem BEGIN/COMMIT (o editor do Neon roda cada comando em
 -- autocommit). Faça o backup antes: mexe em linha de ficha.

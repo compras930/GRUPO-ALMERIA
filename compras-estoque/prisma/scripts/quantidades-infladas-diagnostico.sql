@@ -22,8 +22,14 @@
 --      sem preço é exatamente o caso que passaria;
 --   2. grupos marcados como decisão manual pulam a checagem inteira.
 --
--- Rode as três consultas e me mande o resultado. Se vier vazio, produção está
--- limpa e o problema é só do meu ambiente.
+-- RESULTADO (17/09/2026): rodado em produção, ZERO linhas suspeitas. Produção
+-- está limpa; as 81 linhas eram corrupção do ambiente local, como suspeitado.
+-- Junto com elas cai o alarme do IOGURTE NATURAL a R$ 344/kg, que eu tinha
+-- reportado como achado: em produção a receita está correta.
+--
+-- A consulta fica no repositório porque as duas brechas descritas abaixo
+-- continuam existindo no script de unificação — vale repetir esta varredura
+-- depois de qualquer mesclagem futura de produtos homônimos.
 
 -- ---------------------------------------------------------------------------
 -- 1) O quadro geral. `linhas_suspeitas` é o que importa.
