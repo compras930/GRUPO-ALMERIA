@@ -40,6 +40,18 @@ export type ResultadoNotaCompra = {
   totalRecebido: number;
   precosAtualizados: number;
   precosIgnoradosMaisAntigos: number;
+  /**
+   * Preços recusados por salto absurdo contra o preço atual — quase sempre
+   * unidade trocada na origem (preço da caixa contra um `un` que diz KG).
+   * Não foram gravados; precisam de olho humano. Ver LIMITE_SALTO_PRECO.
+   */
+  precosSuspeitos: {
+    nome: string;
+    unidadeMedida: string;
+    precoAtual: number;
+    precoRecebido: number;
+    razao: number;
+  }[];
   naoReconhecidos: ItemPrecoInput[];
   itensImpactados: {
     itemVendaId: string;
@@ -52,12 +64,20 @@ export type ResultadoNotaCompra = {
   }[];
 };
 
+/**
+ * Quantas vezes o preço pode saltar, pra mais ou pra menos, antes de ser
+ * recusado. 5x é folgado pra reajuste real de insumo (inclusive sazonal, tipo
+ * tomate na entressafra) e apertado pra erro de unidade, que erra por 10x,
+ * 12x ou 1000x.
+ */
+const LIMITE_SALTO_PRECO = 5;
+
 /** Acha o Produto correspondente a uma linha da planilha, só por match exato de nome+unidade. */
 function encontrarProduto(
-  porChave: Map<string, { id: string }>,
+  porChave: Map<string, { id: string; nome: string }>,
   nomeBruto: string,
   unidadeBruta: string
-): { id: string } | null {
+): { id: string; nome: string } | null {
   const nome = normalizarNome(nomeBruto);
   const unidade = normalizarUnidade(unidadeBruta);
   const direto = porChave.get(`${chaveComparacao(nome)}|||${unidade}`);
@@ -108,7 +128,7 @@ export async function processarNotaCompra(
   const casas = await casasDaUnidadeFisica(unidadeFisicaId);
 
   const produtos = await prisma.produto.findMany({ select: { id: true, nome: true, unidadeMedida: true } });
-  const porChave = new Map(produtos.map((p) => [`${chaveComparacao(p.nome)}|||${p.unidadeMedida}`, { id: p.id }]));
+  const porChave = new Map(produtos.map((p) => [`${chaveComparacao(p.nome)}|||${p.unidadeMedida}`, { id: p.id, nome: p.nome }]));
 
   // Snapshot do índice/preços ANTES de qualquer escrita, pra poder comparar
   // custo antes/depois sem precisar de uma segunda ida ao banco no final.
@@ -124,6 +144,7 @@ export async function processarNotaCompra(
   const precosDepois = new Map(precosAntes);
   let precosAtualizados = 0;
   let precosIgnoradosMaisAntigos = 0;
+  const precosSuspeitos: ResultadoNotaCompra["precosSuspeitos"] = [];
 
   const notaCompraId = await prisma.$transaction(async (tx) => {
     const notaCompra = await tx.notaCompra.create({
@@ -166,6 +187,34 @@ export async function processarNotaCompra(
       if (existente && existente.dataCompra >= dataCompra) {
         precosIgnoradosMaisAntigos++;
         continue;
+      }
+
+      // Salto absurdo de preço não é reajuste, é unidade trocada. O
+      // `valorUnitario` do Teknisa às vezes traz o preço da CAIXA contra um
+      // `un` que diz KG — visto no dado real de setembro/2026: BATATA SURECRISP
+      // 7MM a R$ 18,55/kg numa casa e R$ 228,00/kg na outra, MANTEIGA S/SAL a
+      // R$ 174,50/kg, LINGUIÇA CALABRESA a R$ 293,85/kg.
+      //
+      // Gravar isso multiplicaria o custo de toda ficha que usa o insumo, e o
+      // erro seria invisível: o número tem a mesma cara de um preço. Preço de
+      // insumo raramente muda 5x entre duas compras; quando muda, é erro de
+      // cadastro ou de unidade, e vale mais a pena travar e reportar do que
+      // gravar e alguém descobrir pelo CMV meses depois.
+      //
+      // Só vale contra preço POSITIVO já existente: produto novo não tem
+      // referência, então entra e aparece na primeira conferência.
+      if (existente && existente.preco > 0) {
+        const razao = item.preco / existente.preco;
+        if (razao >= LIMITE_SALTO_PRECO || razao <= 1 / LIMITE_SALTO_PRECO) {
+          precosSuspeitos.push({
+            nome: produto.nome,
+            unidadeMedida: item.unidadeMedida,
+            precoAtual: existente.preco,
+            precoRecebido: item.preco,
+            razao: Number(razao.toFixed(1)),
+          });
+          continue;
+        }
       }
 
       await tx.precoAtualProduto.upsert({
@@ -214,6 +263,7 @@ export async function processarNotaCompra(
     totalRecebido: itens.length,
     precosAtualizados,
     precosIgnoradosMaisAntigos,
+    precosSuspeitos,
     naoReconhecidos,
     itensImpactados,
   };
