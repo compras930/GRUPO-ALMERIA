@@ -4,6 +4,13 @@ import { verificarTokenN8n, respostaNaoAutorizada } from "@/lib/n8n-auth";
 import { N8N_SERVICE_USER_EMAIL } from "@/lib/constants";
 import { processarVendaSemanal, VendaSemanalDuplicadaError, type ItemVendaSemanalInput } from "@/lib/venda-semanal";
 
+// A carga real é grande: a planilha semanal do Teknisa chega com ~2200 linhas
+// de nota, que viram ~440 por casa. O $transaction aqui tolera 60s, mas a
+// função da Vercel corta antes disso no padrão — e o corte no meio de uma
+// transação some com a carga inteira sem dizer por quê. Os dois prazos
+// precisam ser o mesmo número.
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   if (!verificarTokenN8n(request)) return respostaNaoAutorizada();
 
