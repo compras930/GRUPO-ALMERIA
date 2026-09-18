@@ -39,6 +39,18 @@ export async function POST(request: Request) {
     if (item.codigo != null && typeof item.codigo !== "string") {
       item.codigo = String(item.codigo);
     }
+    if (item.chave != null && typeof item.chave !== "string") {
+      item.chave = String(item.chave);
+    }
+    // Quantidade só entra em estoque se for número. Texto vindo da planilha
+    // não é convertido no palpite: uma quantidade errada infla saldo em
+    // silêncio, e o silêncio é o que este projeto passou a semana caçando.
+    if (item.quantidade != null && typeof item.quantidade !== "number") {
+      return Response.json(
+        { erro: `Quantidade inválida em "${item.nome}": mande número, não texto.` },
+        { status: 400 }
+      );
+    }
   }
 
   const servico = await prisma.usuario.findUnique({ where: { email: N8N_SERVICE_USER_EMAIL } });

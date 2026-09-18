@@ -31,6 +31,16 @@ export type ItemPrecoInput = {
   dataCompra: string;
   /** Código do produto no Teknisa. Opcional: origem antiga não manda. */
   codigo?: string | null;
+  /** Quantidade comprada. Quando vem, a linha também dá entrada de estoque. */
+  quantidade?: number | null;
+  valorTotal?: number | null;
+  /**
+   * Chave da linha na origem (coluna `chave` da base do Drive). Quando vem, a
+   * linha já carregada antes é reconhecida e pulada — é o que deixa recarregar
+   * sem inflar o saldo. Sem ela, a carga continua funcionando, mas só pra
+   * preço: sem identidade de linha não há como entrar estoque com segurança.
+   */
+  chave?: string | null;
 };
 
 export type ResultadoNotaCompra = {
@@ -41,6 +51,10 @@ export type ResultadoNotaCompra = {
   /** Quantas linhas casaram pelo código do Teknisa e quantas só pelo nome. */
   casadosPorCodigo: number;
   casadosPorNome: number;
+  /** Linhas ignoradas por já terem sido carregadas antes (mesma `chave`). */
+  linhasJaCarregadas: number;
+  /** Produtos que ganharam saldo, e o total somado. */
+  entradasDeEstoque: { produtos: number; quantidadeTotal: number };
   /**
    * Casou por nome, o produto não tem código gravado e a linha trouxe um.
    * É esta lista que faz o pareamento se alimentar sozinho, uma carga de cada
@@ -161,6 +175,32 @@ export async function processarNotaCompra(
     carregarPrecoAtualPorProduto(unidadeFisicaId),
   ]);
 
+  // Linha já carregada antes é pulada ANTES de qualquer escrita. Uma consulta
+  // só, pelas chaves que vieram — o índice único em chaveOrigem faria o
+  // trabalho de qualquer jeito, mas falhando a carga inteira em vez de pular a
+  // linha repetida, que é o que a gente quer.
+  const chavesRecebidas = itens.map((i) => normalizarCodigo(i.chave)).filter((c): c is string => !!c);
+  const chavesJaGravadas = new Set(
+    chavesRecebidas.length === 0
+      ? []
+      : (
+          await prisma.itemNotaCompra.findMany({
+            where: { chaveOrigem: { in: chavesRecebidas } },
+            select: { chaveOrigem: true },
+          })
+        ).map((i) => i.chaveOrigem!)
+  );
+  const itensNovos = itens.filter((i) => {
+    const c = normalizarCodigo(i.chave);
+    return !c || !chavesJaGravadas.has(c);
+  });
+  const linhasJaCarregadas = itens.length - itensNovos.length;
+
+  // Entrada de estoque é somada por PRODUTO, não gravada linha a linha: a mesma
+  // compra aparece várias vezes no mês e um upsert por linha multiplicaria as
+  // idas ao banco por dez sem mudar o resultado.
+  const entradaPorProduto = new Map<string, number>();
+
   const naoReconhecidos: ItemPrecoInput[] = [];
   const produtosAlterados = new Set<string>();
   const precosDepois = new Map(precosAntes);
@@ -181,11 +221,14 @@ export async function processarNotaCompra(
       data: { unidadeId: unidadeFisicaId, arquivoNome: arquivoNome ?? "n8n", importadoPorId },
     });
 
-    for (const item of itens) {
+    for (const item of itensNovos) {
       const resolucao = resolverLinhaCompraPura(item, indiceProdutos);
       const dataCompra = new Date(item.dataCompra);
       const codigoBruto = normalizarCodigo(item.codigo);
       const unidadeBruta = normalizarUnidade(item.unidadeMedida);
+      const chaveOrigem = normalizarCodigo(item.chave);
+      const quantidade = typeof item.quantidade === "number" && item.quantidade > 0 ? item.quantidade : null;
+      const valorTotal = typeof item.valorTotal === "number" ? item.valorTotal : null;
 
       // Toda linha que não virou preço é gravada em ItemNotaCompra sem
       // produtoId — inclusive as recusadas por contradição de código. A linha
@@ -212,6 +255,9 @@ export async function processarNotaCompra(
             nomeBruto: normalizarNome(item.nome),
             codigoBruto,
             unidadeBruta,
+            quantidade,
+            valorTotal,
+            chaveOrigem,
             precoUnitNovo: item.preco,
             dataCompra,
           },
@@ -242,11 +288,27 @@ export async function processarNotaCompra(
           nomeBruto: normalizarNome(item.nome),
           codigoBruto,
           unidadeBruta,
+          quantidade,
+          valorTotal,
+          chaveOrigem,
           precoUnitNovo: item.preco,
           precoUnitAnterior: existente?.preco ?? null,
           dataCompra,
         },
       });
+
+      // O salto de preço é avaliado ANTES da entrada de estoque, e não só
+      // antes da gravação do preço: quando o preço salta 10x é porque a linha
+      // está na unidade errada, e aí a QUANTIDADE também está. Dez fardos
+      // entrando como dez quilos estraga o saldo do mesmo jeito que o preço.
+      const razao = existente && existente.preco > 0 ? item.preco / existente.preco : 1;
+      const precoSuspeito = razao >= LIMITE_SALTO_PRECO || razao <= 1 / LIMITE_SALTO_PRECO;
+
+      // Entrada de estoque não depende da data: mercadoria que entrou, entrou.
+      // A regra "só se for mais recente" é do PREÇO, não do saldo.
+      if (quantidade && !precoSuspeito) {
+        entradaPorProduto.set(produto.id, (entradaPorProduto.get(produto.id) ?? 0) + quantidade);
+      }
 
       if (existente && existente.dataCompra >= dataCompra) {
         precosIgnoradosMaisAntigos++;
@@ -267,18 +329,15 @@ export async function processarNotaCompra(
       //
       // Só vale contra preço POSITIVO já existente: produto novo não tem
       // referência, então entra e aparece na primeira conferência.
-      if (existente && existente.preco > 0) {
-        const razao = item.preco / existente.preco;
-        if (razao >= LIMITE_SALTO_PRECO || razao <= 1 / LIMITE_SALTO_PRECO) {
-          precosSuspeitos.push({
-            nome: produto.nome,
-            unidadeMedida: item.unidadeMedida,
-            precoAtual: existente.preco,
-            precoRecebido: item.preco,
-            razao: Number(razao.toFixed(1)),
-          });
-          continue;
-        }
+      if (precoSuspeito && existente) {
+        precosSuspeitos.push({
+          nome: produto.nome,
+          unidadeMedida: item.unidadeMedida,
+          precoAtual: existente.preco,
+          precoRecebido: item.preco,
+          razao: Number(razao.toFixed(1)),
+        });
+        continue;
       }
 
       await tx.precoAtualProduto.upsert({
@@ -293,6 +352,28 @@ export async function processarNotaCompra(
       precosAtualizados++;
       produtosAlterados.add(produto.id);
       precosDepois.set(produto.id, item.preco);
+    }
+
+    // Entrada de estoque: um upsert e um movimento por PRODUTO, com a soma do
+    // que veio na carga. Gravar linha a linha multiplicaria as idas ao banco
+    // sem mudar o saldo final, e é justamente dentro da transação que isso
+    // custa caro.
+    for (const [produtoId, quantidadeEntrada] of entradaPorProduto) {
+      await tx.estoqueSaldo.upsert({
+        where: { unidadeId_produtoId: { unidadeId: unidadeFisicaId, produtoId } },
+        update: { quantidade: { increment: quantidadeEntrada } },
+        create: { unidadeId: unidadeFisicaId, produtoId, quantidade: quantidadeEntrada },
+      });
+      await tx.movimentoEstoque.create({
+        data: {
+          unidadeId: unidadeFisicaId,
+          produtoId,
+          tipo: "ENTRADA_NOTA",
+          quantidade: quantidadeEntrada,
+          referencia: notaCompra.id,
+          observacao: `Entrada pela nota do Teknisa (${arquivoNome ?? "n8n"})`,
+        },
+      });
     }
 
     return notaCompra.id;
@@ -389,6 +470,11 @@ export async function processarNotaCompra(
     precosIgnoradosMaisAntigos,
     casadosPorCodigo,
     casadosPorNome,
+    linhasJaCarregadas,
+    entradasDeEstoque: {
+      produtos: entradaPorProduto.size,
+      quantidadeTotal: Number([...entradaPorProduto.values()].reduce((a, b) => a + b, 0).toFixed(3)),
+    },
     codigosSugeridos: [...codigosSugeridos.values()],
     codigosGravados,
     codigosNaoGravados,

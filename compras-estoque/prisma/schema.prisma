@@ -217,7 +217,9 @@ model EstoqueSaldo {
   @@unique([unidadeId, produtoId])
 }
 
-// Tipo: "ENTRADA_RECEBIMENTO" | "SAIDA_CONSUMO" | "AJUSTE_CONTAGEM" | "AJUSTE_MANUAL"
+// Tipo: "ENTRADA_RECEBIMENTO" | "ENTRADA_NOTA" | "SAIDA_CONSUMO" | "AJUSTE_CONTAGEM" | "AJUSTE_MANUAL"
+// ENTRADA_NOTA é a entrada vinda da nota do Teknisa pelo n8n (src/lib/nota-compra.ts);
+// ENTRADA_RECEBIMENTO é a conferência manual contra um pedido de compra.
 model MovimentoEstoque {
   id           String        @id @default(cuid())
   unidadeId    String
@@ -404,6 +406,18 @@ model ItemNotaCompra {
   // (o nome sozinho não serve — é justamente o que não bate).
   codigoBruto       String?
   unidadeBruta      String?
+
+  // Quantidade comprada. É o que faz a compra virar ENTRADA DE ESTOQUE, e sem
+  // ela não existe CMV real (estoque inicial + compras − estoque final) nem
+  // curva A de insumo (que é consumo em reais).
+  quantidade        Float?
+  valorTotal        Float?
+
+  // Chave da linha na origem. Preço tolera recarga — regravar o mesmo preço não
+  // muda nada. Estoque não: reprocessar a mesma nota soma a mesma mercadoria de
+  // novo. Esta chave é o que deixa o workflow rodar quantas vezes quiser.
+  chaveOrigem       String?    @unique
+
   precoUnitNovo     Float
   precoUnitAnterior Float?     // snapshot no momento do import, pra o relatório de variação
   dataCompra        DateTime
