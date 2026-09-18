@@ -77,6 +77,12 @@ export default async function ContagemPage({
           </Link>
         ))}
         <span style={{ flex: 1 }} />
+        <Link href={`/estoque/contagem/imprimir${q({ semana: String(semana) })}`} className="btn small" target="_blank">
+          Folha da semana {semana}
+        </Link>
+        <Link href={`/estoque/contagem/imprimir${q({ todos: "1" })}`} className="btn small" target="_blank">
+          Folha da contagem inicial
+        </Link>
         <Link href={q({ semana: String(semana), todos: verTodos ? "0" : "1" })} className="btn small">
           {verTodos ? "Esconder produto avulso" : "Contar um produto avulso"}
         </Link>
