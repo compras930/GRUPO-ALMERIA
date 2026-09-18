@@ -8,11 +8,12 @@ type Item = { id: string; nome: string; unidadeMedida: string; classeAbc: string
 
 export default function ContagemLoteForm({
   unidadeId,
-  semana,
+  rotulo,
   itens,
 }: {
   unidadeId: string;
-  semana: number;
+  /** O que o botão promete gravar — "contagem da semana 3", "contagem inicial". */
+  rotulo: string;
   itens: Item[];
 }) {
   const [erro, setErro] = useState<string | null>(null);
@@ -94,7 +95,7 @@ export default function ContagemLoteForm({
 
       <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 14 }}>
         <button className="btn primary" type="submit" disabled={pending || preenchidos === 0}>
-          {pending ? "Salvando…" : `Registrar contagem da semana ${semana}`}
+          {pending ? "Salvando…" : `Registrar ${rotulo}`}
         </button>
         <span style={{ opacity: 0.7 }}>
           {preenchidos} de {itens.length} preenchidos

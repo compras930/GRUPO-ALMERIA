@@ -10,7 +10,7 @@ import ContagemLoteForm from "@/components/ContagemLoteForm";
 export default async function ContagemPage({
   searchParams,
 }: {
-  searchParams: { unidadeId?: string; semana?: string; todos?: string };
+  searchParams: { unidadeId?: string; semana?: string; todos?: string; avulso?: string };
 }) {
   const user = await requireSession();
   const isAdmin = user.papel === "ADMIN";
@@ -27,18 +27,25 @@ export default async function ContagemPage({
   const unidadeFisicaId = await idDaUnidadeFisica(unidadeId);
   const semana = (Number(searchParams.semana) || semanaDoMes(new Date())) as Semana;
   const grupos = gruposDaSemana(semana);
-  const verTodos = searchParams.todos === "1";
+  const verAvulso = searchParams.avulso === "1";
+  // `todos=1` lista as curvas A e B inteiras num lançamento só. É o modo da
+  // CONTAGEM INICIAL: a folha impressa desse dia traz os 123 itens, e obrigar
+  // quem digita a passar pelas quatro abas pra lançá-los seria inventar
+  // trabalho — e, pior, quatro chances de fechar a aba no meio.
+  const todos = searchParams.todos === "1";
 
   // O filtro do rodízio vive no banco (ParametroEstoqueProduto), não aqui:
   // a mesma classificação alimenta a planilha que vai pra cozinha e esta tela.
   const doRodizio = await prisma.parametroEstoqueProduto.findMany({
-    where: {
-      unidadeId: unidadeFisicaId,
-      OR: [
-        { classeAbc: "A", grupoContagem: grupos.a },
-        { classeAbc: "B", grupoContagem: grupos.b },
-      ],
-    },
+    where: todos
+      ? { unidadeId: unidadeFisicaId, classeAbc: { in: ["A", "B"] } }
+      : {
+          unidadeId: unidadeFisicaId,
+          OR: [
+            { classeAbc: "A", grupoContagem: grupos.a },
+            { classeAbc: "B", grupoContagem: grupos.b },
+          ],
+        },
     include: { produto: { select: { id: true, nome: true, unidadeMedida: true, ativo: true } } },
   });
 
@@ -72,10 +79,17 @@ export default async function ContagemPage({
       <div className="card" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <span className="eyebrow" style={{ margin: 0 }}>Semana</span>
         {SEMANAS.map((s) => (
-          <Link key={s} href={q({ semana: String(s) })} className={`btn small${s === semana ? " primary" : ""}`}>
+          <Link
+            key={s}
+            href={q({ semana: String(s) })}
+            className={`btn small${!todos && s === semana ? " primary" : ""}`}
+          >
             {s}
           </Link>
         ))}
+        <Link href={q({ todos: "1" })} className={`btn small${todos ? " primary" : ""}`}>
+          Contagem inicial (tudo)
+        </Link>
         <span style={{ flex: 1 }} />
         <Link href={`/estoque/contagem/imprimir${q({ semana: String(semana) })}`} className="btn small" target="_blank">
           Folha da semana {semana}
@@ -83,8 +97,8 @@ export default async function ContagemPage({
         <Link href={`/estoque/contagem/imprimir${q({ todos: "1" })}`} className="btn small" target="_blank">
           Folha da contagem inicial
         </Link>
-        <Link href={q({ semana: String(semana), todos: verTodos ? "0" : "1" })} className="btn small">
-          {verTodos ? "Esconder produto avulso" : "Contar um produto avulso"}
+        <Link href={q({ semana: String(semana), avulso: verAvulso ? "0" : "1" })} className="btn small">
+          {verAvulso ? "Esconder produto avulso" : "Contar um produto avulso"}
         </Link>
       </div>
 
@@ -96,13 +110,19 @@ export default async function ContagemPage({
       ) : (
         <div className="card">
           <p className="eyebrow" style={{ margin: 0 }}>
-            Semana {semana} · curva A grupo {grupos.a} + curva B grupo {grupos.b} · {itensDaSemana.length} itens
+            {todos
+              ? `Contagem inicial · curvas A e B · ${itensDaSemana.length} itens`
+              : `Semana ${semana} · curva A grupo ${grupos.a} + curva B grupo ${grupos.b} · ${itensDaSemana.length} itens`}
           </p>
-          <ContagemLoteForm unidadeId={unidadeId} semana={semana} itens={itensDaSemana} />
+          <ContagemLoteForm
+            unidadeId={unidadeId}
+            rotulo={todos ? "contagem inicial" : `contagem da semana ${semana}`}
+            itens={itensDaSemana}
+          />
         </div>
       )}
 
-      {verTodos && (
+      {verAvulso && (
         <div className="card">
           <p className="eyebrow" style={{ marginTop: 0 }}>Produto avulso</p>
           <ContagemForm
