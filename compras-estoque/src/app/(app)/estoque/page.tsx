@@ -44,9 +44,14 @@ export default async function EstoquePage({
           <p className="eyebrow">Estoque</p>
           <h1>Saldo por produto</h1>
         </div>
-        <Link href={`/estoque/contagem${unidadeId ? `?unidadeId=${unidadeId}` : ""}`} className="btn primary">
-          + Registrar contagem
-        </Link>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Link href={`/estoque/consumo${unidadeId ? `?unidadeId=${unidadeId}` : ""}`} className="btn">
+            Consumo entre contagens
+          </Link>
+          <Link href={`/estoque/contagem${unidadeId ? `?unidadeId=${unidadeId}` : ""}`} className="btn primary">
+            + Registrar contagem
+          </Link>
+        </div>
       </div>
 
       {isAdmin && (

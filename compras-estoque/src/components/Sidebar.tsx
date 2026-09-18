@@ -12,6 +12,7 @@ const NAV: Array<{ href: string; label: string; papeis?: Papel[] }> = [
   { href: "/receitas", label: "Sub-receitas", papeis: ["ADMIN"] },
   { href: "/pedidos", label: "Pedidos de compra" },
   { href: "/estoque", label: "Estoque" },
+  { href: "/estoque/consumo", label: "Consumo" },
   { href: "/fornecedores", label: "Fornecedores", papeis: ["ADMIN"] },
   { href: "/produtos", label: "Produtos", papeis: ["ADMIN"] },
   { href: "/unidades", label: "Unidades", papeis: ["ADMIN"] },
