@@ -87,6 +87,29 @@ describe("resolverLinhaCompraPura", () => {
     expect(r.produto?.id).toBe("p3");
   });
 
+  it("trata embalagem como sinônimo de contagem: garrafa é unidade, fardo é caixa", () => {
+    // R$ 32 mil de compra estavam travados por isto em 18/09/2026: vinho
+    // comprado em GF contra cadastro em UND, água em FD contra cadastro em CX.
+    const catalogo: ProdutoResumo[] = [
+      { id: "v1", nome: "GRAN LEGADO", unidadeMedida: "UND", codigoTeknisa: "900001000349" },
+      { id: "a1", nome: "ACQUISSIMA PASSION", unidadeMedida: "CX", codigoTeknisa: "905000005158" },
+    ];
+    const idx = montarIndiceProdutos(catalogo);
+    expect(resolverLinhaCompraPura({ nome: "x", unidadeMedida: "GF", codigo: "900001000349" }, idx).via).toBe("CODIGO");
+    expect(resolverLinhaCompraPura({ nome: "x", unidadeMedida: "FD", codigo: "905000005158" }, idx).via).toBe("CODIGO");
+  });
+
+  it("NÃO trata como sinônimo o par que exige saber o conteúdo da embalagem", () => {
+    // Caixa com 360 ovos contra ovo avulso: falta um número (quantos) que não
+    // está no sistema. Aceitar aqui gravaria R$ 170 como preço de um ovo.
+    const catalogo: ProdutoResumo[] = [
+      { id: "o1", nome: "OVOS GRANDE BRANCO UND", unidadeMedida: "UND", codigoTeknisa: "110030000604" },
+    ];
+    const r = resolverLinhaCompraPura({ nome: "x", unidadeMedida: "CX", codigo: "110030000604" }, montarIndiceProdutos(catalogo));
+    expect(r.via).toBeNull();
+    expect(r.motivo).toBe("UNIDADE_DIVERGENTE");
+  });
+
   it("não encontra quando nome e código são desconhecidos", () => {
     const r = resolverLinhaCompraPura(
       { nome: "COISA QUE NAO EXISTE", unidadeMedida: "KG", codigo: "100000088888" },

@@ -22,15 +22,44 @@
 // pronto (ver src/lib/nota-compra.ts).
 import { normalizarNome, chaveComparacao } from "@/lib/nome-normalizado";
 
-// Sinônimos de unidade que o catálogo já usa (ver padronização KG/LT/UND):
-// normaliza a unidade que vier da planilha antes de tentar casar, pra "UN"/
-// "UNIDADE" da planilha não falhar em bater com um produto já em "UND".
+// Sinônimos de unidade. O catálogo só tem KG, LT, UND e CX (UNIDADES_MEDIDA);
+// o Teknisa manda a embalagem de compra, que é outra palavra pra mesma coisa.
+//
+// SÃO SINÔNIMOS, NÃO CONVERSÕES. Garrafa é uma unidade, barril é uma unidade,
+// fatia é uma unidade; fardo, lata, balde e bag são um pacote. Nada aqui
+// multiplica ou divide número nenhum — só reconhece que "GF" e "UND" nomeiam a
+// mesma contagem.
+//
+// O que NÃO entra aqui, de propósito: qualquer par que exija saber o conteúdo
+// da embalagem. Caixa com 360 ovos contra ovo avulso, lata de 2,5 kg contra
+// quilo, maço de salsa contra quilo — ali falta um número (quantos, quanto
+// pesa) que não está em lugar nenhum do sistema, e inventá-lo aqui gravaria
+// preço errado com cara de preço certo. Esses continuam recusados e aparecem
+// no relatório de unidades divergentes.
+//
+// Levantado no dado real de 18/09/2026: os pares abaixo respondiam por
+// R$ 32 mil de compra travada, sem nenhuma pergunta a fazer pra ninguém.
 const SINONIMO_UNIDADE: Record<string, string> = {
+  // uma peça
   UN: "UND",
   UNIDADE: "UND",
   UNI: "UND",
   UNID: "UND",
   PC: "UND",
+  GF: "UND",  // garrafa
+  FT: "UND",  // fatia
+  BBL: "UND", // barril
+  RL: "UND",  // rolo
+  BOB: "UND", // bobina
+  PR: "UND",  // par
+  // um pacote fechado
+  FD: "CX",   // fardo
+  LA: "CX",   // lata
+  BD: "CX",   // balde
+  BB: "CX",   // bombona
+  BG: "CX",   // bag
+  GA: "CX",   // galão
+  PT: "CX",   // pote
 };
 
 export function normalizarUnidade(unidadeBruta: string): string {

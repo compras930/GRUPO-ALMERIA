@@ -251,7 +251,10 @@ export async function processarNotaCompra(
     const resolucao = resolverLinhaCompraPura(item, indiceProdutos);
     const dataCompra = new Date(item.dataCompra);
     const codigoBruto = normalizarCodigo(item.codigo);
-    const unidadeBruta = normalizarUnidade(item.unidadeMedida);
+    // Guarda a unidade COMO VEIO, não a normalizada: "FD" gravado como "CX"
+    // apagaria o rastro de que a nota falava em fardo, e é justamente esse
+    // rastro que permitiu descobrir os sinônimos que faltavam.
+    const unidadeBruta = normalizarNome(item.unidadeMedida).toUpperCase();
     const chaveOrigem = normalizarCodigo(item.chave);
     const quantidade = typeof item.quantidade === "number" && item.quantidade > 0 ? item.quantidade : null;
     const valorTotal = typeof item.valorTotal === "number" ? item.valorTotal : null;

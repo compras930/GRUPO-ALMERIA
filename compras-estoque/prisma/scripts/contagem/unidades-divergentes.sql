@@ -39,5 +39,10 @@ LEFT JOIN "PrecoAtualProduto" pa
        ON pa."produtoId" = p.id AND pa."unidadeId" = n."unidadeId"
 WHERE i."produtoId" IS NULL
   AND i."codigoBruto" IS NOT NULL
+  -- Só as cargas que trazem chave. Sem isto, entram as linhas das cargas
+  -- anteriores ao pareamento, que ficaram sem produto porque o código ainda
+  -- não existia — nada a ver com unidade, e enterram o achado em 200 linhas
+  -- de ruído. Foi o que aconteceu na primeira vez que rodei isto.
+  AND i."chaveOrigem" IS NOT NULL
 GROUP BY p.nome, p."unidadeMedida", i."unidadeBruta"
 ORDER BY sum(i."valorTotal") DESC NULLS LAST;
