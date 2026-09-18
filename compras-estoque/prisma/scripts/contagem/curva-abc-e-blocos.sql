@@ -28,11 +28,11 @@
 --     dos 76 itens da primeira versão, R$ 27,7 mil. É estoque de verdade e
 --     vale contar um dia, mas não entra em ficha nem em CMV;
 --   limpeza — detergente, álcool, pastilha de forno;
---   bebida pronta pra revenda — refrigerante, água, cerveja, vinho,
---     energético. Tem margem própria e não vira prato.
+-- BEBIDA PRONTA FICA. Refrigerante, água, cerveja e vinho não viram prato,
+-- mas são estoque que some — e sumir bebida é caro. Entram na contagem; o que
+-- não entra é o CMV de cozinha, onde continuam separadas como revenda.
 --
--- Xarope, azeite e afins FICAM: viram drinque e viram comida. Comida de
--- funcionário também fica — é consumo real, só não é CMV de venda.
+-- Comida de funcionário também fica: é consumo real, só não é CMV de venda.
 --
 -- A exclusão é por nome, e nome erra. Ela mora aqui, visível, em vez de
 -- escondida numa planilha que ninguém acha depois.
@@ -52,7 +52,6 @@ WITH consumo AS (
     AND i."valorTotal" IS NOT NULL
     AND p.nome !~* '(TAMPA|SACO |SACOLA|EMBALAGEM|POTE |GUARDANAPO|PAPEL TOALHA|PAPEL HIGIENICO|PANO MULTIUSO|PLASTICO FILME|BOBINA|DISCO ISOPOR|CANUDO|BB PIC|DIVISORIA|KIT GARFO|BANDEJA|GARRAFA TRANSP|ETIQUETA|PERSONALIZA)'
     AND p.nome !~* '(DETERGENTE|DESINFETANTE|ALCOOL|SANITARIA|SACTIF|SUMA |MAX DET|SECANTE|PASTILHA RATIONAL|LUVA |TOUCA|AVENTAL|VASSOURA|RODO |ESPONJA|PULVERIZADOR|HIGIENIZADOR|SABONETE|ENXAGUANTE|FIO DENTAL|CABO MADEIRA|PA PARA LIXO)'
-    AND p.nome !~* '(COCA COLA|GUARANA|AGUA TONICA|AGUA PRATA|ACQUISSIMA|RED BULL|ENERGETICO|H2O |GATORADE|TODDYNHO|CERVEJA|CORONA|SPATEN|STELLA|BUDWEIS|CHOPP|APEROL|CAMPARI|VODKA|TEQUILA|ESPUMANTE|CHARDONNAY|MALBEC|CRIANZA|CARMENERE|SANGIOVESE|PRIMITIVO|BRUT|TAWNY|ROSE|ROSSO|TINTO|WINE|VINHO VERDE|LICOR)'
   GROUP BY i."produtoId"
 ),
 acumulado AS (
@@ -83,7 +82,6 @@ WITH consumo AS (
     AND i."valorTotal" IS NOT NULL
     AND p.nome !~* '(TAMPA|SACO |SACOLA|EMBALAGEM|POTE |GUARDANAPO|PAPEL TOALHA|PAPEL HIGIENICO|PANO MULTIUSO|PLASTICO FILME|BOBINA|DISCO ISOPOR|CANUDO|BB PIC|DIVISORIA|KIT GARFO|BANDEJA|GARRAFA TRANSP|ETIQUETA|PERSONALIZA)'
     AND p.nome !~* '(DETERGENTE|DESINFETANTE|ALCOOL|SANITARIA|SACTIF|SUMA |MAX DET|SECANTE|PASTILHA RATIONAL|LUVA |TOUCA|AVENTAL|VASSOURA|RODO |ESPONJA|PULVERIZADOR|HIGIENIZADOR|SABONETE|ENXAGUANTE|FIO DENTAL|CABO MADEIRA|PA PARA LIXO)'
-    AND p.nome !~* '(COCA COLA|GUARANA|AGUA TONICA|AGUA PRATA|ACQUISSIMA|RED BULL|ENERGETICO|H2O |GATORADE|TODDYNHO|CERVEJA|CORONA|SPATEN|STELLA|BUDWEIS|CHOPP|APEROL|CAMPARI|VODKA|TEQUILA|ESPUMANTE|CHARDONNAY|MALBEC|CRIANZA|CARMENERE|SANGIOVESE|PRIMITIVO|BRUT|TAWNY|ROSE|ROSSO|TINTO|WINE|VINHO VERDE|LICOR)'
   GROUP BY i."produtoId"
 ),
 acumulado AS (
