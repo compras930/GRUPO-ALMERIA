@@ -110,6 +110,50 @@ describe("resolverLinhaCompraPura", () => {
     expect(r.motivo).toBe("UNIDADE_DIVERGENTE");
   });
 
+  it("converte quando alguém já disse quanto vale a embalagem", () => {
+    const catalogo: ProdutoResumo[] = [
+      { id: "m1", nome: "MICROVERDE KG", unidadeMedida: "KG", codigoTeknisa: "110010013603" },
+      { id: "o1", nome: "OVOS GRANDE BRANCO UND", unidadeMedida: "UND", codigoTeknisa: "110030000604" },
+    ];
+    const idx = montarIndiceProdutos(catalogo, [
+      { produtoId: "m1", unidadeCompra: "UND", fator: 0.04 }, // bandeja de 40 g
+      { produtoId: "o1", unidadeCompra: "CX", fator: 360 },   // caixa de 360 ovos
+    ]);
+
+    const bandeja = resolverLinhaCompraPura({ nome: "x", unidadeMedida: "UND", codigo: "110010013603" }, idx);
+    expect(bandeja.via).toBe("CODIGO");
+    expect(bandeja.fatorConversao).toBe(0.04);
+    // R$ 15 a bandeja de 40 g = R$ 375 o quilo.
+    expect(15 / bandeja.fatorConversao).toBeCloseTo(375, 6);
+
+    const caixa = resolverLinhaCompraPura({ nome: "x", unidadeMedida: "CX", codigo: "110030000604" }, idx);
+    expect(caixa.fatorConversao).toBe(360);
+    // R$ 170 a caixa = R$ 0,4722 o ovo, que é o preço já cadastrado.
+    expect(170 / caixa.fatorConversao).toBeCloseTo(0.4722, 4);
+  });
+
+  it("fator zero ou negativo é ignorado, não obedecido", () => {
+    // Dividir o preço por zero daria Infinity, e a entrada de estoque seria 0.
+    // Cadastro ruim tem que cair no caminho seguro, que é recusar a linha.
+    const catalogo: ProdutoResumo[] = [
+      { id: "m1", nome: "MICROVERDE KG", unidadeMedida: "KG", codigoTeknisa: "110010013603" },
+    ];
+    for (const fator of [0, -1]) {
+      const idx = montarIndiceProdutos(catalogo, [{ produtoId: "m1", unidadeCompra: "UND", fator }]);
+      const r = resolverLinhaCompraPura({ nome: "x", unidadeMedida: "UND", codigo: "110010013603" }, idx);
+      expect(r.motivo).toBe("UNIDADE_DIVERGENTE");
+    }
+  });
+
+  it("conversão só vale pra unidade declarada — outra embalagem segue recusada", () => {
+    const catalogo: ProdutoResumo[] = [
+      { id: "m1", nome: "MICROVERDE KG", unidadeMedida: "KG", codigoTeknisa: "110010013603" },
+    ];
+    const idx = montarIndiceProdutos(catalogo, [{ produtoId: "m1", unidadeCompra: "UND", fator: 0.04 }]);
+    const r = resolverLinhaCompraPura({ nome: "x", unidadeMedida: "CX", codigo: "110010013603" }, idx);
+    expect(r.motivo).toBe("UNIDADE_DIVERGENTE");
+  });
+
   it("não encontra quando nome e código são desconhecidos", () => {
     const r = resolverLinhaCompraPura(
       { nome: "COISA QUE NAO EXISTE", unidadeMedida: "KG", codigo: "100000088888" },

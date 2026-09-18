@@ -161,10 +161,11 @@ export async function processarNotaCompra(
   // ...e o custo que ela mexe é o das fichas de TODAS as casas dessa despensa.
   const casas = await casasDaUnidadeFisica(unidadeFisicaId);
 
-  const produtos = await prisma.produto.findMany({
-    select: { id: true, nome: true, unidadeMedida: true, codigoTeknisa: true },
-  });
-  const indiceProdutos = montarIndiceProdutos(produtos);
+  const [produtos, conversoes] = await Promise.all([
+    prisma.produto.findMany({ select: { id: true, nome: true, unidadeMedida: true, codigoTeknisa: true } }),
+    prisma.conversaoUnidadeCompra.findMany({ select: { produtoId: true, unidadeCompra: true, fator: true } }),
+  ]);
+  const indiceProdutos = montarIndiceProdutos(produtos, conversoes);
 
   // Snapshot do índice/preços ANTES de qualquer escrita, pra poder comparar
   // custo antes/depois sem precisar de uma segunda ida ao banco no final.
@@ -293,6 +294,17 @@ export async function processarNotaCompra(
     }
 
     const produto = resolucao.produto;
+    // A embalagem de compra vira unidade do produto AQUI, antes de qualquer
+    // comparação ou gravação: preço por unidade do produto = valor da nota ÷
+    // fator, quantidade que entra = quantidade da nota × fator.
+    //
+    // Caixa de ovos a R$ 170 com fator 360 vira R$ 0,4722 o ovo e 360 ovos de
+    // entrada. Fazer isso antes é o que mantém a trava de salto de preço
+    // comparando coisas comparáveis — sem ela, todo produto convertido pareceria
+    // um salto absurdo e seria recusado.
+    const fator = resolucao.fatorConversao;
+    const preco = item.preco / fator;
+    const quantidadeConvertida = quantidade === null ? null : quantidade * fator;
     if (resolucao.via === "CODIGO") casadosPorCodigo++;
     else casadosPorNome++;
     if (resolucao.codigoSugerido && !codigosSugeridos.has(produto.id)) {
@@ -311,10 +323,13 @@ export async function processarNotaCompra(
       nomeBruto: normalizarNome(item.nome),
       codigoBruto,
       unidadeBruta,
-      quantidade,
+      // `quantidade` fica sempre na unidade do PRODUTO, nunca na da nota: é o
+      // que faz `sum(quantidade)` significar alguma coisa. A unidade original
+      // da nota fica em `unidadeBruta`, pra auditoria.
+      quantidade: quantidadeConvertida,
       valorTotal,
       chaveOrigem,
-      precoUnitNovo: item.preco,
+      precoUnitNovo: preco,
       precoUnitAnterior: existente?.preco ?? null,
       dataCompra,
     });
@@ -337,13 +352,13 @@ export async function processarNotaCompra(
     //
     // Só vale contra preço POSITIVO já existente: produto novo não tem
     // referência, então entra e aparece na primeira conferência.
-    const razao = existente && existente.preco > 0 ? item.preco / existente.preco : 1;
+    const razao = existente && existente.preco > 0 ? preco / existente.preco : 1;
     const precoSuspeito = razao >= LIMITE_SALTO_PRECO || razao <= 1 / LIMITE_SALTO_PRECO;
 
     // Entrada de estoque não depende da data: mercadoria que entrou, entrou.
     // A regra "só se for mais recente" é do PREÇO, não do saldo.
-    if (quantidade && !precoSuspeito) {
-      entradaPorProduto.set(produto.id, (entradaPorProduto.get(produto.id) ?? 0) + quantidade);
+    if (quantidadeConvertida && !precoSuspeito) {
+      entradaPorProduto.set(produto.id, (entradaPorProduto.get(produto.id) ?? 0) + quantidadeConvertida);
     }
 
     if (existente && existente.dataCompra >= dataCompra) {
@@ -359,7 +374,7 @@ export async function processarNotaCompra(
           nome: produto.nome,
           unidadeMedida: item.unidadeMedida,
           precoAtual: existente.preco,
-          precoRecebido: item.preco,
+          precoRecebido: preco,
           razao: Number(razao.toFixed(1)),
         });
       }
@@ -369,7 +384,7 @@ export async function processarNotaCompra(
     // Várias notas do mesmo produto na mesma carga: fica a mais recente.
     const melhor = precoAGravar.get(produto.id);
     if (!melhor || dataCompra > melhor.dataCompra) {
-      precoAGravar.set(produto.id, { preco: item.preco, dataCompra });
+      precoAGravar.set(produto.id, { preco, dataCompra });
     }
   }
 

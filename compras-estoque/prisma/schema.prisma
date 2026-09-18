@@ -13,15 +13,15 @@ datasource db {
 // ---------- Cadastros base ----------
 
 model Unidade {
-  id        String   @id @default(cuid())
-  nome      String   @unique
-  ativo     Boolean  @default(true)
-  criadoEm  DateTime @default(now())
+  id       String   @id @default(cuid())
+  nome     String   @unique
+  ativo    Boolean  @default(true)
+  criadoEm DateTime @default(now())
 
   // Metas de CMV (0.28 = 28%). Nulo = meta ainda não definida pra essa unidade/aba.
-  metaCmvPratos   Float?
-  metaCmvBebidas  Float?
-  metaCmvVinhos   Float?
+  metaCmvPratos  Float?
+  metaCmvBebidas Float?
+  metaCmvVinhos  Float?
 
   // Quando duas "casas" são a MESMA unidade física — Noroeste e Matri: cardápio
   // próprio e caixa próprio, mas uma cozinha, uma despensa, uma compra — a casa
@@ -33,85 +33,86 @@ model Unidade {
   // nota de compra, pedido, parâmetro de estoque. O que segue a CASA: item de
   // venda e venda semanal — é o cardápio e o caixa, a razão de existirem duas.
   // Ver src/lib/unidade-fisica.ts.
-  estoqueEmId     String?
-  estoqueEm       Unidade?  @relation("EstoqueCompartilhado", fields: [estoqueEmId], references: [id])
+  estoqueEmId       String?
+  estoqueEm         Unidade?  @relation("EstoqueCompartilhado", fields: [estoqueEmId], references: [id])
   casasNoMeuEstoque Unidade[] @relation("EstoqueCompartilhado")
 
-  usuarios       Usuario[]
-  pedidos        PedidoCompra[]
-  saldosEstoque  EstoqueSaldo[]
-  movimentos     MovimentoEstoque[]
-  contagens      ContagemEstoque[]
+  usuarios      Usuario[]
+  pedidos       PedidoCompra[]
+  saldosEstoque EstoqueSaldo[]
+  movimentos    MovimentoEstoque[]
+  contagens     ContagemEstoque[]
 
-  receitas              Receita[]
-  itensVenda            ItemVenda[]
-  historicoPrecos       HistoricoPrecoProduto[]
-  precosAtuais          PrecoAtualProduto[]
-  notasCompra           NotaCompra[]
-  vendasSemanais        VendaSemanal[]
-  parametrosEstoque     ParametroEstoqueProduto[]
+  receitas          Receita[]
+  itensVenda        ItemVenda[]
+  historicoPrecos   HistoricoPrecoProduto[]
+  precosAtuais      PrecoAtualProduto[]
+  notasCompra       NotaCompra[]
+  vendasSemanais    VendaSemanal[]
+  parametrosEstoque ParametroEstoqueProduto[]
 }
 
 // Papel: "ADMIN" | "APROVADOR" | "SOLICITANTE" | "RECEBEDOR"
 // (SQLite não suporta enum nativo no Prisma; validação fica em src/lib/constants.ts + Zod)
 model Usuario {
-  id         String   @id @default(cuid())
-  nome       String
-  email      String   @unique
-  senhaHash  String
-  papel      String
-  ativo      Boolean  @default(true)
-  criadoEm   DateTime @default(now())
-
-  unidadeId  String?
-  unidade    Unidade? @relation(fields: [unidadeId], references: [id])
-
-  pedidosCriados     PedidoCompra[]     @relation("PedidoSolicitante")
-  pedidosAprovados   PedidoCompra[]     @relation("PedidoAprovador")
-  recebimentos       Recebimento[]      @relation("RecebimentoUsuario")
-  contagens          ContagemEstoque[]  @relation("ContagemUsuario")
-
-  notasCompraImportadas    NotaCompra[]    @relation("NotaCompraImportador")
-  vendasSemanaisImportadas VendaSemanal[]  @relation("VendaSemanalImportador")
-}
-
-model Fornecedor {
   id        String   @id @default(cuid())
   nome      String
-  cnpj      String?
-  contato   String?
-  telefone  String?
+  email     String   @unique
+  senhaHash String
+  papel     String
   ativo     Boolean  @default(true)
   criadoEm  DateTime @default(now())
 
-  pedidos   PedidoCompra[]
+  unidadeId String?
+  unidade   Unidade? @relation(fields: [unidadeId], references: [id])
+
+  pedidosCriados   PedidoCompra[]    @relation("PedidoSolicitante")
+  pedidosAprovados PedidoCompra[]    @relation("PedidoAprovador")
+  recebimentos     Recebimento[]     @relation("RecebimentoUsuario")
+  contagens        ContagemEstoque[] @relation("ContagemUsuario")
+
+  notasCompraImportadas    NotaCompra[]   @relation("NotaCompraImportador")
+  vendasSemanaisImportadas VendaSemanal[] @relation("VendaSemanalImportador")
+}
+
+model Fornecedor {
+  id       String   @id @default(cuid())
+  nome     String
+  cnpj     String?
+  contato  String?
+  telefone String?
+  ativo    Boolean  @default(true)
+  criadoEm DateTime @default(now())
+
+  pedidos PedidoCompra[]
 }
 
 model Produto {
-  id             String  @id @default(cuid())
-  nome           String
-  categoria      String?
-  unidadeMedida  String  // ex: KG, UN, L, CX
-  ativo          Boolean @default(true)
-  criadoEm       DateTime @default(now())
+  id            String   @id @default(cuid())
+  nome          String
+  categoria     String?
+  unidadeMedida String // ex: KG, UN, L, CX
+  ativo         Boolean  @default(true)
+  criadoEm      DateTime @default(now())
 
   // Código do produto no Teknisa (12 dígitos). Casa linha de compra por
   // identificador em vez de por nome — ver src/lib/resolucao-produto-compra.ts.
   // Único GLOBAL (não por casa como o codigoPdv do ItemVenda): a compra de
   // todas as casas do Grupo sai do mesmo cadastro do Teknisa.
   // Nullable: quem não foi pareado ainda continua casando por nome.
-  codigoTeknisa  String? @unique
+  codigoTeknisa String? @unique
 
-  itensPedido      ItemPedido[]
-  saldosEstoque    EstoqueSaldo[]
-  movimentos       MovimentoEstoque[]
-  contagens        ContagemEstoque[]
+  itensPedido   ItemPedido[]
+  saldosEstoque EstoqueSaldo[]
+  movimentos    MovimentoEstoque[]
+  contagens     ContagemEstoque[]
 
-  ingredienteEm       IngredienteReceita[]
-  historicoPrecos     HistoricoPrecoProduto[]
-  precoAtual          PrecoAtualProduto[]
-  itensNotaCompra     ItemNotaCompra[]
-  parametrosEstoque   ParametroEstoqueProduto[]
+  ingredienteEm     IngredienteReceita[]
+  historicoPrecos   HistoricoPrecoProduto[]
+  precoAtual        PrecoAtualProduto[]
+  itensNotaCompra   ItemNotaCompra[]
+  parametrosEstoque ParametroEstoqueProduto[]
+  conversoesCompra  ConversaoUnidadeCompra[]
 
   // Atenção: esta constraint é case-sensitive (texto em Postgres compara byte a
   // byte), então ela NÃO impede "BURRATA" e "Burrata" de coexistirem — brecha que
@@ -130,88 +131,88 @@ model Produto {
 // Status: "RASCUNHO" | "AGUARDANDO_APROVACAO" | "APROVADO" | "REJEITADO" | "ENVIADO"
 //       | "RECEBIDO_PARCIAL" | "RECEBIDO_TOTAL" | "CANCELADO"
 model PedidoCompra {
-  id             String       @id @default(cuid())
-  numero         Int          @unique // gerado em app code (maior número + 1) ao criar o pedido
-  status         String       @default("RASCUNHO")
-  observacao     String?
-  criadoEm       DateTime     @default(now())
-  atualizadoEm   DateTime     @updatedAt
+  id           String   @id @default(cuid())
+  numero       Int      @unique // gerado em app code (maior número + 1) ao criar o pedido
+  status       String   @default("RASCUNHO")
+  observacao   String?
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
 
-  unidadeId      String
-  unidade        Unidade      @relation(fields: [unidadeId], references: [id])
+  unidadeId String
+  unidade   Unidade @relation(fields: [unidadeId], references: [id])
 
   // Nulável: uma lista de compras gerada automaticamente a partir do consumo semanal
   // (ver ItemVendaSemanal/geração de rascunho) cobre vários fornecedores possíveis —
   // a escolha do fornecedor acontece depois, em código, antes do pedido sair de RASCUNHO.
-  fornecedorId   String?
-  fornecedor     Fornecedor?  @relation(fields: [fornecedorId], references: [id])
+  fornecedorId String?
+  fornecedor   Fornecedor? @relation(fields: [fornecedorId], references: [id])
 
-  solicitanteId  String
-  solicitante    Usuario      @relation("PedidoSolicitante", fields: [solicitanteId], references: [id])
+  solicitanteId String
+  solicitante   Usuario @relation("PedidoSolicitante", fields: [solicitanteId], references: [id])
 
   aprovadorId    String?
-  aprovador      Usuario?     @relation("PedidoAprovador", fields: [aprovadorId], references: [id])
+  aprovador      Usuario?  @relation("PedidoAprovador", fields: [aprovadorId], references: [id])
   aprovadoEm     DateTime?
   motivoRejeicao String?
 
-  itens          ItemPedido[]
-  recebimentos   Recebimento[]
+  itens        ItemPedido[]
+  recebimentos Recebimento[]
 }
 
 model ItemPedido {
-  id                  String       @id @default(cuid())
-  pedidoId            String
-  pedido              PedidoCompra @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  id       String       @id @default(cuid())
+  pedidoId String
+  pedido   PedidoCompra @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
 
-  produtoId           String
-  produto             Produto      @relation(fields: [produtoId], references: [id])
+  produtoId String
+  produto   Produto @relation(fields: [produtoId], references: [id])
 
-  quantidade          Float
-  precoUnitEsperado   Float
+  quantidade        Float
+  precoUnitEsperado Float
 
-  itensRecebimento    ItemRecebimento[]
+  itensRecebimento ItemRecebimento[]
 }
 
 // ---------- Recebimento (conferência) ----------
 
 model Recebimento {
-  id             String       @id @default(cuid())
-  pedidoId       String
-  pedido         PedidoCompra @relation(fields: [pedidoId], references: [id])
+  id       String       @id @default(cuid())
+  pedidoId String
+  pedido   PedidoCompra @relation(fields: [pedidoId], references: [id])
 
-  recebidoPorId  String
-  recebidoPor    Usuario      @relation("RecebimentoUsuario", fields: [recebidoPorId], references: [id])
+  recebidoPorId String
+  recebidoPor   Usuario @relation("RecebimentoUsuario", fields: [recebidoPorId], references: [id])
 
-  dataRecebimento DateTime    @default(now())
+  dataRecebimento DateTime @default(now())
   observacao      String?
 
-  itens           ItemRecebimento[]
+  itens ItemRecebimento[]
 }
 
 model ItemRecebimento {
-  id                  String       @id @default(cuid())
-  recebimentoId       String
-  recebimento         Recebimento  @relation(fields: [recebimentoId], references: [id], onDelete: Cascade)
+  id            String      @id @default(cuid())
+  recebimentoId String
+  recebimento   Recebimento @relation(fields: [recebimentoId], references: [id], onDelete: Cascade)
 
-  itemPedidoId        String
-  itemPedido          ItemPedido   @relation(fields: [itemPedidoId], references: [id])
+  itemPedidoId String
+  itemPedido   ItemPedido @relation(fields: [itemPedidoId], references: [id])
 
-  quantidadeRecebida  Float
-  precoUnitRecebido   Float
+  quantidadeRecebida Float
+  precoUnitRecebido  Float
   // divergência é calculada em runtime a partir do itemPedido (qtd/preço esperados)
 }
 
 // ---------- Estoque ----------
 
 model EstoqueSaldo {
-  id          String   @id @default(cuid())
-  unidadeId   String
-  unidade     Unidade  @relation(fields: [unidadeId], references: [id])
+  id        String  @id @default(cuid())
+  unidadeId String
+  unidade   Unidade @relation(fields: [unidadeId], references: [id])
 
-  produtoId   String
-  produto     Produto  @relation(fields: [produtoId], references: [id])
+  produtoId String
+  produto   Produto @relation(fields: [produtoId], references: [id])
 
-  quantidade  Float    @default(0)
+  quantidade   Float    @default(0)
   atualizadoEm DateTime @updatedAt
 
   @@unique([unidadeId, produtoId])
@@ -221,36 +222,36 @@ model EstoqueSaldo {
 // ENTRADA_NOTA é a entrada vinda da nota do Teknisa pelo n8n (src/lib/nota-compra.ts);
 // ENTRADA_RECEBIMENTO é a conferência manual contra um pedido de compra.
 model MovimentoEstoque {
-  id           String        @id @default(cuid())
-  unidadeId    String
-  unidade      Unidade       @relation(fields: [unidadeId], references: [id])
+  id        String  @id @default(cuid())
+  unidadeId String
+  unidade   Unidade @relation(fields: [unidadeId], references: [id])
 
-  produtoId    String
-  produto      Produto       @relation(fields: [produtoId], references: [id])
+  produtoId String
+  produto   Produto @relation(fields: [produtoId], references: [id])
 
-  tipo         String
-  quantidade   Float         // positivo = entrada, negativo = saída
-  referencia   String?       // id do recebimento/contagem de origem, para rastreabilidade
-  observacao   String?
-  criadoEm     DateTime      @default(now())
+  tipo       String
+  quantidade Float // positivo = entrada, negativo = saída
+  referencia String? // id do recebimento/contagem de origem, para rastreabilidade
+  observacao String?
+  criadoEm   DateTime @default(now())
 }
 
 model ContagemEstoque {
-  id                  String   @id @default(cuid())
-  unidadeId           String
-  unidade             Unidade  @relation(fields: [unidadeId], references: [id])
+  id        String  @id @default(cuid())
+  unidadeId String
+  unidade   Unidade @relation(fields: [unidadeId], references: [id])
 
-  produtoId           String
-  produto             Produto  @relation(fields: [produtoId], references: [id])
+  produtoId String
+  produto   Produto @relation(fields: [produtoId], references: [id])
 
-  quantidadeSistema   Float    // saldo de sistema no momento da contagem
-  quantidadeContada   Float    // saldo real contado
-  diferenca           Float    // contada - sistema
+  quantidadeSistema Float // saldo de sistema no momento da contagem
+  quantidadeContada Float // saldo real contado
+  diferenca         Float // contada - sistema
 
-  contadoPorId        String
-  contadoPor          Usuario  @relation("ContagemUsuario", fields: [contadoPorId], references: [id])
+  contadoPorId String
+  contadoPor   Usuario @relation("ContagemUsuario", fields: [contadoPorId], references: [id])
 
-  criadoEm            DateTime @default(now())
+  criadoEm DateTime @default(now())
 }
 
 // ---------- Ficha técnica / CMV ----------
@@ -260,68 +261,68 @@ model ContagemEstoque {
 // (ver src/lib/receita.ts). Isso é o que torna a cascata de atualização de preço automática.
 
 model Receita {
-  id                String   @id @default(cuid())
-  unidadeId         String
-  unidade           Unidade  @relation(fields: [unidadeId], references: [id])
+  id        String  @id @default(cuid())
+  unidadeId String
+  unidade   Unidade @relation(fields: [unidadeId], references: [id])
 
-  nome              String   // == "ficha" no dashboard antigo
+  nome              String // == "ficha" no dashboard antigo
   modoPreparo       String?
   rendimentoQtd     Float?
   rendimentoUnidade String?
   criadoEm          DateTime @default(now())
   atualizadoEm      DateTime @updatedAt
 
-  ingredientes            IngredienteReceita[] @relation("ReceitaPai")
-  usadaComoSubReceitaEm   IngredienteReceita[] @relation("SubReceita")
-  itensVenda              ItemVenda[]
+  ingredientes          IngredienteReceita[] @relation("ReceitaPai")
+  usadaComoSubReceitaEm IngredienteReceita[] @relation("SubReceita")
+  itensVenda            ItemVenda[]
 
   @@unique([unidadeId, nome])
 }
 
 model IngredienteReceita {
-  id            String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  receitaId     String
-  receita       Receita  @relation("ReceitaPai", fields: [receitaId], references: [id], onDelete: Cascade)
+  receitaId String
+  receita   Receita @relation("ReceitaPai", fields: [receitaId], references: [id], onDelete: Cascade)
 
   // Mutuamente exclusivos (validado em código, não no schema): um ingrediente é OU um
   // insumo comprado (produtoId) OU uma sub-receita reutilizável (subReceitaId).
-  produtoId     String?
-  produto       Produto? @relation(fields: [produtoId], references: [id])
+  produtoId String?
+  produto   Produto? @relation(fields: [produtoId], references: [id])
 
-  subReceitaId  String?
-  subReceita    Receita? @relation("SubReceita", fields: [subReceitaId], references: [id])
+  subReceitaId String?
+  subReceita   Receita? @relation("SubReceita", fields: [subReceitaId], references: [id])
 
   quantidade    Float
-  unidadeMedida String   // unidade de uso nesta ficha (pode diferir da unidadeMedida canônica do Produto)
+  unidadeMedida String // unidade de uso nesta ficha (pode diferir da unidadeMedida canônica do Produto)
 }
 
 model ItemVenda {
-  id             String   @id @default(cuid())
-  unidadeId      String
-  unidade        Unidade  @relation(fields: [unidadeId], references: [id])
+  id        String  @id @default(cuid())
+  unidadeId String
+  unidade   Unidade @relation(fields: [unidadeId], references: [id])
 
-  tipo           String   // "PRATO" | "BEBIDA" | "VINHO"
-  categoria      String?
-  nome           String   // == "prato" no dashboard antigo
-  precoVenda     Float
-  ativo          Boolean  @default(true)
+  tipo       String // "PRATO" | "BEBIDA" | "VINHO"
+  categoria  String?
+  nome       String // == "prato" no dashboard antigo
+  precoVenda Float
+  ativo      Boolean @default(true)
 
   // Código do produto no PDV da casa. É o identificador estável do item na
   // venda: o nome muda quando alguém renomeia o prato no cardápio ("FILE AU
   // POIVRE WINE" x "Filé au Poivre"), o código não. Ver src/lib/resolucao-item-venda.ts.
   // Null = ainda não mapeado; nesse caso a venda continua casando por nome.
-  codigoPdv      String?
+  codigoPdv String?
 
-  receitaId      String?  // null = ainda sem ficha técnica (equivalente ao "Criar Ficha" do dashboard)
-  receita        Receita? @relation(fields: [receitaId], references: [id])
+  receitaId String? // null = ainda sem ficha técnica (equivalente ao "Criar Ficha" do dashboard)
+  receita   Receita? @relation(fields: [receitaId], references: [id])
 
   // Snapshot só de referência histórica da migração — nunca é fonte de verdade depois de importado.
   custoImportado Float?
   cmvImportado   Float?
 
-  criadoEm       DateTime @default(now())
-  atualizadoEm   DateTime @updatedAt
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
 
   itensVendaSemanal ItemVendaSemanal[]
 
@@ -330,7 +331,6 @@ model ItemVenda {
   // em garrafa, cada categoria com preço próprio) — sem categoria na chave,
   // esses dois viram um só registro e um deles se perde.
   @@unique([unidadeId, tipo, categoria, nome])
-
   // Por casa, não global: cada unidade roda um PDV só (Teknisa nas três do
   // Grupo, Xmenu no Beira Lago) e os espaços de código não se comunicam.
   // Postgres trata NULL como distinto num índice único, então os 863 itens
@@ -342,16 +342,16 @@ model ItemVenda {
 
 // Ledger append-only: nunca editado/deletado, só recebe inserts (via recebimento OU nota de compra).
 model HistoricoPrecoProduto {
-  id         String   @id @default(cuid())
-  unidadeId  String
-  unidade    Unidade  @relation(fields: [unidadeId], references: [id])
+  id        String  @id @default(cuid())
+  unidadeId String
+  unidade   Unidade @relation(fields: [unidadeId], references: [id])
 
-  produtoId  String
-  produto    Produto  @relation(fields: [produtoId], references: [id])
+  produtoId String
+  produto   Produto @relation(fields: [produtoId], references: [id])
 
   preco      Float
-  origem     String   // "RECEBIMENTO" | "NOTA_COMPRA" | "IMPORTACAO_INICIAL" (backfill único a partir do dashboard-fichas-tecnicas.html)
-  origemId   String   // id do Recebimento/NotaCompra, ou "import-fichas-tecnicas" na importação inicial
+  origem     String // "RECEBIMENTO" | "NOTA_COMPRA" | "IMPORTACAO_INICIAL" (backfill único a partir do dashboard-fichas-tecnicas.html)
+  origemId   String // id do Recebimento/NotaCompra, ou "import-fichas-tecnicas" na importação inicial
   dataCompra DateTime
   criadoEm   DateTime @default(now())
 
@@ -361,12 +361,12 @@ model HistoricoPrecoProduto {
 // Cache do "preço atual" por unidade — só é sobrescrito se a nova dataCompra for mais
 // recente que a já cacheada, pra nota atrasada não sobrescrever preço mais novo.
 model PrecoAtualProduto {
-  id           String   @id @default(cuid())
-  unidadeId    String
-  unidade      Unidade  @relation(fields: [unidadeId], references: [id])
+  id        String  @id @default(cuid())
+  unidadeId String
+  unidade   Unidade @relation(fields: [unidadeId], references: [id])
 
-  produtoId    String
-  produto      Produto  @relation(fields: [produtoId], references: [id])
+  produtoId String
+  produto   Produto @relation(fields: [produtoId], references: [id])
 
   preco        Float
   dataCompra   DateTime
@@ -378,57 +378,57 @@ model PrecoAtualProduto {
 // ---------- Upload de nota de compra (atualização de preço) ----------
 
 model NotaCompra {
-  id             String   @id @default(cuid())
-  unidadeId      String
-  unidade        Unidade  @relation(fields: [unidadeId], references: [id])
+  id        String  @id @default(cuid())
+  unidadeId String
+  unidade   Unidade @relation(fields: [unidadeId], references: [id])
 
   arquivoNome    String
   importadoPorId String
   importadoPor   Usuario  @relation("NotaCompraImportador", fields: [importadoPorId], references: [id])
   criadoEm       DateTime @default(now())
 
-  itens          ItemNotaCompra[]
+  itens ItemNotaCompra[]
 }
 
 model ItemNotaCompra {
-  id                String     @id @default(cuid())
-  notaCompraId      String
-  notaCompra        NotaCompra @relation(fields: [notaCompraId], references: [id], onDelete: Cascade)
+  id           String     @id @default(cuid())
+  notaCompraId String
+  notaCompra   NotaCompra @relation(fields: [notaCompraId], references: [id], onDelete: Cascade)
 
   // null = linha da planilha não reconhecida contra nenhum Produto — fica visível pro
   // usuário corrigir a grafia ou cadastrar o produto, nunca é descartada silenciosamente.
-  produtoId         String?
-  produto           Produto?   @relation(fields: [produtoId], references: [id])
+  produtoId String?
+  produto   Produto? @relation(fields: [produtoId], references: [id])
 
-  nomeBruto         String     // texto exato da planilha, pra auditoria/correção
+  nomeBruto    String // texto exato da planilha, pra auditoria/correção
   // Código e unidade exatos da planilha. Guardados mesmo quando a linha casou:
   // é o que permite montar depois a lista de pareamento das não reconhecidas
   // (o nome sozinho não serve — é justamente o que não bate).
-  codigoBruto       String?
-  unidadeBruta      String?
+  codigoBruto  String?
+  unidadeBruta String?
 
   // Quantidade comprada. É o que faz a compra virar ENTRADA DE ESTOQUE, e sem
   // ela não existe CMV real (estoque inicial + compras − estoque final) nem
   // curva A de insumo (que é consumo em reais).
-  quantidade        Float?
-  valorTotal        Float?
+  quantidade Float?
+  valorTotal Float?
 
   // Chave da linha na origem. Preço tolera recarga — regravar o mesmo preço não
   // muda nada. Estoque não: reprocessar a mesma nota soma a mesma mercadoria de
   // novo. Esta chave é o que deixa o workflow rodar quantas vezes quiser.
-  chaveOrigem       String?    @unique
+  chaveOrigem String? @unique
 
   precoUnitNovo     Float
-  precoUnitAnterior Float?     // snapshot no momento do import, pra o relatório de variação
+  precoUnitAnterior Float? // snapshot no momento do import, pra o relatório de variação
   dataCompra        DateTime
 }
 
 // ---------- Upload de venda semanal (consumo de insumo + lista de compras) ----------
 
 model VendaSemanal {
-  id             String   @id @default(cuid())
-  unidadeId      String
-  unidade        Unidade  @relation(fields: [unidadeId], references: [id])
+  id        String  @id @default(cuid())
+  unidadeId String
+  unidade   Unidade @relation(fields: [unidadeId], references: [id])
 
   periodoInicio  DateTime
   periodoFim     DateTime
@@ -436,17 +436,17 @@ model VendaSemanal {
   importadoPor   Usuario  @relation("VendaSemanalImportador", fields: [importadoPorId], references: [id])
   criadoEm       DateTime @default(now())
 
-  itens          ItemVendaSemanal[]
+  itens ItemVendaSemanal[]
 }
 
 model ItemVendaSemanal {
-  id                String       @id @default(cuid())
-  vendaSemanalId    String
-  vendaSemanal      VendaSemanal @relation(fields: [vendaSemanalId], references: [id], onDelete: Cascade)
+  id             String       @id @default(cuid())
+  vendaSemanalId String
+  vendaSemanal   VendaSemanal @relation(fields: [vendaSemanalId], references: [id], onDelete: Cascade)
 
   // null = linha da planilha não reconhecida contra nenhum ItemVenda.
-  itemVendaId       String?
-  itemVenda         ItemVenda?   @relation(fields: [itemVendaId], references: [id])
+  itemVendaId String?
+  itemVenda   ItemVenda? @relation(fields: [itemVendaId], references: [id])
 
   nomeBruto         String
   // Código que veio na linha do PDV, mesmo quando não casou com nenhum
@@ -460,12 +460,12 @@ model ItemVendaSemanal {
 // Sugestão de quantidade de compra sem exigir cadastro prévio de todos os produtos —
 // sem parâmetro aqui, a sugestão default é "repor o que foi consumido na semana".
 model ParametroEstoqueProduto {
-  id            String  @id @default(cuid())
-  unidadeId     String
-  unidade       Unidade @relation(fields: [unidadeId], references: [id])
+  id        String  @id @default(cuid())
+  unidadeId String
+  unidade   Unidade @relation(fields: [unidadeId], references: [id])
 
-  produtoId     String
-  produto       Produto @relation(fields: [produtoId], references: [id])
+  produtoId String
+  produto   Produto @relation(fields: [produtoId], references: [id])
 
   estoqueMinimo Float?
   estoqueIdeal  Float?
@@ -473,8 +473,33 @@ model ParametroEstoqueProduto {
   // Rodízio de contagem — ver src/lib/contagem-rotacao.ts.
   // É por (unidade, produto) porque a classe depende do quanto a casa gasta:
   // o mesmo insumo é curva A numa e curva C na outra.
-  classeAbc     String?  // "A" | "B" | "C"
-  grupoContagem Int?     // 1..2 na curva A, 1..4 na curva B
+  classeAbc     String? // "A" | "B" | "C"
+  grupoContagem Int? // 1..2 na curva A, 1..4 na curva B
 
   @@unique([unidadeId, produtoId])
+}
+
+/// Fator entre a embalagem de COMPRA e a unidade do PRODUTO: quanto da unidade
+/// do produto cabe em UMA unidade de compra.
+///
+///   MICROVERDE (KG) comprado em UND, fator 0.040 -> 1 bandeja = 40 g
+///   OVOS (UND)      comprado em CX,  fator 360   -> 1 caixa = 360 ovos
+///
+/// Sem isto, a linha era recusada (UNIDADE_DIVERGENTE) e fazia certo: R$ 170 de
+/// uma caixa de ovos gravado como preço de UM ovo multiplicaria por 360 o custo
+/// de toda ficha que usa ovo. Eram 24 produtos e R$ 32 mil de compra parada.
+///
+/// Global, não por casa: a embalagem do fornecedor é a mesma no grupo.
+model ConversaoUnidadeCompra {
+  id        String  @id @default(cuid())
+  produtoId String
+  produto   Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+
+  /// Unidade como vem na nota (UND, CX, LA, BD...), já normalizada por sinônimo.
+  unidadeCompra String
+  fator         Float
+  observacao    String?
+  criadoEm      DateTime @default(now())
+
+  @@unique([produtoId, unidadeCompra])
 }

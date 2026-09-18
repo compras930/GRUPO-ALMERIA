@@ -99,6 +99,12 @@ export type ResolucaoLinhaCompra = {
   via: "CODIGO" | "NOME" | null;
   motivo: MotivoNaoCasou | null;
   /**
+   * Quanto da unidade do produto cabe em UMA unidade de compra. 1 quando a
+   * unidade já bate. Quem chama multiplica a quantidade por ele e DIVIDE o
+   * preço — ver src/lib/nota-compra.ts.
+   */
+  fatorConversao: number;
+  /**
    * Casou por nome, o produto não tem código gravado e a linha trouxe um.
    * É o código que dá pra aprender pra esse produto — mas quem grava é uma
    * ação explícita (SQL revisado), nunca esta função nem a rota: gravar
@@ -108,12 +114,19 @@ export type ResolucaoLinhaCompra = {
   codigoSugerido: string | null;
 };
 
+/** (produtoId, unidade da nota) -> fator. Ver ConversaoUnidadeCompra. */
+export type ConversaoResumo = { produtoId: string; unidadeCompra: string; fator: number };
+
 export type IndiceProdutos = {
   porCodigo: Map<string, ProdutoResumo>;
   porNomeUnidade: Map<string, ProdutoResumo>;
+  conversoes: Map<string, number>;
 };
 
-export function montarIndiceProdutos(produtos: ProdutoResumo[]): IndiceProdutos {
+export function montarIndiceProdutos(
+  produtos: ProdutoResumo[],
+  conversoes: ConversaoResumo[] = []
+): IndiceProdutos {
   const porCodigo = new Map<string, ProdutoResumo>();
   for (const p of produtos) {
     const c = normalizarCodigo(p.codigoTeknisa);
@@ -124,7 +137,13 @@ export function montarIndiceProdutos(produtos: ProdutoResumo[]): IndiceProdutos 
   for (const p of produtos) {
     porNomeUnidade.set(`${chaveComparacao(p.nome)}|||${p.unidadeMedida}`, p);
   }
-  return { porCodigo, porNomeUnidade };
+  const mapaConversoes = new Map<string, number>();
+  for (const c of conversoes) {
+    // Fator zero ou negativo não converte nada — divide por zero no preço e
+    // zera a entrada de estoque. Cadastro ruim é ignorado, não obedecido.
+    if (c.fator > 0) mapaConversoes.set(`${c.produtoId}|||${normalizarUnidade(c.unidadeCompra)}`, c.fator);
+  }
+  return { porCodigo, porNomeUnidade, conversoes: mapaConversoes };
 }
 
 function porNome(indice: IndiceProdutos, nomeBruto: string, unidade: string): ProdutoResumo | null {
@@ -158,16 +177,20 @@ export function resolverLinhaCompraPura(linha: LinhaCompraBruta, indice: IndiceP
       // casamento era só por nome+unidade isso era impossível por
       // construção; por código, precisa de checagem explícita.
       if (p.unidadeMedida !== unidade) {
-        return { produto: p, via: null, motivo: "UNIDADE_DIVERGENTE", codigoSugerido: null };
+        // ...a menos que alguém já tenha dito quanto vale a embalagem. Aí não é
+        // divergência, é conversão conhecida: 1 bandeja = 40 g.
+        const fator = indice.conversoes.get(`${p.id}|||${unidade}`);
+        if (fator) return { produto: p, via: "CODIGO", motivo: null, codigoSugerido: null, fatorConversao: fator };
+        return { produto: p, via: null, motivo: "UNIDADE_DIVERGENTE", codigoSugerido: null, fatorConversao: 1 };
       }
-      return { produto: p, via: "CODIGO", motivo: null, codigoSugerido: null };
+      return { produto: p, via: "CODIGO", motivo: null, codigoSugerido: null, fatorConversao: 1 };
     }
   }
 
   // 2. Sem código, ou código desconhecido: cai pro nome.
   const achado = porNome(indice, linha.nome, unidade);
   if (!achado) {
-    return { produto: null, via: null, motivo: "NAO_ENCONTRADO", codigoSugerido: null };
+    return { produto: null, via: null, motivo: "NAO_ENCONTRADO", codigoSugerido: null, fatorConversao: 1 };
   }
 
   // 3. O nome casa, mas o produto já declara um código DIFERENTE. Os dois
@@ -176,7 +199,7 @@ export function resolverLinhaCompraPura(linha: LinhaCompraBruta, indice: IndiceP
   //    seria escolher o texto por cima do identificador.
   const codigoDoProduto = normalizarCodigo(achado.codigoTeknisa);
   if (codigo && codigoDoProduto && codigoDoProduto !== codigo) {
-    return { produto: achado, via: null, motivo: "CONFLITO_DE_CODIGO", codigoSugerido: null };
+    return { produto: achado, via: null, motivo: "CONFLITO_DE_CODIGO", codigoSugerido: null, fatorConversao: 1 };
   }
 
   return {
@@ -184,6 +207,7 @@ export function resolverLinhaCompraPura(linha: LinhaCompraBruta, indice: IndiceP
     via: "NOME",
     motivo: null,
     codigoSugerido: codigo && !codigoDoProduto ? codigo : null,
+    fatorConversao: 1,
   };
 }
 
