@@ -295,33 +295,68 @@ export async function processarNotaCompra(
       precosDepois.set(produto.id, item.preco);
     }
 
-    if (aprenderCodigos) {
-      for (const s of codigosSugeridos.values()) {
-        const ocupado = await tx.produto.findUnique({
-          where: { codigoTeknisa: s.codigo },
-          select: { nome: true },
-        });
-        if (ocupado) {
-          codigosNaoGravados.push({
-            nome: s.nome,
-            codigo: s.codigo,
-            motivo: `código já está no produto "${ocupado.nome}"`,
-          });
-          continue;
-        }
-        // updateMany com codigoTeknisa: null no where: se outra carga gravou um
-        // código nesse produto no meio do caminho, esta não sobrescreve.
-        const r = await tx.produto.updateMany({
+    return notaCompra.id;
+  }, { timeout: 60_000 });
+
+  // Aprender código roda FORA da transação da nota, e cada UPDATE sozinho.
+  //
+  // POR QUE, com sangue: na primeira tentativa isto estava dentro da
+  // transação, e a carga morreu com "deadlock detected" (18/09/2026). Preço é
+  // por casa — cada carga mexe nas SUAS linhas de PrecoAtualProduto, então duas
+  // casas simultâneas nunca se encontram. Produto é do grupo inteiro: as duas
+  // casas compram ALCATRA, SALMÃO, AZEITE. Com as duas cargas abertas ao mesmo
+  // tempo (o n8n dispara um POST por casa em paralelo), cada transação segurava
+  // um punhado dessas linhas e pedia as que a outra segurava — e o Postgres
+  // mata uma das duas pra desatar o nó.
+  //
+  // Um UPDATE sozinho, sem transação em volta, segura uma linha de cada vez e
+  // solta na hora: não há como formar ciclo de espera. A ordenação por id é
+  // cinto de segurança em cima disso.
+  //
+  // O custo de não ser atômico com a nota é aceitável: código de produto é
+  // cadastro, não movimento. Se metade gravar e a conexão cair, a carga
+  // seguinte grava o resto — é idempotente por construção (só grava onde está
+  // nulo).
+  if (aprenderCodigos && codigosSugeridos.size > 0) {
+    const sugestoes = [...codigosSugeridos.values()].sort((a, b) => a.produtoId.localeCompare(b.produtoId));
+
+    // Uma consulta só pra saber quais códigos já pertencem a alguém.
+    const jaUsados = new Map(
+      (
+        await prisma.produto.findMany({
+          where: { codigoTeknisa: { in: sugestoes.map((s) => s.codigo) } },
+          select: { nome: true, codigoTeknisa: true },
+        })
+      ).map((p) => [p.codigoTeknisa!, p.nome])
+    );
+
+    for (const s of sugestoes) {
+      const dono = jaUsados.get(s.codigo);
+      if (dono) {
+        codigosNaoGravados.push({ nome: s.nome, codigo: s.codigo, motivo: `código já está no produto "${dono}"` });
+        continue;
+      }
+      try {
+        // `codigoTeknisa: null` no where: se outra carga gravou um código nesse
+        // produto no meio do caminho, esta não sobrescreve.
+        const r = await prisma.produto.updateMany({
           where: { id: s.produtoId, codigoTeknisa: null },
           data: { codigoTeknisa: s.codigo },
         });
         if (r.count === 1) codigosGravados++;
         else codigosNaoGravados.push({ nome: s.nome, codigo: s.codigo, motivo: "produto já tinha código" });
+      } catch (e: any) {
+        // P2002 = a outra casa gravou este mesmo código entre o findMany acima
+        // e este update. Não é erro da carga: é a corrida perdida, e o código
+        // já está onde precisa estar.
+        if (e?.code === "P2002") {
+          codigosNaoGravados.push({ nome: s.nome, codigo: s.codigo, motivo: "outra carga gravou este código antes" });
+        } else {
+          throw e;
+        }
       }
     }
-
-    return notaCompra.id;
-  }, { timeout: 60_000 });
+  }
 
   // Custo/CMV impactados: calcula com precosAntes e precosDepois (em memória,
   // sem nova ida ao banco) pra todo ItemVenda cuja receita usa, direta ou
