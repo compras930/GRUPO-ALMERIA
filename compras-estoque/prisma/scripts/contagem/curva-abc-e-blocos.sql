@@ -12,11 +12,20 @@
 -- Grupo isso costuma dar algumas dezenas de itens A contra centenas de C — e é
 -- por isso que contar tudo toda semana nunca ia acontecer.
 --
--- POR QUE O BLOCO É ALTERNADO, e não "os 25% maiores no bloco 1". Se o bloco 1
--- levasse os itens mais caros, a primeira semana valeria muito mais que as
--- outras três e a rotação ficaria torta. Alternando 1-2-3-4-1-2-3-4 pela ordem
--- de valor, cada bloco recebe uma fatia parecida do dinheiro e do trabalho, e
--- qualquer semana que se conte já vale a pena.
+-- A ROTAÇÃO. Decidido em 18/09/2026: curva A em DOIS grupos e curva B em
+-- QUATRO. A semana conta um grupo de cada — 45 itens —, então cada item da
+-- curva A é contado de quinze em quinze dias e cada item da B, uma vez por mês.
+--
+-- Frequência segue valor, que é a razão de existir a curva. A não pode esperar
+-- um mês: são 55 itens que valem 80% do dinheiro, e doze deles são proteína,
+-- que é onde some. Contar de duas em duas semanas dá 26 medições por ano em
+-- vez de 12 — a diferença entre achar um desvio enquanto ele acontece e achar
+-- trinta dias depois, quando ninguém lembra o que houve.
+--
+-- Dentro de cada classe o grupo é ALTERNADO pela ordem de valor (1-2-1-2 na A,
+-- 1-2-3-4 na B), não "os maiores no grupo 1". Se o primeiro grupo levasse os
+-- itens mais caros, a primeira semana valeria muito mais que as outras e a
+-- rotação ficaria torta.
 --
 -- Trocar '104 Sul' pelo nome da casa. O estoque é da DESPENSA: pra Matri, use
 -- Noroeste.
@@ -68,8 +77,8 @@ GROUP BY 1
 ORDER BY 1;
 
 -- ---------------------------------------------------------------------------
--- 2) A curva A com o bloco de cada item. É a lista que vai pra contagem —
---    baixe como CSV e separe por `bloco`.
+-- 2) Curvas A e B com o grupo de rotação de cada item. É a lista que vai pra
+--    contagem — baixe como CSV.
 -- ---------------------------------------------------------------------------
 WITH consumo AS (
   SELECT i."produtoId", sum(i."valorTotal") AS valor, sum(i.quantidade) AS quantidade
@@ -86,22 +95,29 @@ WITH consumo AS (
 ),
 acumulado AS (
   SELECT "produtoId", valor, quantidade,
-         row_number() OVER (ORDER BY valor DESC, "produtoId") AS posicao,
          sum(valor) OVER (ORDER BY valor DESC, "produtoId") / NULLIF(sum(valor) OVER (), 0) AS ate_aqui
   FROM consumo
+),
+classificado AS (
+  SELECT *, CASE WHEN ate_aqui <= 0.80 THEN 'A' WHEN ate_aqui <= 0.95 THEN 'B' ELSE 'C' END AS classe
+  FROM acumulado
+),
+numerado AS (
+  SELECT *, row_number() OVER (PARTITION BY classe ORDER BY valor DESC, "produtoId") AS pos_na_classe
+  FROM classificado
 )
-SELECT ((a.posicao - 1) % 4) + 1                       AS bloco,
-       a.posicao,
+SELECT n.classe,
+       CASE n.classe WHEN 'A' THEN ((n.pos_na_classe - 1) % 2) + 1
+                     WHEN 'B' THEN ((n.pos_na_classe - 1) % 4) + 1 END AS grupo,
        p.nome                                          AS produto,
        p."unidadeMedida"                               AS unidade,
-       round(a.valor::numeric, 2)                      AS valor_comprado,
-       round(a.quantidade::numeric, 3)                 AS quantidade_comprada,
-       round((100 * a.ate_aqui)::numeric, 1)           AS acumulado_pct,
+       round(n.valor::numeric, 2)                      AS valor_comprado,
+       round(n.quantidade::numeric, 3)                 AS quantidade_comprada,
        round(COALESCE(s.quantidade, 0)::numeric, 3)    AS saldo_hoje
-FROM acumulado a
-JOIN "Produto" p ON p.id = a."produtoId"
+FROM numerado n
+JOIN "Produto" p ON p.id = n."produtoId"
 LEFT JOIN "EstoqueSaldo" s
-       ON s."produtoId" = a."produtoId"
+       ON s."produtoId" = n."produtoId"
       AND s."unidadeId" = (SELECT COALESCE(u."estoqueEmId", u.id) FROM "Unidade" u WHERE u.nome = '104 Sul')
-WHERE a.ate_aqui <= 0.80
-ORDER BY bloco, a.valor DESC;
+WHERE n.classe IN ('A', 'B')
+ORDER BY n.classe, grupo, n.valor DESC;
