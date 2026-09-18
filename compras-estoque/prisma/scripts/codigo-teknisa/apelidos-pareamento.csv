@@ -1,0 +1,13 @@
+# Nome que o setor de compras escreveu na coluna `se_nao_qual_produto` da
+# planilha de pareamento -> nome exato do Produto no catálogo.
+#
+# Existe porque quem preenche escreve o nome que usa no dia a dia, e o cadastro
+# às vezes guarda outro. Sem esta tradução, a correção viraria produto novo —
+# duplicata do que já está lá, com preço e histórico partidos ao meio.
+#
+# Cada linha aqui é uma resposta explícita do setor de compras, não um palpite
+# do cruzador. Confirmadas em 18/09/2026.
+escrito_na_planilha,nome_no_catalogo,confirmado_por
+PRESUNTO PARMA,PARMA,compras 18/09/2026
+CROQUE MONSIER,CROQUE,compras 18/09/2026
+IOGURTE INTEGRAL,IOGURTE NATURAL,compras 18/09/2026
