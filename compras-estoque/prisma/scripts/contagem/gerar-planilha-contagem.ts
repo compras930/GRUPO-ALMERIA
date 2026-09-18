@@ -16,13 +16,13 @@ import { readFileSync, writeFileSync } from "node:fs";
 import * as XLSX from "xlsx";
 
 /**
- * Classificação grosseira, só pra quem conta saber o que está pegando — e pra
- * separar depois o que entra no CMV do que é custo de operação. Embalagem e
- * limpeza são estoque de verdade e valem contagem, mas não são insumo de
- * cozinha e não entram na conta do prato.
+ * Marca a bebida pronta na coluna de observação. Ela entra na contagem (é
+ * estoque que some, e sumir bebida é caro) mas não entra no CMV de cozinha —
+ * é revenda, com margem própria. Quem conta não precisa saber disso; quem lê o
+ * resultado, sim.
  */
-const NAO_E_COZINHA =
-  /TAMPA|SACO |SACOLA|EMBALAGEM|POTE |GUARDANAPO|PAPEL TOALHA|PANO MULTIUSO|PLASTICO FILME|DETERGENTE|ALCOOL 70|MAX DET|SECANTE|PASTILHA RATIONAL|BOBINA|LUVA |TOUCA|AVENTAL|DISCO ISOPOR|CANUDO|BB PIC|DIVISORIA/i;
+const REVENDA =
+  /COCA COLA|GUARANA|AGUA TONICA|AGUA PRATA|ACQUISSIMA|RED BULL|ENERGETICO|H2O |GATORADE|TODDYNHO|CERVEJA|CORONA|SPATEN|STELLA|CHOPP|APEROL|APERITIVO|CAMPARI|VODKA|TEQUILA|ESPUMANTE|CHARDONNAY|MALBEC|CRIANZA|CARMENERE|WINE|LICOR/i;
 
 function lerCsv(caminho: string): Record<string, string>[] {
   const linhas = readFileSync(caminho, "utf8").split(/\r?\n/).filter((l) => l.trim() !== "" && !l.startsWith("#"));
@@ -69,7 +69,7 @@ function main() {
         i.produto,
         i.unidade,
         "",
-        NAO_E_COZINHA.test(i.produto) ? "embalagem/limpeza" : "",
+        REVENDA.test(i.produto) ? "revenda" : "",
       ]),
     ];
 
