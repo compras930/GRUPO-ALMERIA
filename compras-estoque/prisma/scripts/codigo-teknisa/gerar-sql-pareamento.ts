@@ -80,12 +80,37 @@ function main() {
   }
   mkdirSync(pastaSaida, { recursive: true });
 
-  const catalogo = lerCsv(arqCatalogo).map((p) => ({ nome: p.nome, unidade: p.unidade }));
+  // O catálogo tem que vir INTEIRO, com a coluna `codigo` — não só os produtos
+  // sem código.
+  //
+  // Na primeira versão eu exportei só os sem código e usei a mesma lista pra
+  // duas perguntas diferentes: "com quem isto pode casar?" e "este nome já
+  // existe?". A segunda precisa do catálogo todo. O 3b morreu no banco com
+  // duplicate key: MORTADELA ITALIANA já existia, com código, invisível pra
+  // mim. Sorte que o INSERT é um comando só e não aplicou nada.
+  const catalogo = lerCsv(arqCatalogo).map((p) => ({
+    nome: p.nome,
+    unidade: p.unidade,
+    codigo: (p.codigo ?? "").trim(),
+  }));
+  if (!("codigo" in (lerCsv(arqCatalogo)[0] ?? {}))) {
+    console.error("O CSV do catálogo precisa da coluna `codigo`. Exporte com codigoTeknisa.");
+    process.exit(1);
+  }
   const porChave = new Map<string, typeof catalogo>();
+  const porChaveUnidade = new Map<string, (typeof catalogo)[number]>();
   for (const p of catalogo) {
     const k = chave(p.nome);
     porChave.set(k, [...(porChave.get(k) ?? []), p]);
+    porChaveUnidade.set(`${k}|||${p.unidade}`, p);
   }
+
+  /**
+   * Um produto carrega UM código. Quando o alvo já tem outro, não há o que
+   * fazer com este — nem ligar (o UPDATE ignoraria em silêncio) nem criar (o
+   * nome colide). Vira descarte reportado.
+   */
+  const jaTemOutroCodigo: { teknisa: string; codigo: string; produto: string; codigoDoProduto: string }[] = [];
 
   // Apelidos confirmados pelo setor de compras (ver apelidos-pareamento.csv).
   const apelidos = new Map(
@@ -102,6 +127,30 @@ function main() {
   const semTraducao: any[] = [];
   const pulados: string[] = [];
 
+  /** Liga, ou reporta que o alvo já carrega outro código. */
+  const ligarOuDescartar = (
+    alvo: (typeof catalogo)[number],
+    codigo: string,
+    teknisa: string,
+    unidadeTeknisa: string
+  ) => {
+    if (alvo.codigo && alvo.codigo !== codigo) {
+      jaTemOutroCodigo.push({ teknisa, codigo, produto: `${alvo.nome} [${alvo.unidade}]`, codigoDoProduto: alvo.codigo });
+      return;
+    }
+    ligar.push({ nome: alvo.nome, unidade: alvo.unidade, codigo, teknisa, unidadeTeknisa });
+  };
+
+  /** Cria, a menos que o nome+unidade já exista no catálogo. */
+  const criarOuLigar = (nome: string, codigo: string, teknisa: string, unidadeTeknisa: string) => {
+    const u = UNIDADE_AO_CRIAR[unidadeTeknisa];
+    if (!u) return false;
+    const existente = porChaveUnidade.get(`${chave(nome)}|||${u}`);
+    if (existente) ligarOuDescartar(existente, codigo, teknisa, unidadeTeknisa);
+    else criar.push({ nome, unidade: u, codigo, unidadeTeknisa });
+    return true;
+  };
+
   for (const x of linhas) {
     const codigo = String(x.codigo_teknisa).trim();
     const unidadeTeknisa = String(x.unidade).trim().toUpperCase();
@@ -112,28 +161,21 @@ function main() {
     // 1. Escreveu um nome: manda ele, tenha marcado sim ou não.
     if (correcao) {
       const achado = porChave.get(chave(correcao));
-      if (achado?.length === 1) {
-        ligar.push({ nome: achado[0].nome, unidade: achado[0].unidade, codigo, teknisa: x.nome_no_teknisa, unidadeTeknisa });
-      } else {
-        const u = UNIDADE_AO_CRIAR[unidadeTeknisa];
-        if (u) criar.push({ nome: correcao, unidade: u, codigo, unidadeTeknisa });
-        else semTraducao.push(x);
-      }
+      if (achado?.length === 1) ligarOuDescartar(achado[0], codigo, x.nome_no_teknisa, unidadeTeknisa);
+      else if (!criarOuLigar(correcao, codigo, x.nome_no_teknisa, unidadeTeknisa)) semTraducao.push(x);
       continue;
     }
     // 2. Aceitou a sugestão.
     if (sim && String(x.sugestao).trim()) {
       const achado = porChave.get(chave(x.sugestao));
       if (achado?.length === 1) {
-        ligar.push({ nome: achado[0].nome, unidade: achado[0].unidade, codigo, teknisa: x.nome_no_teknisa, unidadeTeknisa });
+        ligarOuDescartar(achado[0], codigo, x.nome_no_teknisa, unidadeTeknisa);
         continue;
       }
     }
     // 3. "sim" numa linha sem candidato = é produto novo, com o nome do Teknisa.
     if (sim) {
-      const u = UNIDADE_AO_CRIAR[unidadeTeknisa];
-      if (u) criar.push({ nome: String(x.nome_no_teknisa).trim(), unidade: u, codigo, unidadeTeknisa });
-      else semTraducao.push(x);
+      if (!criarOuLigar(String(x.nome_no_teknisa).trim(), codigo, x.nome_no_teknisa, unidadeTeknisa)) semTraducao.push(x);
       continue;
     }
     // 4. "não" sem correção: ninguém disse o que é. Não se inventa.
@@ -250,6 +292,10 @@ SELECT count(*) AS criados_agora FROM "Produto" WHERE id LIKE 'tk%';
   if (codigosDescartados.length) {
     console.log(`\ndois códigos pro mesmo produto (${codigosDescartados.length}) — fica o de consumo:`);
     for (const d of codigosDescartados) console.log(`   ${d.produto}\n      fica: ${d.ficou}\n      cai : ${d.caiu.join(", ")}`);
+  }
+  if (jaTemOutroCodigo.length) {
+    console.log(`\nalvo já carrega outro código (${jaTemOutroCodigo.length}) — o código do Teknisa fica sem par:`);
+    for (const d of jaTemOutroCodigo) console.log(`   ${d.teknisa} (${d.codigo})  ->  ${d.produto} já tem ${d.codigoDoProduto}`);
   }
   if (criacoesDescartadas.length) {
     console.log(`\nprodutos novos repetidos, mantido o primeiro (${criacoesDescartadas.length}):`);
