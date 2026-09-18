@@ -34,22 +34,27 @@ ORDER BY un.nome;
 -- ---------------------------------------------------------------------------
 -- 2) A lista em si. Baixe como CSV (botão de download do resultado no Neon).
 --
--- Uma linha por produto do Teknisa que ainda não existe aqui — ou existe com
--- outro nome, que é o caso mais comum.
+-- Uma linha por CÓDIGO, não por casa: Produto é cadastro único do grupo, então
+-- a decisão de pareamento é uma só, mesmo quando as duas casas compram o mesmo
+-- insumo. `casas` diz quem compra, e `nomes_diferentes > 1` avisa quando o
+-- mesmo código chega escrito de dois jeitos (vale olhar com mais atenção).
 -- ---------------------------------------------------------------------------
 WITH ultima AS (
   SELECT DISTINCT ON ("unidadeId") id, "unidadeId"
   FROM "NotaCompra"
   ORDER BY "unidadeId", "criadoEm" DESC
 )
-SELECT un.nome                                  AS casa,
-       i."codigoBruto"                          AS codigo_teknisa,
-       i."nomeBruto"                            AS nome_no_teknisa,
-       i."unidadeBruta"                         AS unidade,
-       round(i."precoUnitNovo"::numeric, 4)     AS preco_unitario,
-       i."dataCompra"::date                     AS data_da_compra
+SELECT i."codigoBruto"                                        AS codigo_teknisa,
+       min(i."nomeBruto")                                     AS nome_no_teknisa,
+       count(DISTINCT i."nomeBruto")                          AS nomes_diferentes,
+       min(i."unidadeBruta")                                  AS unidade,
+       string_agg(DISTINCT un.nome, ' + ')                    AS casas,
+       round(max(i."precoUnitNovo")::numeric, 4)              AS preco_unitario,
+       max(i."dataCompra")::date                              AS compra_mais_recente
 FROM "ItemNotaCompra" i
 JOIN ultima n     ON n.id = i."notaCompraId"
 JOIN "Unidade" un ON un.id = n."unidadeId"
 WHERE i."produtoId" IS NULL
-ORDER BY un.nome, i."nomeBruto";
+  AND i."codigoBruto" IS NOT NULL
+GROUP BY i."codigoBruto"
+ORDER BY min(i."nomeBruto");
