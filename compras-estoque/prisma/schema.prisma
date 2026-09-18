@@ -470,5 +470,11 @@ model ParametroEstoqueProduto {
   estoqueMinimo Float?
   estoqueIdeal  Float?
 
+  // Rodízio de contagem — ver src/lib/contagem-rotacao.ts.
+  // É por (unidade, produto) porque a classe depende do quanto a casa gasta:
+  // o mesmo insumo é curva A numa e curva C na outra.
+  classeAbc     String?  // "A" | "B" | "C"
+  grupoContagem Int?     // 1..2 na curva A, 1..4 na curva B
+
   @@unique([unidadeId, produtoId])
 }
