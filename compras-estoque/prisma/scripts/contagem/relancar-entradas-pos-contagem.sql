@@ -19,23 +19,57 @@
 --
 -- RODAR DEPOIS DE LANÇAR A CONTAGEM, nunca antes — antes, a contagem apagaria isto também.
 
+-- SÓ RELANÇA O QUE FOI CONTADO. Descoberto na primeira execução, em 21/09: a
+-- consulta sem esse filtro trouxe 9 produtos, e 3 deles (ALFACE AMERICANA,
+-- ALFACE ROXO, MOLHO ROTI) não estavam na folha — são curva C. A contagem
+-- sobrescreve o saldo apenas de quem ela conta; quem não foi contado manteve a
+-- entrada da carga intacta, e relançar somaria a mesma mercadoria duas vezes.
+--
+-- O critério não é "está na curva A/B", é "tem contagem registrada agora". Isso
+-- também cobre de graça o item que quem digitou deixou EM BRANCO: campo vazio
+-- não gera ContagemEstoque, o saldo dele não foi tocado, e ele fica de fora.
+
 -- ---------------------------------------------------------------------------
--- 1) CONFERIR ANTES. Deve listar exatamente os produtos com nota posterior à
---    data da contagem. Se vier algo inesperado, pare aqui.
+-- 0) A CONTAGEM FOI LANÇADA? Sem isso, não há o que relançar.
+-- ---------------------------------------------------------------------------
+SELECT count(*) AS itens_contados, min(c."criadoEm") AS primeira, max(c."criadoEm") AS ultima
+FROM "ContagemEstoque" c
+JOIN "Unidade" u ON u.id = c."unidadeId"
+WHERE c."criadoEm" >= now() - interval '12 hours'
+  AND u.nome = '104 Sul';
+
+-- ---------------------------------------------------------------------------
+-- 1) CONFERIR ANTES. Produtos CONTADOS agora que receberam mercadoria com nota
+--    posterior à data da contagem física. Se vier algo inesperado, pare aqui.
+--
+--    A coluna `entrou_no_saldo` é a defesa contra a trava de preço: uma linha
+--    recusada por salto de preço tem quantidade na nota mas NÃO deu entrada
+--    (ver nota-compra.ts). Se ela vier menor que `total_na_carga`, alguma linha
+--    desse produto foi recusada e o relançamento estaria inventando estoque.
 -- ---------------------------------------------------------------------------
 SELECT p.nome,
        p."unidadeMedida" AS un,
-       round(sum(i.quantidade)::numeric, 3) AS qtd,
-       max(i."dataCompra")::date AS nota
+       round(sum(i.quantidade) FILTER (WHERE i."dataCompra" > DATE '2026-09-18')::numeric, 3) AS a_relancar,
+       round(sum(i.quantidade)::numeric, 3) AS total_na_carga,
+       round((
+         SELECT coalesce(sum(m.quantidade), 0) FROM "MovimentoEstoque" m
+         WHERE m."produtoId" = i."produtoId" AND m."unidadeId" = n."unidadeId"
+           AND m.tipo = 'ENTRADA_NOTA' AND m."criadoEm" >= now() - interval '12 hours'
+       )::numeric, 3) AS entrou_no_saldo
 FROM "ItemNotaCompra" i
 JOIN "NotaCompra" n ON n.id = i."notaCompraId"
 JOIN "Unidade" u ON u.id = n."unidadeId"
 JOIN "Produto" p ON p.id = i."produtoId"
 WHERE n."criadoEm" >= now() - interval '12 hours'
   AND u.nome = '104 Sul'
-  AND i."dataCompra" > DATE '2026-09-18'
   AND i.quantidade IS NOT NULL
-GROUP BY p.nome, p."unidadeMedida"
+  AND EXISTS (
+    SELECT 1 FROM "ContagemEstoque" c
+    WHERE c."produtoId" = i."produtoId" AND c."unidadeId" = n."unidadeId"
+      AND c."criadoEm" >= now() - interval '12 hours'
+  )
+GROUP BY p.nome, p."unidadeMedida", i."produtoId", n."unidadeId"
+HAVING sum(i.quantidade) FILTER (WHERE i."dataCompra" > DATE '2026-09-18') > 0
 ORDER BY p.nome;
 
 -- ---------------------------------------------------------------------------
@@ -60,6 +94,14 @@ WITH pos_contagem AS (
     AND i."dataCompra" > DATE '2026-09-18'
     AND i."produtoId" IS NOT NULL
     AND i.quantidade IS NOT NULL
+    -- Só quem foi contado agora: é de quem a contagem apagou a entrada.
+    -- EXISTS, não JOIN: duas contagens do mesmo produto multiplicariam as
+    -- linhas da nota e o sum() sairia dobrado.
+    AND EXISTS (
+      SELECT 1 FROM "ContagemEstoque" c
+      WHERE c."produtoId" = i."produtoId" AND c."unidadeId" = n."unidadeId"
+        AND c."criadoEm" >= now() - interval '12 hours'
+    )
   GROUP BY i."produtoId", n."unidadeId"
 ),
 nova AS (
