@@ -39,11 +39,21 @@
 const MAPA_CASA = {
   "104 SUL": "104 Sul",
   "CASA NORO": "Noroeste",
+  // Entrou em 22/09/2026. Em 18/09 o `_unidadesNaPlanilha` trazia só as duas
+  // casas acima; depois disso a unidade 0005 passou a sair no export do
+  // Teknisa, e o diagnóstico mostrou "WINE GARDEN" com 1.145 linhas sendo
+  // descartadas aqui. A casa nunca esteve perdida no caminho — faltava esta
+  // linha.
+  "WINE GARDEN": "Wine Garden",
   // Conferir no `_unidadesNaPlanilha` da saída como a casa aparece escrita na
   // planilha e completar aqui. O nome da direita tem que ser EXATAMENTE o
   // Unidade.nome cadastrado no app.
-  // "WINE GARDEN": "Wine Garden",
-  // "BEIRA LAGO": "Beira Lago",
+  //
+  // BEIRA LAGO E CPD NÃO ENTRAM AQUI. Os dois vêm do XMenu, não do Teknisa:
+  // outra planilha, outro espaço de código de produto e sem a coluna `chave`.
+  // Mandá-los por este node faria o código do XMenu ser gravado em
+  // Produto.codigoTeknisa (que é unique global) e tiraria a proteção contra
+  // recarga. Ver a análise de 22/09 — precisa de mudança no app antes.
 };
 
 const norm = (v) => String(v ?? "").trim().toUpperCase();
