@@ -257,6 +257,14 @@ function main() {
     if (!UNIDADES_VALIDAS.has(unidade)) {
       avisos.push(`unidade "${unidadeBruta}" não existe no catálogo — decidir para qual das quatro vai`);
     }
+    // O conflito de código só TRAVA quando a sugestão é casamento de nome de
+    // verdade. Na rodada dos vinhos, 55 das 60 linhas da aba "outros" vinham
+    // com este aviso — quase todas em faixa D, onde a sugestão é um parecido
+    // de longe e a resposta certa é "criar". Aviso que aparece em tudo é aviso
+    // que ninguém lê; ali ele vira nota.
+    const sugestaoEhNomeIgual = iguais.length >= 1;
+    const ondeVai = sugestaoEhNomeIgual ? avisos : notas;
+
     if (melhor && melhor.p.codigo) {
       if (melhor.p.codigo === codigoTeknisa) {
         // O produto JÁ tem este código e mesmo assim a linha não casou.
@@ -264,13 +272,13 @@ function main() {
         // correção é fator de conversão, não pareamento. Se a unidade também
         // bate, a linha não deveria estar aqui: o mais provável é que os dois
         // CSV tenham sido exportados em momentos diferentes.
-        avisos.push(
+        ondeVai.push(
           melhor.p.unidade !== unidade
             ? `produto já tem ESTE código; não casou porque a unidade diverge (${unidade} na nota × ${melhor.p.unidade} no cadastro). Não é pareamento — é fator de conversão em ConversaoUnidadeCompra`
             : `produto já tem ESTE código e a unidade bate — esta linha não deveria estar aqui. Reexportar os dois CSV juntos antes de decidir`
         );
       } else {
-        avisos.push(`sugestão já tem o código ${melhor.p.codigo} — ligar aqui seria recusado por CONFLITO_DE_CODIGO`);
+        ondeVai.push(`sugestão já tem o código ${melhor.p.codigo} — se for pra ligar nela, seria recusado por CONFLITO_DE_CODIGO`);
       }
     }
     if (melhor && !melhor.p.ativo) avisos.push("sugestão está inativa");
@@ -304,6 +312,7 @@ function main() {
       codigo_teknisa: codigoTeknisa,
       nome_no_teknisa: nomeTeknisa,
       un_teknisa: unidadeBruta,
+      casas: String(c.casas ?? "").trim(),
       valor_comprado: Number(c.valor_comprado) || 0,
       linhas_de_nota: Number(c.linhas) || 0,
       preco_unitario: Number(c.preco_unitario) || 0,
@@ -464,6 +473,7 @@ function main() {
     15, // codigo_teknisa
     52, // nome_no_teknisa
     11, // un_teknisa
+    26, // casas
     15, // valor_comprado
     9,  // linhas_de_nota
     14, // preco_unitario
