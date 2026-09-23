@@ -38,7 +38,13 @@ export type ItemPrecoInput = {
    * Chave da linha na origem (coluna `chave` da base do Drive). Quando vem, a
    * linha já carregada antes é reconhecida e pulada — é o que deixa recarregar
    * sem inflar o saldo. Sem ela, a carga continua funcionando, mas só pra
-   * preço: sem identidade de linha não há como entrar estoque com segurança.
+   * preço: sem identidade de linha não há como entrar estoque com segurança, e
+   * a quantidade é recusada e reportada em `entradasSemChave`.
+   *
+   * A segunda frase acima descrevia a intenção e não o código até 23/09/2026:
+   * a condição da entrada de estoque não olhava esta chave, e linha sem ela
+   * somava saldo a cada reexecução. Corrigido — mas fica o registro de que
+   * comentário não é garantia, teste é.
    */
   chave?: string | null;
 };
@@ -55,6 +61,16 @@ export type ResultadoNotaCompra = {
   linhasJaCarregadas: number;
   /** Produtos que ganharam saldo, e o total somado. */
   entradasDeEstoque: { produtos: number; quantidadeTotal: number };
+  /**
+   * Linhas que traziam quantidade mas NÃO entraram no saldo por não terem
+   * `chave`. Sem identidade de linha, cada reexecução somaria a mesma
+   * mercadoria de novo — ver o comentário na condição que preenche isto.
+   *
+   * O preço dessas linhas entrou normalmente. Vir diferente de zero significa
+   * que a origem parou de mandar `chave`: o estoque daquela casa vai congelar
+   * até alguém arrumar, e é por isso que o número aparece aqui.
+   */
+  entradasSemChave: { linhas: number; quantidadeTotal: number; produtos: string[] };
   /**
    * Casou por nome, o produto não tem código gravado e a linha trouxe um.
    * É esta lista que faz o pareamento se alimentar sozinho, uma carga de cada
@@ -201,6 +217,11 @@ export async function processarNotaCompra(
   // compra aparece várias vezes no mês e um upsert por linha multiplicaria as
   // idas ao banco por dez sem mudar o resultado.
   const entradaPorProduto = new Map<string, number>();
+  const entradasSemChave: ResultadoNotaCompra["entradasSemChave"] = {
+    linhas: 0,
+    quantidadeTotal: 0,
+    produtos: [],
+  };
 
   const naoReconhecidos: ItemPrecoInput[] = [];
   const produtosAlterados = new Set<string>();
@@ -357,8 +378,29 @@ export async function processarNotaCompra(
 
     // Entrada de estoque não depende da data: mercadoria que entrou, entrou.
     // A regra "só se for mais recente" é do PREÇO, não do saldo.
+    //
+    // MAS DEPENDE DE `chaveOrigem`. Sem identidade de linha não existe a
+    // consulta lá em cima que pula o que já entrou: a linha é sempre "nova", e
+    // cada reexecução do workflow soma a mesma mercadoria de novo. Preço
+    // tolera recarga — regravar o mesmo preço não muda nada; estoque não.
+    //
+    // Isto estava documentado em `ItemPrecoInput.chave` ("sem ela, a carga
+    // continua funcionando, mas só pra preço") e não estava implementado: a
+    // condição abaixo não olhava a chave. Apareceu ao levantar a integração do
+    // XMenu (Beira Lago), que não tem coluna `chave` — mas o buraco valia para
+    // qualquer origem, inclusive uma linha do Teknisa com a coluna em branco.
+    //
+    // A linha não é descartada: preço entra, ela é gravada em ItemNotaCompra
+    // com a quantidade, e o total recusado volta em `entradasSemChave` pra que
+    // isso nunca seja silencioso.
     if (quantidadeConvertida && !precoSuspeito) {
-      entradaPorProduto.set(produto.id, (entradaPorProduto.get(produto.id) ?? 0) + quantidadeConvertida);
+      if (chaveOrigem) {
+        entradaPorProduto.set(produto.id, (entradaPorProduto.get(produto.id) ?? 0) + quantidadeConvertida);
+      } else {
+        entradasSemChave.linhas++;
+        entradasSemChave.quantidadeTotal += quantidadeConvertida;
+        if (!entradasSemChave.produtos.includes(produto.nome)) entradasSemChave.produtos.push(produto.nome);
+      }
     }
 
     if (existente && existente.dataCompra >= dataCompra) {
@@ -543,6 +585,10 @@ export async function processarNotaCompra(
     entradasDeEstoque: {
       produtos: entradaPorProduto.size,
       quantidadeTotal: Number([...entradaPorProduto.values()].reduce((a, b) => a + b, 0).toFixed(3)),
+    },
+    entradasSemChave: {
+      ...entradasSemChave,
+      quantidadeTotal: Number(entradasSemChave.quantidadeTotal.toFixed(3)),
     },
     codigosSugeridos: [...codigosSugeridos.values()],
     codigosGravados,
