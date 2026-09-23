@@ -8,3 +8,6 @@ build/
 prisma/dev.db
 prisma/dev.db-journal
 .DS_Store
+
+# Cache incremental do TypeScript — regenerado a cada build.
+*.tsbuildinfo
