@@ -77,6 +77,8 @@ export type LinhaCompraBruta = {
   unidadeMedida: string;
   /** Código do produto no Teknisa. Ausente quando a origem não manda. */
   codigo?: string | null;
+  /** De onde vem a nota. Omitido = TEKNISA, que é o caso das três casas de hoje. */
+  origem?: string;
 };
 
 export type ProdutoResumo = {
@@ -92,7 +94,13 @@ export type MotivoNaoCasou =
   /** O nome casa com um produto que já declara OUTRO código. */
   | "CONFLITO_DE_CODIGO"
   /** O código casa, mas a unidade da linha é outra. Ver comentário abaixo. */
-  | "UNIDADE_DIVERGENTE";
+  | "UNIDADE_DIVERGENTE"
+  /**
+   * O código está cadastrado em mais de um produto (CodigoCompraProduto).
+   * É erro de cadastro: escolher um gravaria preço no produto errado em
+   * silêncio. Não acontece com `Produto.codigoTeknisa`, que é unique.
+   */
+  | "CODIGO_AMBIGUO";
 
 export type ResolucaoLinhaCompra = {
   produto: ProdutoResumo | null;
@@ -117,15 +125,47 @@ export type ResolucaoLinhaCompra = {
 /** (produtoId, unidade da nota) -> fator. Ver ConversaoUnidadeCompra. */
 export type ConversaoResumo = { produtoId: string; unidadeCompra: string; fator: number };
 
+/**
+ * Uma linha de CodigoCompraProduto: este código, nesta unidade de compra, é
+ * este produto, com este fator. Ver o model no schema.
+ */
+export type CodigoCompraResumo = {
+  origem?: string;
+  codigo: string;
+  produtoId: string;
+  unidadeCompra: string;
+  fator: number;
+};
+
+/** O que `porCodigoCompra` guarda para cada (origem, código, unidade). */
+type EntradaCodigoCompra = { produto: ProdutoResumo; fator: number };
+
 export type IndiceProdutos = {
+  /**
+   * (origem|||código|||unidade) -> produto + fator. É a tabela
+   * CodigoCompraProduto, e é consultada ANTES de `porCodigo`.
+   *
+   * Vazio até a rota carregar a tabela nova — e com ele vazio a resolução se
+   * comporta exatamente como antes dela existir. É o que permite este código
+   * ir pra produção antes da tabela.
+   */
+  porCodigoCompra: Map<string, EntradaCodigoCompra>;
+  /** (origem|||código) -> quantos produtos DIFERENTES aquele código responde. */
+  produtosPorCodigoCompra: Map<string, number>;
+  /** As unidades declaradas para cada (origem|||código), pra explicar a recusa. */
+  unidadesPorCodigoCompra: Map<string, string[]>;
   porCodigo: Map<string, ProdutoResumo>;
   porNomeUnidade: Map<string, ProdutoResumo>;
   conversoes: Map<string, number>;
 };
 
+/** Origem padrão das notas: as três casas de hoje vêm todas do Teknisa. */
+export const ORIGEM_PADRAO = "TEKNISA";
+
 export function montarIndiceProdutos(
   produtos: ProdutoResumo[],
-  conversoes: ConversaoResumo[] = []
+  conversoes: ConversaoResumo[] = [],
+  codigosCompra: CodigoCompraResumo[] = []
 ): IndiceProdutos {
   const porCodigo = new Map<string, ProdutoResumo>();
   for (const p of produtos) {
@@ -143,7 +183,39 @@ export function montarIndiceProdutos(
     // zera a entrada de estoque. Cadastro ruim é ignorado, não obedecido.
     if (c.fator > 0) mapaConversoes.set(`${c.produtoId}|||${normalizarUnidade(c.unidadeCompra)}`, c.fator);
   }
-  return { porCodigo, porNomeUnidade, conversoes: mapaConversoes };
+
+  const porId = new Map(produtos.map((p) => [p.id, p]));
+  const porCodigoCompra = new Map<string, EntradaCodigoCompra>();
+  const produtosDoCodigo = new Map<string, Set<string>>();
+  const unidadesPorCodigoCompra = new Map<string, string[]>();
+  for (const c of codigosCompra) {
+    const codigo = normalizarCodigo(c.codigo);
+    const produto = porId.get(c.produtoId);
+    // Fator ruim e produto que não está no catálogo carregado são ignorados
+    // pelo mesmo motivo das conversões: cadastro quebrado não é obedecido.
+    if (!codigo || !produto || !(c.fator > 0)) continue;
+    const unidade = normalizarUnidade(c.unidadeCompra);
+    const chaveCodigo = `${c.origem ?? ORIGEM_PADRAO}|||${codigo}`;
+    porCodigoCompra.set(`${chaveCodigo}|||${unidade}`, { produto, fator: c.fator });
+
+    const quais = produtosDoCodigo.get(chaveCodigo) ?? new Set<string>();
+    quais.add(produto.id);
+    produtosDoCodigo.set(chaveCodigo, quais);
+
+    const unidades = unidadesPorCodigoCompra.get(chaveCodigo) ?? [];
+    if (!unidades.includes(unidade)) unidades.push(unidade);
+    unidadesPorCodigoCompra.set(chaveCodigo, unidades);
+  }
+  const produtosPorCodigoCompra = new Map([...produtosDoCodigo].map(([k, v]) => [k, v.size]));
+
+  return {
+    porCodigoCompra,
+    produtosPorCodigoCompra,
+    unidadesPorCodigoCompra,
+    porCodigo,
+    porNomeUnidade,
+    conversoes: mapaConversoes,
+  };
 }
 
 function porNome(indice: IndiceProdutos, nomeBruto: string, unidade: string): ProdutoResumo | null {
@@ -164,6 +236,42 @@ function porNome(indice: IndiceProdutos, nomeBruto: string, unidade: string): Pr
 export function resolverLinhaCompraPura(linha: LinhaCompraBruta, indice: IndiceProdutos): ResolucaoLinhaCompra {
   const codigo = normalizarCodigo(linha.codigo);
   const unidade = normalizarUnidade(linha.unidadeMedida);
+
+  // 0. CodigoCompraProduto, quando a tabela já foi carregada. Vem antes de
+  //    tudo porque é a resposta mais específica que existe: este código, nesta
+  //    embalagem, é este produto, com este fator.
+  //
+  //    Índice vazio (a tabela ainda não existe no banco) cai direto no passo 1
+  //    e a resolução se comporta como antes.
+  if (codigo) {
+    const chaveCodigo = `${linha.origem ?? ORIGEM_PADRAO}|||${codigo}`;
+    const entrada = indice.porCodigoCompra.get(`${chaveCodigo}|||${unidade}`);
+    if (entrada) {
+      // Um código cadastrado em dois produtos é erro de cadastro, não uma
+      // escolha a fazer aqui. Escolher um gravaria preço num produto e
+      // deixaria o outro sem — em silêncio, que é o que este arquivo existe
+      // pra evitar. Recusa e reporta; a consulta do passo 6 do script de
+      // migração lista esses casos.
+      if ((indice.produtosPorCodigoCompra.get(chaveCodigo) ?? 1) > 1) {
+        return { produto: null, via: null, motivo: "CODIGO_AMBIGUO", codigoSugerido: null, fatorConversao: 1 };
+      }
+      return { produto: entrada.produto, via: "CODIGO", motivo: null, codigoSugerido: null, fatorConversao: entrada.fator };
+    }
+    // O código é conhecido, mas NÃO nesta unidade. É a mesma recusa de sempre
+    // — preço de caixa não vira preço de quilo —, agora sabendo exatamente
+    // quais embalagens foram declaradas para ele.
+    const declaradas = indice.unidadesPorCodigoCompra.get(chaveCodigo);
+    if (declaradas && declaradas.length > 0) {
+      const qualquer = indice.porCodigoCompra.get(`${chaveCodigo}|||${declaradas[0]}`);
+      return {
+        produto: qualquer?.produto ?? null,
+        via: null,
+        motivo: "UNIDADE_DIVERGENTE",
+        codigoSugerido: null,
+        fatorConversao: 1,
+      };
+    }
+  }
 
   // 1. Código bate. O nome pode estar diferente à vontade — é pra isso que o
   //    código serve.
@@ -215,4 +323,5 @@ export const EXPLICACAO_MOTIVO: Record<MotivoNaoCasou, string> = {
   NAO_ENCONTRADO: "nenhum produto com esse nome e unidade no catálogo",
   CONFLITO_DE_CODIGO: "o produto com esse nome já está cadastrado com outro código do Teknisa",
   UNIDADE_DIVERGENTE: "o código casa com um produto cadastrado em outra unidade de medida",
+  CODIGO_AMBIGUO: "o código está cadastrado em mais de um produto — corrigir o cadastro antes",
 };

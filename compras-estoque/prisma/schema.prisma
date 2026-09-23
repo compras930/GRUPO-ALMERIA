@@ -100,6 +100,10 @@ model Produto {
   // Único GLOBAL (não por casa como o codigoPdv do ItemVenda): a compra de
   // todas as casas do Grupo sai do mesmo cadastro do Teknisa.
   // Nullable: quem não foi pareado ainda continua casando por nome.
+  //
+  // EM SUBSTITUIÇÃO por CodigoCompraProduto, que aceita mais de um código por
+  // produto. Fica aqui até uma carga semanal inteira rodar limpa pela tabela
+  // nova; enquanto isso os dois existem e o casamento tenta a tabela primeiro.
   codigoTeknisa String? @unique
 
   itensPedido   ItemPedido[]
@@ -113,6 +117,7 @@ model Produto {
   itensNotaCompra   ItemNotaCompra[]
   parametrosEstoque ParametroEstoqueProduto[]
   conversoesCompra  ConversaoUnidadeCompra[]
+  codigosCompra     CodigoCompraProduto[]
 
   // Atenção: esta constraint é case-sensitive (texto em Postgres compara byte a
   // byte), então ela NÃO impede "BURRATA" e "Burrata" de coexistirem — brecha que
@@ -479,8 +484,84 @@ model ParametroEstoqueProduto {
   @@unique([unidadeId, produtoId])
 }
 
+/// Os códigos pelos quais a COMPRA chama um produto. Um produto, vários
+/// códigos — que é a diferença inteira para `Produto.codigoTeknisa`.
+///
+/// POR QUE PRECISOU MUDAR. `codigoTeknisa` guarda UM código por produto, e o
+/// Teknisa tem um código POR EMBALAGEM: o litro de leite é 105060008520 e a
+/// caixa com doze é 105060008521. Cabe um só, então o outro fica eternamente
+/// sem casar — e criar um segundo produto "Leite integral 12x1L" quebraria
+/// toda ficha que usa o primeiro. Levantado em 23/09/2026: 107 códigos e
+/// R$ 86.794 de compra travados exatamente nisso, sem nenhuma pergunta a
+/// fazer a ninguém — só faltava onde guardar.
+///
+/// ABSORVE ConversaoUnidadeCompra. A conversão de embalagem era por
+/// (produto, unidade), o que obriga a adivinhar QUAL caixa: duas caixas do
+/// mesmo item, uma com 12 e outra com 24, não cabem lá. Aqui o fator mora no
+/// código, que é a embalagem — 105060008521 É a caixa de doze, e diz isso.
+///
+///   105060008520  -> Leite integral (LT), unidadeCompra LT,  fator 1
+///   105060008521  -> Leite integral (LT), unidadeCompra CX,  fator 12
+///   110030000604  -> Ovos (UND),          unidadeCompra CX,  fator 360
+///
+/// A REGRA É UMA SÓ: a unidade da linha tem que ser igual à `unidadeCompra`
+/// deste código; aí o fator se aplica. Fator nunca é aplicado a uma unidade
+/// que ninguém declarou — é a mesma trava do UNIDADE_DIVERGENTE de hoje, e é
+/// ela que impede preço de caixa virar preço de quilo.
+///
+/// POR QUE A CHAVE INCLUI A UNIDADE, e não é só (origem, código). O primeiro
+/// desenho era um código por linha, porque "um código é uma embalagem". O dado
+/// desmente: hoje o MESMO código do Teknisa chega ora na unidade do produto
+/// (fator 1), ora na embalagem declarada em ConversaoUnidadeCompra — a
+/// resolução atual aceita as duas, e aceitar só uma faria linhas que casam
+/// hoje pararem de casar. A chave é (origem, código, unidade).
+///
+/// O preço disso é que o banco sozinho não garante mais "um código pertence a
+/// um produto só": duas linhas do mesmo código poderiam apontar para produtos
+/// diferentes. Não dá pra declarar isso aqui nem com índice único, então fica
+/// como invariante conferida — pela consulta do passo 6 de
+/// prisma/scripts/codigo-compra/1-migrar-codigos-existentes.sql, e pelo núcleo
+/// puro, que trata código ambíguo como não resolvido em vez de escolher um.
+///
+/// `origem` existe porque Beira Lago e CPD compram pelo XMenu, cujo espaço de
+/// código é outro: nada garante que "1042" do XMenu não seja "1042" do
+/// Teknisa. Único por (origem, código), nunca por código sozinho. Entra agora
+/// porque depois, com código já gravado, separar os dois espaços seria
+/// migração de dados em cima de ambiguidade — e ambiguidade de identificador
+/// é o que este arquivo inteiro existe pra evitar.
+model CodigoCompraProduto {
+  id String @id @default(cuid())
+
+  /// De onde vem a nota: "TEKNISA" (as três casas de hoje) ou "XMENU".
+  origem String @default("TEKNISA")
+  /// Código do item na origem. 12 dígitos no Teknisa.
+  codigo String
+
+  produtoId String
+  produto   Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+
+  /// Unidade como vem na nota para ESTE código, já normalizada por sinônimo.
+  unidadeCompra String
+  /// Quanto da unidade do produto cabe em UMA unidade de compra.
+  fator         Float  @default(1)
+
+  observacao String?
+  criadoEm   DateTime @default(now())
+
+  // Atenção: a migração cria também um CHECK ("fator" > 0), que o Prisma não
+  // sabe declarar aqui. Fator zero divide o preço por zero e zera a entrada de
+  // estoque. Se algum `prisma migrate dev` gerar uma migração apagando esse
+  // CHECK, é pra recusar — mesmo caso do índice funcional de Produto.nome.
+  @@unique([origem, codigo, unidadeCompra])
+  @@index([origem, codigo])
+  @@index([produtoId])
+}
+
 /// Fator entre a embalagem de COMPRA e a unidade do PRODUTO: quanto da unidade
 /// do produto cabe em UMA unidade de compra.
+///
+/// SUBSTITUÍDA por CodigoCompraProduto — ver ali o porquê. Fica até a tabela
+/// nova ter rodado uma carga semanal inteira.
 ///
 ///   MICROVERDE (KG) comprado em UND, fator 0.040 -> 1 bandeja = 40 g
 ///   OVOS (UND)      comprado em CX,  fator 360   -> 1 caixa = 360 ovos

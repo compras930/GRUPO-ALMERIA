@@ -175,3 +175,150 @@ describe("resolverLinhaCompraPura", () => {
     expect(r.codigoSugerido).toBe("100000077777");
   });
 });
+
+// ---------------------------------------------------------------------------
+// CodigoCompraProduto — um produto, vários códigos.
+//
+// Estes testes rodam contra o índice novo, que a rota só passa a carregar
+// depois de a tabela existir no banco. Até lá `codigosCompra` chega vazio e
+// nada aqui muda o comportamento de produção — o primeiro teste deste bloco é
+// exatamente essa garantia.
+// ---------------------------------------------------------------------------
+describe("resolverLinhaCompraPura com CodigoCompraProduto", () => {
+  const LEITE: ProdutoResumo = { id: "l1", nome: "Leite integral", unidadeMedida: "LT", codigoTeknisa: "105060008520" };
+  const OVOS: ProdutoResumo = { id: "o1", nome: "OVOS GRANDE BRANCO UND", unidadeMedida: "UND", codigoTeknisa: "110030000604" };
+
+  it("índice vazio se comporta exatamente como antes da tabela existir", () => {
+    // A garantia que permite este código ir pra produção antes da migração.
+    const semTabela = montarIndiceProdutos([LEITE]);
+    const comTabelaVazia = montarIndiceProdutos([LEITE], [], []);
+    const linha = { nome: "LEITE INTEGRAL PIRACANJUBA 12X1L (COMPRA)", unidadeMedida: "CX", codigo: "105060008521" };
+    expect(resolverLinhaCompraPura(linha, comTabelaVazia)).toEqual(resolverLinhaCompraPura(linha, semTabela));
+    expect(resolverLinhaCompraPura(linha, comTabelaVazia).motivo).toBe("NAO_ENCONTRADO");
+  });
+
+  it("o caso que motivou a tabela: dois códigos do Teknisa, um produto só", () => {
+    // O litro é 105060008520 e a caixa com doze é 105060008521. Com
+    // codigoTeknisa cabia um; o outro ficava eternamente sem casar, e criar um
+    // segundo "Leite integral 12x1L" quebraria as fichas que usam o primeiro.
+    const idx = montarIndiceProdutos([LEITE], [], [
+      { codigo: "105060008520", produtoId: "l1", unidadeCompra: "LT", fator: 1 },
+      { codigo: "105060008521", produtoId: "l1", unidadeCompra: "CX", fator: 12 },
+    ]);
+
+    const litro = resolverLinhaCompraPura({ nome: "LEITE INTEGRAL 1L", unidadeMedida: "LT", codigo: "105060008520" }, idx);
+    expect(litro.via).toBe("CODIGO");
+    expect(litro.produto?.id).toBe("l1");
+    expect(litro.fatorConversao).toBe(1);
+
+    const caixa = resolverLinhaCompraPura({ nome: "LEITE ... 12X1L (COMPRA)", unidadeMedida: "CX", codigo: "105060008521" }, idx);
+    expect(caixa.via).toBe("CODIGO");
+    expect(caixa.produto?.id).toBe("l1");
+    expect(caixa.fatorConversao).toBe(12);
+    // R$ 71,88 a caixa = R$ 5,99 o litro, comparável com o preço do litro
+    // avulso — que é o ponto inteiro do fator.
+    expect(71.88 / caixa.fatorConversao).toBeCloseTo(5.99, 6);
+  });
+
+  it("o MESMO código em duas unidades continua casando nas duas", () => {
+    // Regressão do erro que quase entrou no script de migração: a primeira
+    // versão trocava a unidade da linha migrada em vez de acrescentar outra, e
+    // o ovo avulso — que casa hoje — pararia de casar.
+    const idx = montarIndiceProdutos([OVOS], [], [
+      { codigo: "110030000604", produtoId: "o1", unidadeCompra: "UND", fator: 1 },
+      { codigo: "110030000604", produtoId: "o1", unidadeCompra: "CX", fator: 360 },
+    ]);
+    expect(resolverLinhaCompraPura({ nome: "x", unidadeMedida: "UND", codigo: "110030000604" }, idx).fatorConversao).toBe(1);
+    expect(resolverLinhaCompraPura({ nome: "x", unidadeMedida: "CX", codigo: "110030000604" }, idx).fatorConversao).toBe(360);
+  });
+
+  it("unidade não declarada segue recusada, mesmo com o código conhecido", () => {
+    // Preço de embalagem não vira preço de unidade porque alguém esqueceu de
+    // cadastrar o fator. É a trava de sempre.
+    const idx = montarIndiceProdutos([OVOS], [], [
+      { codigo: "110030000604", produtoId: "o1", unidadeCompra: "UND", fator: 1 },
+    ]);
+    const r = resolverLinhaCompraPura({ nome: "x", unidadeMedida: "CX", codigo: "110030000604" }, idx);
+    expect(r.via).toBeNull();
+    expect(r.motivo).toBe("UNIDADE_DIVERGENTE");
+    // O produto vem junto pra que o relatório diga de qual item se trata.
+    expect(r.produto?.id).toBe("o1");
+  });
+
+  it("sinônimo de unidade vale na tabela nova também", () => {
+    // Cadastrado em UND, a nota manda GF. É a mesma contagem.
+    const idx = montarIndiceProdutos(
+      [{ id: "v1", nome: "GRAN LEGADO", unidadeMedida: "UND", codigoTeknisa: null }],
+      [],
+      [{ codigo: "900001000349", produtoId: "v1", unidadeCompra: "UND", fator: 1 }]
+    );
+    expect(resolverLinhaCompraPura({ nome: "x", unidadeMedida: "GF", codigo: "900001000349" }, idx).via).toBe("CODIGO");
+  });
+
+  it("código em dois produtos é recusado, não desempatado", () => {
+    // A chave única é (origem, código, unidade), então o banco não impede
+    // isto. Escolher um gravaria preço num produto e deixaria o outro sem, em
+    // silêncio — que é o erro que este arquivo inteiro existe pra evitar.
+    const idx = montarIndiceProdutos(
+      [LEITE, { id: "l2", nome: "Leite desnatado", unidadeMedida: "LT", codigoTeknisa: null }],
+      [],
+      [
+        { codigo: "105060008520", produtoId: "l1", unidadeCompra: "LT", fator: 1 },
+        { codigo: "105060008520", produtoId: "l2", unidadeCompra: "CX", fator: 12 },
+      ]
+    );
+    const r = resolverLinhaCompraPura({ nome: "x", unidadeMedida: "LT", codigo: "105060008520" }, idx);
+    expect(r.via).toBeNull();
+    expect(r.motivo).toBe("CODIGO_AMBIGUO");
+    expect(r.produto).toBeNull();
+  });
+
+  it("origens diferentes não se misturam", () => {
+    // Beira Lago e CPD compram pelo XMenu, cujo espaço de código é outro: nada
+    // garante que "1042" de lá não seja "1042" do Teknisa. Sem a origem na
+    // chave, uma casa gravaria preço no produto da outra.
+    const idx = montarIndiceProdutos(
+      [
+        { id: "t1", nome: "Farinha de trigo", unidadeMedida: "KG", codigoTeknisa: null },
+        { id: "x1", nome: "Cerveja long neck", unidadeMedida: "UND", codigoTeknisa: null },
+      ],
+      [],
+      [
+        { origem: "TEKNISA", codigo: "1042", produtoId: "t1", unidadeCompra: "KG", fator: 1 },
+        { origem: "XMENU", codigo: "1042", produtoId: "x1", unidadeCompra: "UND", fator: 1 },
+      ]
+    );
+    expect(resolverLinhaCompraPura({ nome: "x", unidadeMedida: "KG", codigo: "1042" }, idx).produto?.id).toBe("t1");
+    expect(resolverLinhaCompraPura({ nome: "x", unidadeMedida: "UND", codigo: "1042", origem: "XMENU" }, idx).produto?.id).toBe("x1");
+    // Sem origem declarada, vale o Teknisa — as três casas de hoje.
+    expect(resolverLinhaCompraPura({ nome: "x", unidadeMedida: "UND", codigo: "1042" }, idx).motivo).toBe("UNIDADE_DIVERGENTE");
+  });
+
+  it("a tabela nova tem precedência sobre codigoTeknisa", () => {
+    // Durante a transição os dois existem. Se discordarem, manda a tabela
+    // nova: é ela que foi revisada por gente no pareamento.
+    const idx = montarIndiceProdutos(
+      [LEITE, { id: "l3", nome: "Leite outro", unidadeMedida: "LT", codigoTeknisa: null }],
+      [],
+      [{ codigo: "105060008520", produtoId: "l3", unidadeCompra: "LT", fator: 1 }]
+    );
+    expect(resolverLinhaCompraPura({ nome: "x", unidadeMedida: "LT", codigo: "105060008520" }, idx).produto?.id).toBe("l3");
+  });
+
+  it("fator zero na tabela nova é ignorado, não obedecido", () => {
+    const idx = montarIndiceProdutos([LEITE], [], [
+      { codigo: "105060008521", produtoId: "l1", unidadeCompra: "CX", fator: 0 },
+    ]);
+    const r = resolverLinhaCompraPura({ nome: "x", unidadeMedida: "CX", codigo: "105060008521" }, idx);
+    // Linha ignorada: cai no caminho de sempre, e lá o código é desconhecido.
+    expect(r.via).toBeNull();
+    expect(r.motivo).toBe("NAO_ENCONTRADO");
+  });
+
+  it("código de produto fora do catálogo carregado é ignorado", () => {
+    const idx = montarIndiceProdutos([LEITE], [], [
+      { codigo: "999999999999", produtoId: "fantasma", unidadeCompra: "LT", fator: 1 },
+    ]);
+    expect(resolverLinhaCompraPura({ nome: "x", unidadeMedida: "LT", codigo: "999999999999" }, idx).motivo).toBe("NAO_ENCONTRADO");
+  });
+});
