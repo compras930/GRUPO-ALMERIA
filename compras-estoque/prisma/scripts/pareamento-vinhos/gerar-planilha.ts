@@ -332,6 +332,112 @@ function main() {
   const vinhos = linhas.filter((l) => l.vinho).sort(ordenar);
   const outros = linhas.filter((l) => !l.vinho).sort(ordenar);
 
+  // ------------------------------------------------------------------------
+  // Aba 3 — a carta: de quanto de PRODUTO cada VENDA consome.
+  //
+  // Parear a compra resolve preço e estoque. Não resolve o CMV: o vinho só
+  // passa a custar alguma coisa quando o ItemVenda tem Receita apontando pro
+  // Produto. Num bar de vinho a receita é mecânica — uma garrafa vendida
+  // consome uma garrafa comprada — MENOS quando a venda é taça ou dose.
+  //
+  // E é taça com frequência: a carta tem o mesmo vinho duas vezes com preços
+  // muito diferentes (Chablis Maurice Lecestre a R$ 105 e a R$ 479, Château
+  // Simard a R$ 124 e a R$ 564). Gerar "1 garrafa" para os dois faria a taça
+  // custar uma garrafa inteira — CMV grotesco, com cara de número calculado.
+  //
+  // Quantas taças saem de uma garrafa é decisão da casa. Este script marca 1
+  // onde a leitura é segura e deixa EM BRANCO onde não é.
+  // ------------------------------------------------------------------------
+  const porNomeNaCarta = new Map<string, typeof cartaIndexada>();
+  for (const v of cartaIndexada) {
+    const lista = porNomeNaCarta.get(v.chave) ?? [];
+    lista.push(v);
+    porNomeNaCarta.set(v.chave, lista);
+  }
+
+  const precoDe = new Map(carta.map((v) => [v.id, Number(v.preco_venda) || 0]));
+  const idDe = new Map(cartaIndexada.map((v, i) => [v, carta[i].id]));
+
+  const linhasCarta = carta.map((v, i) => {
+    const idx = cartaIndexada[i];
+    const irmaos = (porNomeNaCarta.get(idx.chave) ?? []).filter((x) => x !== idx);
+    const meuPreco = Number(v.preco_venda) || 0;
+    const precosIrmaos = irmaos.map((x) => precoDe.get(idDe.get(x)!) ?? 0);
+    const souOMaisCaro = precosIrmaos.every((p) => meuPreco >= p);
+    const ehDose = /\(\s*\d+\s*ml\s*\)/i.test(v.nome);
+
+    // A compra que corresponde a este vinho — é dela que sai o Produto.
+    const daCompra = linhas
+      .map((l) => ({ l, score: similaridade(idx.tokens, tokens(l.nome_no_teknisa), idx.chave, chave(l.nome_no_teknisa)) }))
+      .filter((x) => x.score >= 0.7)
+      .sort((a, b) => b.score - a.score)[0];
+
+    // A PROVA REAL É O PREÇO CONTRA O CUSTO. A leitura por irmão na carta não
+    // basta: "Tabalí Pedregoso Gran Reserva Chardonnay" aparece uma vez só, a
+    // R$ 46, e a garrafa custa R$ 94,37 — é taça, e a garrafa simplesmente não
+    // está na carta. Marcar 1 ali faria a taça custar o dobro do que ela vende.
+    //
+    // Restaurante não vende vinho abaixo do custo. Venda menor que 1,3× o
+    // custo da garrafa não é garrafa.
+    const custo = Number(daCompra?.l.preco_unitario) || 0;
+    const pagaAGarrafa = custo > 0 && meuPreco >= custo * 1.3;
+
+    const provavel = ehDose ? "dose"
+      : custo > 0 && !pagaAGarrafa ? "taça ou dose (venda abaixo do custo da garrafa)"
+      : irmaos.length === 0 ? "único"
+      : souOMaisCaro ? "garrafa"
+      : "taça ou dose";
+
+    // Quando a garrafa do mesmo vinho está na carta, a razão entre os dois
+    // preços é a melhor pista da fração — e ela se repete: Chablis 105/479,
+    // Truffle Hunter 37/169, Klet Brda 70/319, Dubordieu 83/376, Garzon 66/299
+    // dão todos 0,22. A casa tem uma regra, e ela é visível no próprio dado.
+    const maisCaroDoGrupo = Math.max(meuPreco, ...precosIrmaos);
+    // Só vale como pista de taça quando a razão é de taça. "Ribeiro Santo
+    // Reserva" aparece a R$ 66 e a R$ 56, ambos abaixo do custo da garrafa:
+    // razão 0,85, que sugeriria "1 taça por garrafa" — bobagem. Ali os dois
+    // são taça e a garrafa não está na carta; melhor não sugerir nada.
+    const bruta = !souOMaisCaro && maisCaroDoGrupo > 0 ? meuPreco / maisCaroDoGrupo : 0;
+    const razao = bruta > 0 && bruta <= 0.5 ? bruta : 0;
+
+    return {
+      nome_na_carta: v.nome,
+      preco_venda: meuPreco,
+      ja_tem_ficha: idx.temReceita ? "sim" : "",
+      provavel,
+      precos_do_mesmo_vinho: precosIrmaos.length ? precosIrmaos.map((p) => `R$ ${p}`).join(" | ") : "",
+      codigo_teknisa: daCompra?.l.codigo_teknisa ?? "",
+      produto_correspondente: daCompra ? (daCompra.l.sugestao || daCompra.l.nome_ao_criar) : "",
+      custo_da_garrafa: custo || "",
+      margem: custo > 0 ? Number((meuPreco / custo).toFixed(2)) : "",
+      valor_comprado: daCompra?.l.valor_comprado ?? "",
+      // Só marca 1 quando o preço de venda sustenta uma garrafa inteira. Todo
+      // o resto fica em branco de propósito — inclusive a garrafa de um par,
+      // porque se a taça precisa de decisão, as duas linhas do par devem ser
+      // olhadas juntas.
+      garrafas_por_venda: !idx.temReceita && daCompra && pagaAGarrafa && !ehDose && souOMaisCaro ? 1 : "",
+      observacao: idx.temReceita ? "já tem ficha — não mexer"
+        : !daCompra ? "não achei a compra correspondente — sem Produto, não dá pra custear"
+        : ehDose ? `dose: que fração da garrafa? (50 ml de 750 ml = 0,067). Custo da garrafa R$ ${custo}`
+        : !pagaAGarrafa ? `vende a R$ ${meuPreco} e a garrafa custa R$ ${custo} — não é garrafa inteira.${razao ? ` A garrafa na carta sai a R$ ${maisCaroDoGrupo}, razão ${razao.toFixed(2)} (≈ ${Math.round(1 / razao)} taças).` : ""} Quantas taças por garrafa?`
+        : !souOMaisCaro && razao ? `o mesmo vinho aparece a R$ ${maisCaroDoGrupo}: razão ${razao.toFixed(2)} (≈ ${Math.round(1 / razao)} taças). Confirmar`
+        : "",
+    };
+  });
+
+  linhasCarta.sort((a, b) =>
+    Number(!!a.ja_tem_ficha) - Number(!!b.ja_tem_ficha) ||
+    (Number(b.valor_comprado) || 0) - (Number(a.valor_comprado) || 0) ||
+    a.nome_na_carta.localeCompare(b.nome_na_carta)
+  );
+
+  const semFicha = linhasCarta.filter((l) => !l.ja_tem_ficha);
+  const aDecidir = semFicha.filter((l) => l.garrafas_por_venda === "" && l.codigo_teknisa);
+  console.log(`\nCARTA: ${linhasCarta.length} vinhos, ${linhasCarta.length - semFicha.length} já com ficha`);
+  console.log(`  ${String(semFicha.filter((l) => l.garrafas_por_venda === 1).length).padStart(4)}  já marcados com 1 garrafa`);
+  console.log(`  ${String(aDecidir.length).padStart(4)}  precisam da quantidade (taça, dose ou par)`);
+  console.log(`  ${String(semFicha.filter((l) => !l.codigo_teknisa).length).padStart(4)}  sem compra correspondente — não dá pra custear`);
+
   const real = (n: number) => `R$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const resumo = (nome: string, ls: typeof linhas) => {
     const total = ls.reduce((s, l) => s + l.valor_comprado, 0);
@@ -384,6 +490,15 @@ function main() {
     }
     XLSX.utils.book_append_sheet(wb, ws, aba);
   }
+
+  if (linhasCarta.length > 0) {
+    const ws = XLSX.utils.json_to_sheet(linhasCarta);
+    ws["!cols"] = [52, 13, 12, 46, 26, 15, 45, 16, 10, 15, 18, 95].map((wch) => ({ wch }));
+    ws["!freeze"] = { xSplit: 0, ySplit: 1 };
+    ws["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: linhasCarta.length, c: 11 } }) };
+    XLSX.utils.book_append_sheet(wb, ws, "carta-vinhos");
+  }
+
   writeFileSync(saida, XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
   console.log(`\n${saida}`);
 }
