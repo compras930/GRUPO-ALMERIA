@@ -175,7 +175,12 @@ function main() {
   }));
 
   const carta = arqCarta ? lerCsv(arqCarta) : [];
-  const cartaIndexada = carta.map((v) => ({ nome: v.nome, temReceita: !!String(v.receita_id ?? "").trim(), chave: chave(v.nome) }));
+  const cartaIndexada = carta.map((v) => ({
+    nome: v.nome,
+    temReceita: !!String(v.receita_id ?? "").trim(),
+    chave: chave(v.nome),
+    tokens: tokens(v.nome),
+  }));
 
   // Nome+unidade EXATOS: é essa a chave única do banco. Case conta —
   // "QUEIJO BRIE" e "Queijo brie" convivem no Postgres, e é por isso que os
@@ -203,6 +208,16 @@ function main() {
     let candidatos: { p: ProdutoCat; score: number }[];
     let faixa: string;
 
+    // Piso de semelhança mais alto para vinho. Nome de vinho é feito de
+    // palavras que se repetem em toda a carta — RESERVA, GRAN, BRUT, ROSE,
+    // PINOT —, então 0,5 cola qualquer espumante rosé em qualquer outro. Com o
+    // piso baixo, "VEZZI AMALTEIA BRUT ROSE", "WG BELVINO GRILLO ROSE BRUT" e
+    // "WG BEAU ROCHER BRUT ROSE" caíam todos no mesmo "Cave Amadeu Rosé Brut",
+    // que não é nenhum dos três. Sugestão fraca é pior que sugestão nenhuma:
+    // convida a confirmar errado. Sem candidato, a linha cai em "produto novo",
+    // que num bar de vinho é a resposta certa na maioria das vezes.
+    const piso = ehVinho(codigoTeknisa, nomeTeknisa) ? 0.7 : 0.5;
+
     if (iguais.length >= 1) {
       candidatos = iguais.map((p) => ({ p, score: 1 }));
       faixa = iguais.length > 1 ? "C - mais de um produto com esse nome"
@@ -211,7 +226,7 @@ function main() {
     } else {
       candidatos = catalogo
         .map((p) => ({ p, score: similaridade(tk, p.tokens, ch, p.chave) }))
-        .filter((x) => x.score >= 0.5)
+        .filter((x) => x.score >= piso)
         .sort((a, b) => b.score - a.score || Number(b.p.unidade === unidade) - Number(a.p.unidade === unidade))
         .slice(0, 3);
       faixa =
@@ -232,9 +247,12 @@ function main() {
     const avisos: string[] = [];
     const notas: string[] = [];
 
-    // A sugestão É o produto que o nome proposto colidiria: não é colisão, é
-    // confirmação de que ligar é o caminho.
-    const sugestaoEhOMesmoNome = !!melhor && melhor.p.nome === nomeAoCriar && melhor.p.unidade === unidade;
+    // Existe produto com o mesmo nome normalizado: a decisão é LIGAR, e
+    // qualquer aviso de colisão seria falso — a "colisão" é o próprio produto
+    // que se quer ligar. Comparar texto cru aqui não serve: "COVELA AVESSO
+    // VINHO VERDE DOC" e "Covela Avesso Vinho Verde DOC" são o mesmo vinho
+    // escrito em caixas diferentes, e é justamente esse o caso da faixa A.
+    const criarNaoEstaEmJogo = iguais.length >= 1;
 
     if (!UNIDADES_VALIDAS.has(unidade)) {
       avisos.push(`unidade "${unidadeBruta}" não existe no catálogo — decidir para qual das quatro vai`);
@@ -256,7 +274,7 @@ function main() {
       }
     }
     if (melhor && !melhor.p.ativo) avisos.push("sugestão está inativa");
-    if (!sugestaoEhOMesmoNome) {
+    if (!criarNaoEstaEmJogo) {
       if (exatos.has(`${nomeAoCriar}|||${unidade}`)) {
         avisos.push("já existe produto com esse nome e unidade — criar quebraria a chave única");
       } else {
@@ -264,11 +282,20 @@ function main() {
         if (parecido) avisos.push(`existe "${parecido}" (só muda maiúscula/minúscula) — criar geraria duplicata`);
       }
     }
-    const naCarta = cartaIndexada.find((v) => v.chave === ch);
+    // A carta casa por SEMELHANÇA, não por nome idêntico. O Teknisa escreve
+    // "LOUREIRO VINHO VERDE DOC BRANCO WINE" onde a casa vende "Loureiro Vinho
+    // Verde DOC" — uma palavra a mais derrubava o casamento exato, e a carta é
+    // o sinal mais útil desta planilha: é ela que diz o nome real do vinho na
+    // casa e se ele já sai com custo.
+    const naCarta = cartaIndexada
+      .map((v) => ({ v, score: v.chave === ch ? 1 : similaridade(tk, v.tokens, ch, v.chave) }))
+      .filter((x) => x.score >= 0.7)
+      .sort((a, b) => b.score - a.score)[0];
     if (naCarta) {
-      notas.push(naCarta.temReceita
-        ? `na carta como "${naCarta.nome}", com ficha`
-        : `na carta como "${naCarta.nome}", SEM ficha — hoje vende sem custo`);
+      const quase = naCarta.score < 1 ? ` (parecido, ${naCarta.score.toFixed(2)})` : "";
+      notas.push(naCarta.v.temReceita
+        ? `na carta como "${naCarta.v.nome}"${quase}, com ficha`
+        : `na carta como "${naCarta.v.nome}"${quase}, SEM ficha — hoje vende sem custo`);
     }
 
     return {
