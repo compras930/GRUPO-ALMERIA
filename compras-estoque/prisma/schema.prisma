@@ -411,6 +411,18 @@ model ItemNotaCompra {
   // (o nome sozinho não serve — é justamente o que não bate).
   codigoBruto  String?
   unidadeBruta String?
+  // De qual sistema veio o `codigoBruto`: "TEKNISA" ou "XMENU". Sem isto, o
+  // pareamento retroativo soma maçã com laranja — as consultas de "não
+  // casados" agrupam por `codigoBruto`, e os dois sistemas têm espaços de
+  // código independentes: nada garante que "1042" do XMenu não seja "1042" do
+  // Teknisa. Ver CodigoCompraProduto.origem, que é o outro lado disto.
+  //
+  // Nulo = linha carregada antes desta coluna existir, e portanto do Teknisa
+  // (as três casas de hoje). Quem consulta usa COALESCE(origemBruta,
+  // 'TEKNISA') em vez de backfill: a coluna diz o que a carga afirmou, e
+  // preencher retroativo apagaria a diferença entre "veio do Teknisa" e
+  // "ninguém disse".
+  origemBruta  String?
 
   // Quantidade comprada. É o que faz a compra virar ENTRADA DE ESTOQUE, e sem
   // ela não existe CMV real (estoque inicial + compras − estoque final) nem

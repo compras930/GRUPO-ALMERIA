@@ -45,11 +45,22 @@ CREATE INDEX IF NOT EXISTS "CodigoCompraProduto_origem_codigo_idx"
 CREATE INDEX IF NOT EXISTS "CodigoCompraProduto_produtoId_idx"
   ON "CodigoCompraProduto" ("produtoId");
 
+-- As duas constraints abaixo vão em DO/EXCEPTION porque o Postgres não tem
+-- `ADD CONSTRAINT IF NOT EXISTS`: sem isso, rodar este arquivo duas vezes
+-- morre em "constraint already exists" — e o resto do projeto todo assume que
+-- dá pra repetir um passo sem medo. Descoberto rodando de novo, não lendo.
+
 -- Fator zero ou negativo divide o preço por zero e zera a entrada de estoque.
 -- O núcleo puro já ignora cadastro assim; o banco recusa, que é mais barato.
-ALTER TABLE "CodigoCompraProduto"
-  ADD CONSTRAINT "CodigoCompraProduto_fator_positivo" CHECK ("fator" > 0);
+DO $$ BEGIN
+  ALTER TABLE "CodigoCompraProduto"
+    ADD CONSTRAINT "CodigoCompraProduto_fator_positivo" CHECK ("fator" > 0);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
-ALTER TABLE "CodigoCompraProduto"
-  ADD CONSTRAINT "CodigoCompraProduto_produtoId_fkey"
-  FOREIGN KEY ("produtoId") REFERENCES "Produto"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$ BEGIN
+  ALTER TABLE "CodigoCompraProduto"
+    ADD CONSTRAINT "CodigoCompraProduto_produtoId_fkey"
+    FOREIGN KEY ("produtoId") REFERENCES "Produto"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
