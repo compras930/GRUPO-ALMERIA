@@ -116,7 +116,7 @@ export default async function PedidoDetalhePage({ params }: { params: { id: stri
           <h2 style={{ fontSize: 15, marginBottom: 14 }}>Recebimentos registrados</h2>
           {pedido.recebimentos.map((r) => (
             <div key={r.id} style={{ marginBottom: 16 }}>
-              <p style={{ fontSize: 12.5, color: "#6b6252", marginBottom: 6 }}>
+              <p style={{ fontSize: 12.5, color: "#7a6a62", marginBottom: 6 }}>
                 {new Date(r.dataRecebimento).toLocaleString("pt-BR")} · recebido por {r.recebidoPor.nome}
                 {r.observacao ? ` · ${r.observacao}` : ""}
               </p>

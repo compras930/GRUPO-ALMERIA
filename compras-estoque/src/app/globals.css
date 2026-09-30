@@ -1,17 +1,18 @@
 @import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap");
 
 :root {
-  --ink: #1b2a22;
-  --paper: #f4f0e4;
-  --paper-2: #eae3d2;
-  --line: #d8cfb8;
-  --green-deep: #20402f;
-  --green-mid: #3a5f45;
-  --flame: #e2572b;
+  /* Paleta vinho — mesma do painel de Controle de Vendas. */
+  --ink: #2a1418;
+  --paper: #f4ebdc;
+  --paper-2: #ebdcc3;
+  --line: #ddcdb0;
+  --wine-deep: #6e0f26;
+  --wine-mid: #9b1b3d;
+  --flame: #9b1b3d;
   --ok: #3a7d53;
   --warn: #c98a1f;
-  --bad: #c0432d;
-  --white: #fffcf6;
+  --bad: #b3261e;
+  --white: #fffdf8;
 }
 
 * {
@@ -43,7 +44,7 @@ h3 {
   font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--green-mid);
+  color: var(--wine-mid);
   margin: 0 0 6px;
 }
 
@@ -55,7 +56,7 @@ h3 {
 .sidebar {
   width: 220px;
   flex: 0 0 220px;
-  background: var(--green-deep);
+  background: var(--wine-deep);
   color: var(--paper);
   padding: 24px 16px;
   display: flex;
@@ -71,14 +72,14 @@ h3 {
 }
 
 .sidebar .brand em {
-  color: var(--flame);
+  color: var(--paper-2);
   font-style: italic;
 }
 
 .sidebar .unit {
   font-family: "IBM Plex Mono", monospace;
   font-size: 11px;
-  color: #b9d1c1;
+  color: #e8c9d0;
   margin-bottom: 22px;
 }
 
@@ -100,7 +101,9 @@ h3 {
 }
 
 .sidebar a.active {
-  background: var(--flame);
+  background: var(--paper-2);
+  color: var(--wine-deep);
+  font-weight: 600;
   opacity: 1;
 }
 
@@ -145,7 +148,7 @@ thead th {
   text-align: left;
   padding: 12px 14px;
   border-bottom: 1.5px solid var(--ink);
-  background: var(--green-deep);
+  background: var(--wine-deep);
   color: var(--paper);
   white-space: nowrap;
 }
@@ -160,7 +163,7 @@ tbody tr {
 }
 
 tbody tr:hover {
-  background: #fbf8ef;
+  background: #fbf5ea;
 }
 
 td {
@@ -185,8 +188,8 @@ td {
 }
 
 .btn.primary {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--wine-mid);
+  color: var(--white);
 }
 
 .btn.flame {
@@ -230,7 +233,7 @@ td {
   font-size: 9.5px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--green-mid);
+  color: var(--wine-mid);
 }
 
 .field-group input,
@@ -268,8 +271,8 @@ td {
   border: 1px solid var(--bad);
 }
 .tag.neutral {
-  color: var(--green-mid);
-  border: 1px solid var(--green-mid);
+  color: var(--wine-mid);
+  border: 1px solid var(--wine-mid);
 }
 
 .kpis {
@@ -295,7 +298,7 @@ td {
   font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--green-mid);
+  color: var(--wine-mid);
   margin: 0 0 8px;
 }
 .kpi .val {
@@ -317,7 +320,7 @@ td {
   border-radius: 4px;
   padding: 40px;
   text-align: center;
-  color: #6b6252;
+  color: #7a6a62;
   font-size: 13.5px;
 }
 
@@ -378,7 +381,7 @@ td {
   background: var(--white);
   border: 1.5px solid var(--ink);
   border-radius: 2px;
-  box-shadow: 0 6px 18px rgba(27, 42, 34, 0.18);
+  box-shadow: 0 6px 18px rgba(42, 20, 24, 0.18);
 }
 
 .combobox-dropdown ul {
@@ -412,7 +415,7 @@ td {
   font-family: "IBM Plex Mono", monospace;
   font-size: 10px;
   letter-spacing: 0.06em;
-  color: var(--green-mid);
+  color: var(--wine-mid);
 }
 
 .combobox-novo {
@@ -427,7 +430,7 @@ td {
   background: var(--paper-2);
   border: none;
   border-top: 1px solid var(--line);
-  color: var(--green-deep);
+  color: var(--wine-deep);
   cursor: pointer;
 }
 
@@ -458,13 +461,13 @@ td {
   font-size: 9.5px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--green-mid);
+  color: var(--wine-mid);
   margin: 0;
 }
 
 .combobox-vazio {
   font-size: 12px;
-  color: var(--green-mid);
+  color: var(--wine-mid);
   padding: 8px 10px;
   margin: 0;
 }

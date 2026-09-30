@@ -65,7 +65,7 @@ export default function ContagemForm({ unidadeId, produtos }: { unidadeId: strin
         </div>
       </div>
       {produtoSelecionado && (
-        <p style={{ fontSize: 12.5, color: "#6b6252", marginTop: -6, marginBottom: 14 }}>
+        <p style={{ fontSize: 12.5, color: "#7a6a62", marginTop: -6, marginBottom: 14 }}>
           Saldo de sistema hoje: {produtoSelecionado.saldoSistema} {produtoSelecionado.unidadeMedida}
         </p>
       )}
