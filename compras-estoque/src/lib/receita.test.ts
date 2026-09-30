@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { explodirReceitaPura, receitasAfetadasPor, CicloReceitaError, type IndiceReceitas } from "./receita";
+import {
+  explodirReceitaPura,
+  custoDaLinhaPura,
+  receitasAfetadasPor,
+  CicloReceitaError,
+  type IndiceReceitas,
+} from "./receita";
 
 describe("explodirReceitaPura", () => {
   it("explosão simples: só insumos, sem sub-receita", () => {
@@ -119,5 +125,82 @@ describe("receitasAfetadasPor", () => {
       ["prato-1", { rendimentoQtd: null, ingredientes: [{ produtoId: "insumo-x", subReceitaId: null, quantidade: 1 }] }],
     ]);
     expect(receitasAfetadasPor(["insumo-z"], indice).size).toBe(0);
+  });
+});
+
+describe("custoDaLinhaPura", () => {
+  const precos = new Map([
+    ["tomate", 8],
+    ["queijo", 60],
+    ["manjericao", 40],
+  ]);
+
+  it("linha de insumo é quantidade × preço", () => {
+    const indice: IndiceReceitas = new Map();
+    expect(custoDaLinhaPura({ produtoId: "queijo", subReceitaId: null, quantidade: 0.15 }, indice, precos)).toBeCloseTo(9);
+  });
+
+  it("insumo sem preço entra como zero, não quebra", () => {
+    // Produto recém-criado, ainda sem compra. A ficha impressa marca a linha;
+    // inventar preço aqui seria pior.
+    const indice: IndiceReceitas = new Map();
+    expect(custoDaLinhaPura({ produtoId: "azeite-trufado", subReceitaId: null, quantidade: 0.02 }, indice, precos)).toBe(0);
+  });
+
+  it("linha de sub-receita custa a explosão dela pela quantidade consumida", () => {
+    const indice: IndiceReceitas = new Map([
+      [
+        "molho",
+        {
+          rendimentoQtd: 2, // o lote rende 2 kg
+          ingredientes: [
+            { produtoId: "tomate", subReceitaId: null, quantidade: 3 }, // 3 kg de tomate por lote
+            { produtoId: "manjericao", subReceitaId: null, quantidade: 0.05 },
+          ],
+        },
+      ],
+    ]);
+    // Consumir 0,5 kg = um quarto do lote = 0,75 kg de tomate + 0,0125 de manjericão
+    const custo = custoDaLinhaPura({ produtoId: null, subReceitaId: "molho", quantidade: 0.5 }, indice, precos);
+    expect(custo).toBeCloseTo(0.75 * 8 + 0.0125 * 40);
+  });
+
+  it("A SOMA DAS LINHAS FECHA COM O CUSTO DO LOTE — é o ponto da ficha impressa", () => {
+    // Se a soma da coluna não bater com o total, a ficha impressa vira motivo
+    // de desconfiança em vez de instrumento.
+    const indice: IndiceReceitas = new Map([
+      [
+        "molho",
+        { rendimentoQtd: 2, ingredientes: [{ produtoId: "tomate", subReceitaId: null, quantidade: 3 }] },
+      ],
+      [
+        "prato",
+        {
+          rendimentoQtd: null,
+          ingredientes: [
+            { produtoId: "queijo", subReceitaId: null, quantidade: 0.15 },
+            { produtoId: null, subReceitaId: "molho", quantidade: 0.5 },
+          ],
+        },
+      ],
+    ]);
+    const linhas = indice.get("prato")!.ingredientes;
+    const somaDasLinhas = linhas.reduce((s, l) => s + custoDaLinhaPura(l, indice, precos), 0);
+
+    let custoLote = 0;
+    for (const [produtoId, qtd] of explodirReceitaPura("prato", 1, indice)) {
+      custoLote += qtd * (precos.get(produtoId) ?? 0);
+    }
+    expect(somaDasLinhas).toBeCloseTo(custoLote, 10);
+  });
+
+  it("sub-receita com ciclo lança, não devolve número errado", () => {
+    const indice: IndiceReceitas = new Map([
+      ["a", { rendimentoQtd: null, ingredientes: [{ produtoId: null, subReceitaId: "b", quantidade: 1 }] }],
+      ["b", { rendimentoQtd: null, ingredientes: [{ produtoId: null, subReceitaId: "a", quantidade: 1 }] }],
+    ]);
+    expect(() => custoDaLinhaPura({ produtoId: null, subReceitaId: "a", quantidade: 1 }, indice, precos)).toThrow(
+      CicloReceitaError
+    );
   });
 });

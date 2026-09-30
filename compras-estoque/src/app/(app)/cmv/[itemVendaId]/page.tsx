@@ -62,6 +62,14 @@ export default async function ItemVendaPage({ params }: { params: { itemVendaId:
         <h1>{item.nome}</h1>
       </div>
 
+      {status !== "SEM_FICHA" && (
+        <div className="barra-acao">
+          <Link href={`/cmv/${item.id}/imprimir`} className="btn">
+            Imprimir ficha
+          </Link>
+        </div>
+      )}
+
       <div className="kpis" style={{ marginBottom: 24 }}>
         <div className="kpi">
           <p className="lbl">Custo</p>

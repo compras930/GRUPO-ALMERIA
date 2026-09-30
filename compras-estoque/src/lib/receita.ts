@@ -184,6 +184,39 @@ export function receitasAfetadasPor(produtoIds: Iterable<string>, indice: Indice
   return afetadas;
 }
 
+/**
+ * Quanto custa UMA LINHA da ficha, do jeito que ela está escrita.
+ *
+ * Existe pra ficha impressa: o chef precisa ver de onde vem o custo, linha a
+ * linha, e não só o total. "R$ 38,40 de custo" não diz se o problema é o
+ * camarão ou o açafrão; a coluna por linha diz.
+ *
+ * A conta é a MESMA que `explodirReceitaPura` faz por dentro, e é por isso que
+ * a soma das linhas fecha com `custoLote` em vez de bater perto. Linha de
+ * insumo é quantidade × preço; linha de sub-receita é a explosão dela pela
+ * quantidade consumida — que é literalmente o que a receita-mãe pede, sem
+ * precisar calcular "custo unitário da sub" à parte e arredondar no meio.
+ *
+ * Produto sem preço entra como zero, igual ao resto do módulo: a ficha impressa
+ * marca essas linhas, porque custo zero é o erro mais fácil de não ver.
+ *
+ * Lança CicloReceitaError se a sub-receita da linha tiver ciclo — mesma regra
+ * do resto, quem chama decide o que mostrar.
+ */
+export function custoDaLinhaPura(
+  linha: { produtoId: string | null; subReceitaId: string | null; quantidade: number },
+  indice: IndiceReceitas,
+  precos: Map<string, number>
+): number {
+  if (linha.produtoId) return linha.quantidade * (precos.get(linha.produtoId) ?? 0);
+  if (!linha.subReceitaId) return 0;
+  let custo = 0;
+  for (const [produtoId, qtd] of explodirReceitaPura(linha.subReceitaId, linha.quantidade, indice)) {
+    custo += qtd * (precos.get(produtoId) ?? 0);
+  }
+  return custo;
+}
+
 /** Wrapper conveniente: carrega o índice do banco e explode uma receita. */
 export async function explodirReceita(
   receitaId: string,

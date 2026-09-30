@@ -732,3 +732,111 @@ td.num,
 .kpi .val {
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------------------------------------------------------------------------
+   Ficha técnica impressa (/cmv/[itemVendaId]/imprimir)
+
+   Reaproveita .folha-* da folha de contagem — cabeçalho, tabela, rodapé e o
+   @media print que some com o menu. Aqui só o que é próprio da ficha.
+   --------------------------------------------------------------------------- */
+.ficha-resumo {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border: 1px solid var(--ink);
+  margin-bottom: 14px;
+}
+
+.ficha-resumo > div {
+  padding: 10px 12px;
+  border-right: 1px solid var(--line);
+}
+.ficha-resumo > div:last-child {
+  border-right: none;
+}
+
+.ficha-resumo .lbl {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 4px;
+}
+
+.ficha-resumo strong {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* "sub-receita" / "sem preço" ao lado do nome do ingrediente. Discreto na
+   tela e ainda legível impresso em preto e branco — daí o contorno, que não
+   depende de cor pra aparecer. */
+.ficha-marca {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid var(--muted);
+  color: var(--muted);
+  border-radius: 100px;
+  padding: 1px 7px;
+  margin-left: 8px;
+  white-space: nowrap;
+}
+
+.ficha-marca.alerta {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.ficha-total td {
+  border-top: 2px solid var(--ink);
+  font-weight: 700;
+}
+
+.ficha-preparo {
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  padding: 12px 14px;
+}
+
+.ficha-preparo h2 {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+
+.ficha-preparo p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  /* O modo de preparo é digitado com quebras de linha; sem isto vira um
+     parágrafo só e o cozinheiro perde o passo a passo. */
+  white-space: pre-line;
+}
+
+.folha-rodape p {
+  margin: 0 0 6px;
+}
+
+/* Cinza explícito em vez de herdar --ink com opacity: opacidade em texto sai
+   lavada em impressora jato de tinta, e o rodapé da ficha carrega o aviso de
+   "este custo está menor que o real" — que é justamente o que não pode sumir
+   no papel. */
+.folha-rodape {
+  color: #3c3335;
+  opacity: 1;
+}
+
+/* Na impressão a folha ocupa a página inteira: sem menu, sem botões, fundo
+   branco. Isso já vem do @media print da folha de contagem. O que falta é a
+   tabela não partir uma linha no meio da página. */
+@media print {
+  .ficha-resumo,
+  .ficha-preparo {
+    page-break-inside: avoid;
+  }
+}
