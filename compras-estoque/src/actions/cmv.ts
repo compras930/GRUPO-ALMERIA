@@ -1,11 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { normalizarNome } from "@/lib/nome-normalizado";
 import { casasDaCozinha } from "@/lib/unidade-fisica";
 import { carregarIndiceReceitas, explodirReceitaPura, CicloReceitaError } from "@/lib/receita";
+import { TIPO_ITEM_VENDA, type TipoItemVenda } from "@/lib/constants";
 import { resolverIngredientesPura, type LinhaIngredienteBruta } from "@/lib/resolucao-ingredientes";
 
 // A lista de ingredientes chega do FichaForm identificando cada linha por id
@@ -148,4 +150,56 @@ export async function salvarFicha(itemVendaId: string, formData: FormData) {
 
   revalidatePath(`/cmv/${itemVendaId}`);
   revalidatePath("/cmv");
+}
+
+/**
+ * Cadastra um ItemVenda novo (prato, bebida ou vinho) sem ficha técnica e leva
+ * pra tela da ficha, onde os ingredientes são preenchidos. O item nasce com
+ * `receitaId` null — aparece no CMV como "Sem ficha" até salvar a ficha.
+ *
+ * Duas chaves únicas protegem contra duplicata, e as duas são checadas antes
+ * pra devolver mensagem clara em vez do erro cru do Postgres:
+ * (unidadeId, tipo, categoria, nome) e (unidadeId, codigoPdv).
+ */
+export async function criarItemVenda(formData: FormData) {
+  await requireAdmin();
+
+  const unidadeId = String(formData.get("unidadeId") || "");
+  const tipoRaw = String(formData.get("tipo") || "");
+  const nome = normalizarNome(String(formData.get("nome") || ""));
+  const categoria = normalizarNome(String(formData.get("categoria") || "")) || null;
+  const precoVenda = Number(String(formData.get("precoVenda") || "").replace(",", "."));
+  const codigoPdv = String(formData.get("codigoPdv") || "").trim() || null;
+
+  if (!(TIPO_ITEM_VENDA as readonly string[]).includes(tipoRaw)) throw new Error("Tipo inválido.");
+  const tipo = tipoRaw as TipoItemVenda;
+  if (!nome) throw new Error("Informe o nome do item.");
+  if (!Number.isFinite(precoVenda) || precoVenda < 0) throw new Error("Preço de venda inválido.");
+
+  const unidade = await prisma.unidade.findUnique({ where: { id: unidadeId }, select: { id: true } });
+  if (!unidade) throw new Error("Unidade não encontrada.");
+
+  const duplicado = await prisma.itemVenda.findFirst({
+    where: { unidadeId, tipo, categoria, nome },
+    select: { id: true },
+  });
+  if (duplicado) {
+    throw new Error(`Já existe "${nome}"${categoria ? ` na categoria "${categoria}"` : ""} nesta casa.`);
+  }
+
+  if (codigoPdv) {
+    const jaUsado = await prisma.itemVenda.findFirst({ where: { unidadeId, codigoPdv }, select: { nome: true } });
+    if (jaUsado) {
+      throw new Error(
+        `O código de PDV "${codigoPdv}" já está cadastrado em "${jaUsado.nome}" nesta casa. Cada código pertence a um item só.`
+      );
+    }
+  }
+
+  const item = await prisma.itemVenda.create({
+    data: { unidadeId, tipo, nome, categoria, precoVenda, codigoPdv },
+  });
+
+  revalidatePath("/cmv");
+  redirect(`/cmv/${item.id}`);
 }

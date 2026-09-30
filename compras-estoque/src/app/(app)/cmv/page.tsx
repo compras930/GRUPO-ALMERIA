@@ -48,6 +48,12 @@ export default async function CmvPage({
         <h1>Fichas técnicas e custo</h1>
       </div>
 
+      <div style={{ marginBottom: 18 }}>
+        <Link href={`/cmv/novo?unidade=${unidadeSelecionada.id}&tipo=${tipo}`} className="btn primary">
+          + Novo item
+        </Link>
+      </div>
+
       <div className="field-row" style={{ marginBottom: 18 }}>
         <div className="field-group">
           <label htmlFor="unidade">Unidade</label>
