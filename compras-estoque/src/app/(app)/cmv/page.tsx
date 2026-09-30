@@ -4,7 +4,6 @@ import { requireAdmin } from "@/lib/session";
 import { listarItensComCusto, type ItemComCusto } from "@/lib/cmv";
 import { fmtCurrency } from "@/lib/format";
 import { TIPO_ITEM_VENDA, TIPO_ITEM_VENDA_LABEL, type TipoItemVenda } from "@/lib/constants";
-import NovoItemVenda from "@/components/NovoItemVenda";
 import AcoesItemVenda from "@/components/AcoesItemVenda";
 
 function fmtPct(v: number | null) {
@@ -74,12 +73,6 @@ export default async function CmvPage({
     ? comFicha.reduce((s, i) => s + (i.cmv ?? 0), 0) / comFicha.length
     : null;
 
-  // As categorias que já existem nessa casa e nesse tipo, pra o formulário
-  // sugerir em vez de deixar digitar uma variante nova de algo existente.
-  const categorias = [...new Set(todos.map((i) => i.categoria).filter((c): c is string => !!c))].sort(
-    (a, b) => a.localeCompare(b, "pt-BR")
-  );
-
   return (
     <div>
       <div className="page-header">
@@ -139,13 +132,11 @@ export default async function CmvPage({
         </div>
       </div>
 
-      <NovoItemVenda
-        unidadeId={unidadeSelecionada.id}
-        unidadeNome={unidadeSelecionada.nome}
-        tipo={tipo}
-        tipoLabel={TIPO_ITEM_VENDA_LABEL[tipo]}
-        categorias={categorias}
-      />
+      <div className="barra-acao">
+        <Link href={`/cmv/novo?unidade=${unidadeSelecionada.id}&tipo=${tipo}`} className="btn primary">
+          + Novo {TIPO_ITEM_VENDA_LABEL[tipo].toLowerCase().replace(/s$/, "")}
+        </Link>
+      </div>
 
       <table>
         <thead>

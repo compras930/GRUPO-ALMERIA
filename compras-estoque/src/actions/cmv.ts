@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { normalizarNome } from "@/lib/nome-normalizado";
@@ -168,6 +169,9 @@ export async function salvarFicha(itemVendaId: string, formData: FormData) {
  * Item INATIVO com o mesmo nome não é duplicata: é prato que já saiu e está
  * voltando. Aí a mensagem manda reativar em vez de criar, porque criar um
  * segundo registro perderia o histórico de venda do primeiro.
+ *
+ * Termina em `redirect` pra tela da ficha. Quem chama tem que deixar o
+ * NEXT_REDIRECT passar — ver FormNovoItemVenda.
  */
 export async function criarItemVenda(formData: FormData) {
   await requireAdmin();
@@ -208,10 +212,16 @@ export async function criarItemVenda(formData: FormData) {
     }
   }
 
-  await prisma.itemVenda.create({
+  const item = await prisma.itemVenda.create({
     data: { unidadeId, tipo, categoria, nome, precoVenda, codigoPdv },
   });
   revalidatePath("/cmv");
+
+  // Vai direto pra ficha: prato sem ficha é prato sem custo, e a lista já o
+  // mostraria como "sem ficha". Levar pra lá é o passo seguinte de qualquer
+  // jeito. (Veio da implementação paralela em db1d6eb, e é melhor que voltar
+  // pra lista, que era o que esta função fazia antes.)
+  redirect(`/cmv/${item.id}`);
 }
 
 /**
