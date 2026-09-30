@@ -32,9 +32,25 @@ export default function Sidebar({
 
   return (
     <nav className="sidebar">
-      <div className="brand">
-        Grupo <em>Almeria</em>
-      </div>
+      {/*
+        A marca do Grupo, não o nome escrito à mão que havia aqui antes.
+
+        A versão CLARA: o logo original é navy, e navy sobre o vinho do menu
+        não se enxerga. O arquivo tem o mesmo desenho recolorido em #f3ead9.
+
+        Servido em 376px e exibido em 170: o dobro da densidade, pra não sair
+        borrado em tela retina. `width`/`height` declarados porque sem eles o
+        menu "pula" enquanto a imagem carrega.
+
+        `alt` com o nome: é o cabeçalho do app pra quem usa leitor de tela.
+      */}
+      <img
+        className="brand"
+        src="/marca-grupo-almeria-claro.png"
+        alt="Grupo Almeria"
+        width={170}
+        height={69}
+      />
       <div className="unit">
         {unidadeNome ?? "Todas as unidades"} · {PAPEL_LABEL[papel]}
       </div>

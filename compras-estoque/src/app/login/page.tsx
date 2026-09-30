@@ -32,8 +32,21 @@ function LoginForm() {
   return (
     <div className="login-wrap">
       <div className="login-box">
-        <p className="eyebrow">Grupo Almeria</p>
-        <h1 style={{ fontSize: 24, marginBottom: 22 }}>Compras &amp; Estoque</h1>
+        {/*
+          A marca em vez do nome escrito. Aqui é a versão NAVY, a cor original
+          do logo: o cartão de login é claro, ao contrário do menu lateral.
+
+          O middleware precisa deixar `marca-` passar — esta tela, por
+          definição, não tem sessão. Ver src/middleware.ts.
+        */}
+        <img
+          className="login-marca"
+          src="/marca-grupo-almeria.png"
+          alt="Grupo Almeria"
+          width={188}
+          height={76}
+        />
+        <h1 style={{ fontSize: 22, marginBottom: 22 }}>Compras &amp; Estoque</h1>
         <form onSubmit={handleSubmit}>
           <div className="field-group" style={{ marginBottom: 14 }}>
             <label htmlFor="email">E-mail</label>

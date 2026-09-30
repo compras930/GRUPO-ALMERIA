@@ -10,5 +10,12 @@ export const config = {
   // 307 pra tela de login. O navegador não segue redirect pra buscar favicon —
   // então a aba do LOGIN, que é a primeira que qualquer pessoa vê, continuava
   // com o globo cinza. Só apareceu abrindo a URL do ícone de fora da sessão.
-  matcher: ["/((?!login|api/auth|api/n8n|_next/static|_next/image|favicon.ico|icon.png).*)"],
+  //
+  // `marca-` cobre os PNGs da marca em public/. Eles não são segredo — é o
+  // logo que está no site e na fachada —, e deixá-los de fora da checagem
+  // permite usar a marca na própria tela de login, que por definição não tem
+  // sessão. Sem isso, o mesmo 307 silencioso do favicon.
+  matcher: [
+    "/((?!login|api/auth|api/n8n|_next/static|_next/image|favicon.ico|icon.png|marca-).*)",
+  ],
 };

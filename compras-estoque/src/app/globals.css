@@ -74,19 +74,14 @@ h3 {
   gap: 4px;
 }
 
+/* A marca é imagem agora (ver src/components/Sidebar.tsx), não texto. O
+   `height: auto` com `aspect-ratio` deixa o navegador reservar o espaço antes
+   de a imagem chegar, sem o menu pular. */
 .sidebar .brand {
-  font-family: "Inter", sans-serif;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  font-size: 18px;
-  margin-bottom: 4px;
-}
-
-.sidebar .brand em {
-  /* Rosa claro, não --wine: o vinho da marca em cima do vinho-escuro do menu
-     ficava ilegível — só apareceu na primeira captura da tela. */
-  color: #e9a7b8;
-  font-style: italic;
+  display: block;
+  width: 170px;
+  height: auto;
+  margin-bottom: 10px;
 }
 
 .sidebar .unit {
@@ -519,9 +514,17 @@ td {
   justify-content: center;
 }
 
+.login-marca {
+  display: block;
+  width: 188px;
+  height: auto;
+  margin-bottom: 14px;
+}
+
 .login-box {
   background: var(--white);
-  border: 2px solid var(--ink);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 30px rgba(43, 25, 29, 0.08);
   border-radius: 4px;
   padding: 36px 40px;
   width: 100%;
