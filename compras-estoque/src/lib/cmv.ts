@@ -18,6 +18,8 @@ export type ItemComCusto = {
   categoria: string | null;
   tipo: string;
   precoVenda: number;
+  /** Fora do cardápio. O item continua aqui: o histórico de venda é dele. */
+  ativo: boolean;
   receitaId: string | null;
   custo: number | null;
   cmv: number | null;
@@ -61,6 +63,7 @@ export async function listarItensComCusto(unidadeId: string, tipo?: string): Pro
         categoria: item.categoria,
         tipo: item.tipo,
         precoVenda: item.precoVenda,
+        ativo: item.ativo,
         receitaId: null,
         custo: null,
         cmv: null,
@@ -75,6 +78,7 @@ export async function listarItensComCusto(unidadeId: string, tipo?: string): Pro
         categoria: item.categoria,
         tipo: item.tipo,
         precoVenda: item.precoVenda,
+        ativo: item.ativo,
         receitaId: item.receitaId,
         custo: null,
         cmv: null,
@@ -88,6 +92,7 @@ export async function listarItensComCusto(unidadeId: string, tipo?: string): Pro
       categoria: item.categoria,
       tipo: item.tipo,
       precoVenda: item.precoVenda,
+      ativo: item.ativo,
       receitaId: item.receitaId,
       custo: resultado.custo,
       cmv,

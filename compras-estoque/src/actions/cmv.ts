@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { normalizarNome } from "@/lib/nome-normalizado";
 import { casasDaCozinha } from "@/lib/unidade-fisica";
+import { TIPO_ITEM_VENDA, type TipoItemVenda } from "@/lib/constants";
 import { carregarIndiceReceitas, explodirReceitaPura, CicloReceitaError } from "@/lib/receita";
 import { resolverIngredientesPura, type LinhaIngredienteBruta } from "@/lib/resolucao-ingredientes";
 
@@ -147,5 +148,112 @@ export async function salvarFicha(itemVendaId: string, formData: FormData) {
   });
 
   revalidatePath(`/cmv/${itemVendaId}`);
+  revalidatePath("/cmv");
+}
+
+/**
+ * Cadastra um prato/bebida/vinho novo no cardápio de uma casa.
+ *
+ * Nasce SEM ficha técnica, de propósito: o item aparece na lista como "sem
+ * ficha" e alguém monta a receita depois. Criar as duas coisas de uma vez
+ * obrigaria a escolher ingredientes antes de o prato existir, e é comum o
+ * cardápio entrar antes de a ficha estar fechada.
+ *
+ * O dedupe é CASE-INSENSITIVE, ao contrário da constraint do banco
+ * (`@@unique([unidadeId, tipo, categoria, nome])`, que compara byte a byte em
+ * Postgres). Sem isto, "Filé au Poivre" e "FILE AU POIVRE" viram dois itens de
+ * cardápio e a venda semanal passa a casar ora com um, ora com outro — é o
+ * mesmo buraco que criou "BURRATA"/"Burrata" no catálogo de insumos.
+ *
+ * Item INATIVO com o mesmo nome não é duplicata: é prato que já saiu e está
+ * voltando. Aí a mensagem manda reativar em vez de criar, porque criar um
+ * segundo registro perderia o histórico de venda do primeiro.
+ */
+export async function criarItemVenda(formData: FormData) {
+  await requireAdmin();
+
+  const unidadeId = String(formData.get("unidadeId") || "");
+  const tipo = String(formData.get("tipo") || "");
+  const nome = normalizarNome(String(formData.get("nome") || ""));
+  const categoria = normalizarNome(String(formData.get("categoria") || "")) || null;
+  const codigoPdv = normalizarNome(String(formData.get("codigoPdv") || "")) || null;
+  // A planilha e o teclado brasileiro mandam vírgula; Number("28,90") é NaN.
+  const precoVenda = Number(String(formData.get("precoVenda") || "").trim().replace(",", "."));
+
+  if (!nome) throw new Error("Informe o nome do item.");
+  if (!TIPO_ITEM_VENDA.includes(tipo as TipoItemVenda)) throw new Error(`Tipo inválido: "${tipo}".`);
+  if (!Number.isFinite(precoVenda) || precoVenda <= 0) {
+    throw new Error("Informe um preço de venda maior que zero.");
+  }
+  const unidade = await prisma.unidade.findUnique({ where: { id: unidadeId } });
+  if (!unidade) throw new Error("Unidade inválida.");
+
+  const existente = await prisma.itemVenda.findFirst({
+    where: { unidadeId, tipo, categoria, nome: { equals: nome, mode: "insensitive" } },
+  });
+  if (existente) {
+    throw new Error(
+      existente.ativo
+        ? `"${existente.nome}" já está no cardápio de ${unidade.nome} nessa categoria. Abra o item para editar em vez de criar outro.`
+        : `"${existente.nome}" já existe em ${unidade.nome}, fora do cardápio. Use "Voltar ao cardápio" na lista de itens inativos — criar de novo perderia o histórico de venda dele.`
+    );
+  }
+
+  // codigoPdv é único POR CASA. Dois itens com o mesmo código fariam a venda
+  // semanal casar no errado, e o banco recusaria com um erro cru.
+  if (codigoPdv) {
+    const dono = await prisma.itemVenda.findFirst({ where: { unidadeId, codigoPdv } });
+    if (dono) {
+      throw new Error(`O código ${codigoPdv} já é de "${dono.nome}" em ${unidade.nome}.`);
+    }
+  }
+
+  await prisma.itemVenda.create({
+    data: { unidadeId, tipo, categoria, nome, precoVenda, codigoPdv },
+  });
+  revalidatePath("/cmv");
+}
+
+/**
+ * Tira do cardápio, ou devolve.
+ *
+ * É `ativo = false`, não DELETE. Prato que saiu do cardápio continua tendo
+ * venda registrada nas semanas em que existiu, e é dela que sai o consumo
+ * histórico e o CMV do período. Apagar o item apagaria o passado junto — a
+ * pergunta "quanto vendemos de picanha em agosto" deixaria de ter resposta.
+ */
+export async function alternarItemVenda(id: string, ativo: boolean) {
+  await requireAdmin();
+  await prisma.itemVenda.update({ where: { id }, data: { ativo } });
+  revalidatePath("/cmv");
+}
+
+/**
+ * Apaga de vez — só o que nunca vendeu.
+ *
+ * Existe para o item cadastrado errado (nome trocado, casa errada, duplicata),
+ * onde desativar deixaria lixo na tela para sempre. Com uma semana de venda
+ * sequer, recusa e manda desativar: a diferença entre "nunca existiu" e "saiu
+ * do cardápio" é justamente o que o histórico guarda.
+ */
+export async function excluirItemVenda(id: string) {
+  await requireAdmin();
+
+  const item = await prisma.itemVenda.findUnique({
+    where: { id },
+    include: { _count: { select: { itensVendaSemanal: true } } },
+  });
+  if (!item) throw new Error("Item não encontrado.");
+
+  if (item._count.itensVendaSemanal > 0) {
+    throw new Error(
+      `"${item.nome}" tem ${item._count.itensVendaSemanal} semana(s) de venda registradas — apagar levaria o histórico junto. Use "Tirar do cardápio".`
+    );
+  }
+
+  // A Receita não é apagada junto: ela pode ser sub-receita de outra ficha, e
+  // um DELETE em cascata aqui quebraria o custo de quem a usa. Ela fica
+  // visível e editável em /receitas.
+  await prisma.itemVenda.delete({ where: { id } });
   revalidatePath("/cmv");
 }

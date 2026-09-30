@@ -54,7 +54,7 @@ export default async function DashboardPage() {
           <p className="lbl">Aguardando recebimento</p>
           <div className="val">{aguardandoRecebimento.length}</div>
         </div>
-        <div className="kpi flame">
+        <div className="kpi destaque">
           <p className="lbl">Divergências (pedido vs. recebido)</p>
           <div className="val">{divergencias.length}</div>
         </div>

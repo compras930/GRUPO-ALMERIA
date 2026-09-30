@@ -53,7 +53,7 @@ export default async function PedidoDetalhePage({ params }: { params: { id: stri
           <p className="lbl">Solicitante</p>
           <div className="val" style={{ fontSize: 18 }}>{pedido.solicitante.nome}</div>
         </div>
-        <div className="kpi flame">
+        <div className="kpi destaque">
           <p className="lbl">Total esperado</p>
           <div className="val">{fmtCurrency(totalEsperado)}</div>
         </div>
@@ -174,7 +174,7 @@ export default async function PedidoDetalhePage({ params }: { params: { id: stri
           </ActionButton>
         )}
         {podeReceberEsse && (
-          <Link href={`/recebimentos/novo/${pedido.id}`} className="btn flame">
+          <Link href={`/recebimentos/novo/${pedido.id}`} className="btn destaque">
             Registrar recebimento
           </Link>
         )}

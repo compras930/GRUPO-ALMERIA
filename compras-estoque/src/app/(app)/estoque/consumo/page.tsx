@@ -96,7 +96,7 @@ export default async function ConsumoPage({ searchParams }: { searchParams: { un
       ) : (
         <>
           <div className="kpis" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
-            <div className="kpi flame">
+            <div className="kpi destaque">
               <p className="lbl">Consumo no período</p>
               <div className="val">{fmtCurrency(total)}</div>
             </div>
