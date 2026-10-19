@@ -34,11 +34,47 @@ export const STATUS_PEDIDO_LABEL: Record<StatusPedido, string> = {
   CANCELADO: "Cancelado",
 };
 
+/**
+ * Motivos de baixa declarada — mercadoria que saiu da despensa e NÃO virou
+ * venda. O gerente lança diariamente.
+ *
+ * POR QUE O MOTIVO MORA NO `tipo`, e não numa coluna nova. `MovimentoEstoque.tipo`
+ * já é texto com prefixo por família (ENTRADA_, AJUSTE_, SAIDA_), e um
+ * `GROUP BY tipo` já dá a quebra por motivo. Coluna nova exigiria migração, e
+ * migração exige que o banco mude ANTES do código — a coordenação que já custou
+ * caro neste projeto. Detalhe livre continua cabendo em `observacao`.
+ *
+ * AS DUAS ÚLTIMAS NÃO SÃO DESPERDÍCIO, e estão aqui de propósito: cortesia e
+ * refeição da equipe também saem do estoque sem virar receita. Para a conta do
+ * CMV é a mesma pergunta — "saiu e não vendeu" —, e separá-las em outra tela
+ * faria o gerente lançar em dois lugares no mesmo gesto.
+ */
+export const TIPO_PERDA = [
+  "PERDA_PREPARO",
+  "PERDA_VALIDADE",
+  "PERDA_QUEBRA",
+  "PERDA_PRODUCAO",
+  "PERDA_CORTESIA",
+  "PERDA_CONSUMO_INTERNO",
+] as const;
+export type TipoPerda = (typeof TIPO_PERDA)[number];
+
+export const TIPO_PERDA_LABEL: Record<TipoPerda, string> = {
+  PERDA_PREPARO: "Preparo (aparas, limpeza, porcionamento)",
+  PERDA_VALIDADE: "Vencimento",
+  PERDA_QUEBRA: "Quebra ou avaria",
+  PERDA_PRODUCAO: "Erro de produção (queimou, refez)",
+  PERDA_CORTESIA: "Cortesia a cliente",
+  PERDA_CONSUMO_INTERNO: "Consumo da equipe",
+};
+
 export const TIPO_MOVIMENTO = [
+  "ENTRADA_NOTA",
   "ENTRADA_RECEBIMENTO",
   "SAIDA_CONSUMO",
   "AJUSTE_CONTAGEM",
   "AJUSTE_MANUAL",
+  ...TIPO_PERDA,
 ] as const;
 export type TipoMovimento = (typeof TIPO_MOVIMENTO)[number];
 

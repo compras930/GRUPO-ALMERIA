@@ -90,3 +90,50 @@ export const TIPOS_DE_ENTRADA = ["ENTRADA_NOTA", "ENTRADA_RECEBIMENTO", "AJUSTE_
 // SAIDA_CONSUMO também: é a baixa TEÓRICA, calculada da ficha. Este relatório
 // mede o que saiu de verdade, e misturar as duas coisas apagaria justamente a
 // diferença que interessa.
+//
+// PERDA_* também, e esta é a que mais confunde — ver perdasPorProdutoPura.
+
+/**
+ * Quanto de cada produto saiu como BAIXA DECLARADA dentro da janela de consumo
+ * daquele produto.
+ *
+ * PERDA NÃO SOMA AO CONSUMO. ELA SEPARA O CONSUMO.
+ *
+ * O que foi jogado fora já saiu da prateleira, então a contagem final já está
+ * menor e a perda JÁ ESTÁ dentro de `consumo`. Somá-la de novo contaria duas
+ * vezes. Por isso PERDA_* fica fora de TIPOS_DE_ENTRADA e esta função devolve
+ * um número à parte, para a tela mostrar:
+ *
+ *     consumo total = o que virou venda + o que foi baixado
+ *
+ * É essa quebra que separa "receita rendendo menos" de "lixo" de "sumindo" —
+ * três causas que o consumo total sozinho não distingue.
+ *
+ * A janela é a do PRÓPRIO produto (entre as duas últimas contagens dele), não
+ * uma data global: cada produto fecha período quando é contado.
+ *
+ * SINAL: o movimento é gravado negativo (a convenção de MovimentoEstoque é
+ * "positivo = entrada, negativo = saída"). Aqui sai em MÓDULO, porque quem lê
+ * a tela quer "perdemos 3 kg", não "-3". Converter no lugar errado é como um
+ * número certo vira número errado sem ninguém ver.
+ */
+export function perdasPorProdutoPura(
+  consumos: Pick<ConsumoProduto, "produtoId" | "de" | "ate">[],
+  perdas: EntradaResumo[]
+): Map<string, number> {
+  const porProduto = new Map<string, EntradaResumo[]>();
+  for (const p of perdas) {
+    porProduto.set(p.produtoId, [...(porProduto.get(p.produtoId) ?? []), p]);
+  }
+
+  const total = new Map<string, number>();
+  for (const c of consumos) {
+    // Mesma regra de borda das entradas: a baixa no instante da contagem
+    // anterior fica de fora (aquela contagem já viu a prateleira sem ela).
+    const soma = (porProduto.get(c.produtoId) ?? [])
+      .filter((p) => p.em > c.de && p.em <= c.ate)
+      .reduce((s, p) => s + Math.abs(p.quantidade), 0);
+    if (soma > 0) total.set(c.produtoId, soma);
+  }
+  return total;
+}
