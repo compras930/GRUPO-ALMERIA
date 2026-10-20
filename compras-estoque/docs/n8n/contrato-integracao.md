@@ -157,8 +157,12 @@ apagar e reinserir nada: a carga pode rodar quantas vezes quiser.
 inconsistentes (MC, FA, VD, GL...), com pares sem sentido como "KG → MC fator
 1". A coluna `unidade` tem 5 valores limpos e é a que serve.
 
-`PCT` ainda não está na tabela de sinônimos do app; vai ser mapeado para `CX`
-do nosso lado.
+`PCT` é mapeado para `CX` pela tabela de sinônimos do app
+(`SINONIMO_UNIDADE`, em `src/lib/resolucao-produto-compra.ts`) — mande `PCT`
+mesmo, a tradução é do nosso lado. **Isso vale para a linha, e por isso vale
+também para o cadastro:** o produto tem que estar cadastrado em `CX`, não em
+`PCT`, senão a busca não acha nada e a linha volta como "não reconhecida" sem
+nenhuma pista. Foi o que aconteceu com as 75 linhas em PCT da primeira carga.
 
 ## Cuidado que derruba a carga inteira
 
