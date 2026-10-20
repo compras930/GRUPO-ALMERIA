@@ -107,6 +107,26 @@ export type ResultadoNotaCompra = {
     precoRecebido: number;
     razao: number;
   }[];
+  /**
+   * Preços que entraram SEM comparação possível: produto que não tinha preço
+   * nesta despensa até agora.
+   *
+   * É o ponto cego da trava de salto. Ela só sabe recusar o que destoa do
+   * preço anterior — e produto novo não tem anterior, então o primeiro valor
+   * entra inteiro, seja ele qual for. Não é um defeito a consertar: é o único
+   * comportamento possível quando não há referência. O que dava pra consertar
+   * era o silêncio, e é o que esta lista faz.
+   *
+   * Apareceu na primeira carga do Beira Lago: 395 produtos recém-cadastrados,
+   * `precosSuspeitos` vazio, e no meio deles a SALSA CRESPA a R$ 150/kg contra
+   * uma mediana de R$ 46 no próprio período — maço lançado como quilo na
+   * origem. Vai direto pro custo de toda ficha que use o insumo.
+   *
+   * Quem opera deve olhar esta lista na PRIMEIRA carga de uma casa. Nas
+   * seguintes ela tende a zero, e um número alto fora da primeira vez quer
+   * dizer que alguém cadastrou produto novo — ou que a origem renomeou coisa.
+   */
+  precosPrimeiraVez: { produtoId: string; nome: string; unidadeMedida: string; preco: number }[];
   naoReconhecidos: ItemPrecoInput[];
   itensImpactados: {
     itemVendaId: string;
@@ -447,8 +467,21 @@ export async function processarNotaCompra(
   }
 
   precosAtualizados = precoAGravar.size;
+  const produtoPorId = new Map(produtos.map((p) => [p.id, p]));
+  const precosPrimeiraVez: ResultadoNotaCompra["precosPrimeiraVez"] = [];
   for (const [produtoId, p] of precoAGravar) {
     produtosAlterados.add(produtoId);
+    // `precosAntes` é o retrato de ANTES de qualquer escrita desta carga, então
+    // "não está nele" é exatamente "não havia preço pra comparar".
+    if (!precosAntes.has(produtoId)) {
+      const doCatalogo = produtoPorId.get(produtoId);
+      precosPrimeiraVez.push({
+        produtoId,
+        nome: doCatalogo?.nome ?? produtoId,
+        unidadeMedida: doCatalogo?.unidadeMedida ?? "",
+        preco: p.preco,
+      });
+    }
     precosDepois.set(produtoId, p.preco);
   }
 
@@ -613,6 +646,7 @@ export async function processarNotaCompra(
     codigosNaoGravados,
     recusadasPorCodigo,
     precosSuspeitos,
+    precosPrimeiraVez,
     naoReconhecidos,
     itensImpactados,
   };

@@ -181,6 +181,7 @@ coisa mudou na origem:
 | `entradasSemChave` | linha sem `chave` — estoque NÃO entrou |
 | `recusadasPorCodigo` | contradição de código ou unidade |
 | `precosSuspeitos` | preço saltou 5x ou mais — quase sempre unidade trocada |
+| `precosPrimeiraVez` | preço que entrou SEM comparação possível — ver abaixo |
 | `linhasJaCarregadas` | linha repetida e pulada; igual a `totalRecebido` significa "nada era novo", que é o certo ao reexecutar |
 
 Também vêm `precosAtualizados`, `casadosPorCodigo`, `casadosPorNome`,
@@ -189,6 +190,26 @@ Também vêm `precosAtualizados`, `casadosPorCodigo`, `casadosPorNome`,
 **Combine com quem opera: essa resposta é para ser lida.** Se
 `naoReconhecidos` pular de 20 para 300, alguém renomeou coisa na origem — e a
 carga vai continuar respondendo 200.
+
+## `precosSuspeitos` vazio não quer dizer "preços bons"
+
+A trava de salto compara o preço recebido com o **anterior**. Produto que
+ainda não tinha preço nesta despensa não tem anterior — então o primeiro
+valor entra inteiro, seja ele qual for, e `precosSuspeitos` volta vazio.
+
+Não é defeito: é o único comportamento possível sem referência. O que dava
+para consertar era o silêncio, e é o que `precosPrimeiraVez` faz — ela lista
+todo preço que entrou sem comparação, com produto e valor.
+
+Isso morde justamente na **primeira carga de uma casa**, quando todo produto é
+novo. No Beira Lago foram 395 de uma vez, com `precosSuspeitos` vazio, e no
+meio deles a SALSA CRESPA a R$ 150/kg contra uma mediana de R$ 46 no próprio
+período — maço lançado como quilo na origem. Esse número vira custo de toda
+ficha que use salsa.
+
+Da segunda carga em diante a lista tende a zero. Um número alto fora da
+primeira vez quer dizer que alguém cadastrou produto novo, ou que a origem
+renomeou alguma coisa.
 
 ---
 
