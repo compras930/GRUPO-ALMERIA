@@ -333,3 +333,73 @@ describe("resolverLinhaCompraPura com CodigoCompraProduto", () => {
     expect(resolverLinhaCompraPura({ nome: "x", unidadeMedida: "LT", codigo: "999999999999" }, idx).motivo).toBe("NAO_ENCONTRADO");
   });
 });
+
+describe("conversão no casamento por NOME (o caminho do XMenu, que não manda código)", () => {
+  // O XMenu do Beira Lago não manda código nenhum — ver docs/n8n/contrato-integracao.md.
+  // Até 20/10/2026 a conversão só era consultada no caminho do CÓDIGO, então
+  // cadastrar uma ConversaoUnidadeCompra pra essas linhas não fazia efeito
+  // nenhum: elas voltavam como "não reconhecidas" para sempre, caladas.
+  const catalogo: ProdutoResumo[] = [
+    { id: "ap", nome: "APERITIVO APEROL 750ML", unidadeMedida: "UND", codigoTeknisa: null },
+    { id: "ca", nome: "CASTANHA DE CAJU TORRADA SEM SAL", unidadeMedida: "UND", codigoTeknisa: null },
+    { id: "ac", nome: "ACELGA", unidadeMedida: "LT", codigoTeknisa: null },
+  ];
+
+  it("casa por nome em outra unidade quando a conversão existe", () => {
+    const idx = montarIndiceProdutos(catalogo, [
+      { produtoId: "ap", unidadeCompra: "LT", fator: 1.3333 }, // 1 litro = 1,3333 garrafas de 750ml
+      { produtoId: "ca", unidadeCompra: "KG", fator: 1 },      // pacote de 1 kg
+    ]);
+
+    const aperol = resolverLinhaCompraPura({ nome: "APERITIVO APEROL 750ML", unidadeMedida: "LT" }, idx);
+    expect(aperol.via).toBe("NOME");
+    expect(aperol.produto?.id).toBe("ap");
+    expect(aperol.fatorConversao).toBe(1.3333);
+    // 4,5 LT viram 6 garrafas, e R$ 79,83 o litro vira R$ 59,87 a garrafa.
+    expect(4.5 * aperol.fatorConversao).toBeCloseTo(6, 3);
+    expect(79.83 / aperol.fatorConversao).toBeCloseTo(59.87, 2);
+
+    const castanha = resolverLinhaCompraPura(
+      { nome: "CASTANHA DE CAJU TORRADA SEM SAL", unidadeMedida: "KG" },
+      idx
+    );
+    expect(castanha.via).toBe("NOME");
+    expect(castanha.fatorConversao).toBe(1);
+  });
+
+  it("SEM conversão declarada, nome em outra unidade continua não casando", () => {
+    // É a regra que impede preço de caixa virar preço de quilo. A acelga está
+    // cadastrada em LT e a compra vem em KG, sem ninguém ter dito quanto vale
+    // um pelo outro — porque não vale: é erro de cadastro, não embalagem.
+    const idx = montarIndiceProdutos(catalogo, []);
+    const r = resolverLinhaCompraPura({ nome: "ACELGA", unidadeMedida: "KG" }, idx);
+    expect(r.produto).toBeNull();
+    expect(r.motivo).toBe("NAO_ENCONTRADO");
+  });
+
+  it("nome igual em dois produtos, os dois com conversão: recusa em vez de escolher", () => {
+    const dois: ProdutoResumo[] = [
+      { id: "a", nome: "AZEITE", unidadeMedida: "LT", codigoTeknisa: null },
+      { id: "b", nome: "AZEITE", unidadeMedida: "UND", codigoTeknisa: null },
+    ];
+    const idx = montarIndiceProdutos(dois, [
+      { produtoId: "a", unidadeCompra: "CX", fator: 12 },
+      { produtoId: "b", unidadeCompra: "CX", fator: 6 },
+    ]);
+    const r = resolverLinhaCompraPura({ nome: "AZEITE", unidadeMedida: "CX" }, idx);
+    expect(r.produto).toBeNull();
+    expect(r.motivo).toBe("CONVERSAO_AMBIGUA");
+  });
+
+  it("o caminho exato continua ganhando do caminho da conversão", () => {
+    // Produto na unidade certa existe: a conversão não deve ser nem olhada,
+    // e o fator tem que ser 1.
+    const idx = montarIndiceProdutos(
+      [...catalogo, { id: "ap-lt", nome: "APERITIVO APEROL 750ML", unidadeMedida: "LT", codigoTeknisa: null }],
+      [{ produtoId: "ap", unidadeCompra: "LT", fator: 1.3333 }]
+    );
+    const r = resolverLinhaCompraPura({ nome: "APERITIVO APEROL 750ML", unidadeMedida: "LT" }, idx);
+    expect(r.produto?.id).toBe("ap-lt");
+    expect(r.fatorConversao).toBe(1);
+  });
+});

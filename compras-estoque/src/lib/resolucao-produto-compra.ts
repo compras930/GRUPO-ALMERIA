@@ -101,7 +101,13 @@ export type MotivoNaoCasou =
    * É erro de cadastro: escolher um gravaria preço no produto errado em
    * silêncio. Não acontece com `Produto.codigoTeknisa`, que é unique.
    */
-  | "CODIGO_AMBIGUO";
+  | "CODIGO_AMBIGUO"
+  /**
+   * O nome casa com DOIS produtos de unidades diferentes, e os dois declaram
+   * conversão para a unidade desta linha. Escolher um seria tirar no par ou
+   * ímpar qual deles recebe o preço. É erro de cadastro, não decisão daqui.
+   */
+  | "CONVERSAO_AMBIGUA";
 
 export type ResolucaoLinhaCompra = {
   produto: ProdutoResumo | null;
@@ -157,6 +163,12 @@ export type IndiceProdutos = {
   unidadesPorCodigoCompra: Map<string, string[]>;
   porCodigo: Map<string, ProdutoResumo>;
   porNomeUnidade: Map<string, ProdutoResumo>;
+  /**
+   * chaveComparacao(nome) -> todos os produtos com esse nome, em QUALQUER
+   * unidade. Só é consultado quando nome+unidade falhou e existe conversão
+   * declarada — ver o passo 2b de resolverLinhaCompraPura.
+   */
+  porNomeQualquerUnidade: Map<string, ProdutoResumo[]>;
   conversoes: Map<string, number>;
 };
 
@@ -175,8 +187,11 @@ export function montarIndiceProdutos(
     if (c) porCodigo.set(c, p);
   }
   const porNomeUnidade = new Map<string, ProdutoResumo>();
+  const porNomeQualquerUnidade = new Map<string, ProdutoResumo[]>();
   for (const p of produtos) {
     porNomeUnidade.set(`${chaveComparacao(p.nome)}|||${p.unidadeMedida}`, p);
+    const chave = chaveComparacao(p.nome);
+    porNomeQualquerUnidade.set(chave, [...(porNomeQualquerUnidade.get(chave) ?? []), p]);
   }
   const mapaConversoes = new Map<string, number>();
   for (const c of conversoes) {
@@ -215,8 +230,20 @@ export function montarIndiceProdutos(
     unidadesPorCodigoCompra,
     porCodigo,
     porNomeUnidade,
+    porNomeQualquerUnidade,
     conversoes: mapaConversoes,
   };
+}
+
+/** As duas grafias que `porNome` tenta: a cheia e a sem o sufixo de unidade. */
+function candidatosDeNome(nomeBruto: string, unidade: string): string[] {
+  const nome = normalizarNome(nomeBruto);
+  const chaves = [chaveComparacao(nome)];
+  const sufixo = ` ${unidade}`;
+  if (nome.toUpperCase().endsWith(sufixo)) {
+    chaves.push(chaveComparacao(nome.slice(0, nome.length - sufixo.length).trim()));
+  }
+  return chaves;
 }
 
 function porNome(indice: IndiceProdutos, nomeBruto: string, unidade: string): ProdutoResumo | null {
@@ -299,6 +326,42 @@ export function resolverLinhaCompraPura(linha: LinhaCompraBruta, indice: IndiceP
   // 2. Sem código, ou código desconhecido: cai pro nome.
   const achado = porNome(indice, linha.nome, unidade);
   if (!achado) {
+    // 2b. O nome existe, mas noutra unidade — E alguém já declarou quanto vale
+    //     a embalagem. Aí não é "não encontrado": é conversão conhecida.
+    //
+    //     Isto existe por causa do XMenu. Até aqui a conversão só era
+    //     consultada no caminho do CÓDIGO (passo 1), e o XMenu não manda
+    //     código nenhum — então cadastrar uma ConversaoUnidadeCompra para o
+    //     Beira Lago não fazia efeito NENHUM, e a linha voltava como "não
+    //     reconhecida" para sempre. Caladamente, porque "não encontrado" é a
+    //     mesma resposta de produto que não existe.
+    //
+    //     Continua valendo a regra do passo 1: sem conversão declarada, nome
+    //     em outra unidade NÃO casa. Preço de caixa não vira preço de quilo
+    //     só porque o nome bate.
+    const candidatos = candidatosDeNome(linha.nome, unidade)
+      .flatMap((chave) => indice.porNomeQualquerUnidade.get(chave) ?? [])
+      .map((p) => ({ produto: p, fator: indice.conversoes.get(`${p.id}|||${unidade}`) }))
+      .filter((c): c is { produto: ProdutoResumo; fator: number } => c.fator !== undefined);
+
+    // Dois produtos de mesmo nome, unidades diferentes, os dois com conversão
+    // pra esta embalagem: escolher um é tirar no par ou ímpar quem fica com o
+    // preço. Recusa e reporta.
+    const distintos = new Set(candidatos.map((c) => c.produto.id));
+    if (distintos.size > 1) {
+      return { produto: null, via: null, motivo: "CONVERSAO_AMBIGUA", codigoSugerido: null, fatorConversao: 1 };
+    }
+    if (candidatos.length === 1) {
+      const { produto, fator } = candidatos[0];
+      // A mesma contradição do passo 3, e pelo mesmo motivo: identificador
+      // ganha de texto. Se a linha traz código e o produto declara outro, o
+      // nome não desempata.
+      const codigoDele = normalizarCodigo(produto.codigoTeknisa);
+      if (codigo && codigoDele && codigoDele !== codigo) {
+        return { produto, via: null, motivo: "CONFLITO_DE_CODIGO", codigoSugerido: null, fatorConversao: 1 };
+      }
+      return { produto, via: "NOME", motivo: null, codigoSugerido: null, fatorConversao: fator };
+    }
     return { produto: null, via: null, motivo: "NAO_ENCONTRADO", codigoSugerido: null, fatorConversao: 1 };
   }
 
@@ -325,4 +388,6 @@ export const EXPLICACAO_MOTIVO: Record<MotivoNaoCasou, string> = {
   CONFLITO_DE_CODIGO: "o produto com esse nome já está cadastrado com outro código do Teknisa",
   UNIDADE_DIVERGENTE: "o código casa com um produto cadastrado em outra unidade de medida",
   CODIGO_AMBIGUO: "o código está cadastrado em mais de um produto — corrigir o cadastro antes",
+  CONVERSAO_AMBIGUA:
+    "esse nome existe em mais de um produto com conversão para esta embalagem — corrigir o cadastro antes",
 };
