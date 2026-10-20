@@ -4,14 +4,28 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import type { Papel } from "@/lib/constants";
-import { PAPEL_LABEL } from "@/lib/constants";
+import { PAPEIS, PAPEL_LABEL } from "@/lib/constants";
+import { podeVerPedidos } from "@/lib/permissions";
 
-const NAV: Array<{ href: string; label: string; papeis?: Papel[] }> = [
+/**
+ * `papeis` ausente = todo mundo vê. `daUnidade` = só aparece pra quem tem uma
+ * casa; as páginas de contagem e perda dependem de uma unidade, e o ADMIN sem
+ * unidade entra nelas pelo Estoque, escolhendo a casa antes.
+ *
+ * ISTO É MENU, NÃO SEGURANÇA. Quem decide o que pode é o servidor:
+ * `requireAdmin` nas páginas de cadastro e `requireSession` + `unidadeVisivel`
+ * nas ações de estoque e pedido. Esconder link só evita que alguém se perca.
+ */
+const NAV: Array<{ href: string; label: string; papeis?: Papel[]; daUnidade?: boolean }> = [
   { href: "/dashboard", label: "Painel" },
   { href: "/cmv", label: "CMV", papeis: ["ADMIN"] },
   { href: "/receitas", label: "Sub-receitas", papeis: ["ADMIN"] },
-  { href: "/pedidos", label: "Pedidos de compra" },
+  // Derivado do helper, não repetido à mão: a regra de quem vê pedido mora em
+  // um lugar só, e o menu segue ela.
+  { href: "/pedidos", label: "Pedidos de compra", papeis: PAPEIS.filter(podeVerPedidos) },
   { href: "/estoque", label: "Estoque" },
+  { href: "/estoque/contagem", label: "Contagem da semana", daUnidade: true },
+  { href: "/estoque/perdas", label: "Perdas e baixas", daUnidade: true },
   { href: "/estoque/consumo", label: "Consumo" },
   { href: "/fornecedores", label: "Fornecedores", papeis: ["ADMIN"] },
   { href: "/produtos", label: "Produtos", papeis: ["ADMIN"] },
@@ -54,7 +68,9 @@ export default function Sidebar({
       <div className="unit">
         {unidadeNome ?? "Todas as unidades"} · {PAPEL_LABEL[papel]}
       </div>
-      {NAV.filter((item) => !item.papeis || item.papeis.includes(papel)).map((item) => (
+      {NAV.filter(
+        (item) => (!item.papeis || item.papeis.includes(papel)) && (!item.daUnidade || unidadeNome !== null)
+      ).map((item) => (
         <Link
           key={item.href}
           href={item.href}

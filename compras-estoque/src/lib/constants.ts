@@ -1,7 +1,11 @@
 // Constantes de domínio — o SQLite não tem enum nativo, então os papéis e status
 // vivem como string no banco e são validados/tipados aqui.
 
-export const PAPEIS = ["ADMIN", "APROVADOR", "SOLICITANTE", "RECEBEDOR"] as const;
+// GERENTE é o responsável pela unidade: conta o estoque toda segunda, lança
+// perda todo dia e olha o consumo da própria casa. Não é um papel de compra —
+// ele NÃO cria nem aprova pedido, e os helpers de permissão já garantem isso
+// por omissão (cada um lista quem pode; quem não está, não pode).
+export const PAPEIS = ["ADMIN", "APROVADOR", "SOLICITANTE", "RECEBEDOR", "GERENTE"] as const;
 export type Papel = (typeof PAPEIS)[number];
 
 export const PAPEL_LABEL: Record<Papel, string> = {
@@ -9,6 +13,7 @@ export const PAPEL_LABEL: Record<Papel, string> = {
   APROVADOR: "Aprovador",
   SOLICITANTE: "Solicitante",
   RECEBEDOR: "Recebedor",
+  GERENTE: "Gerente da unidade",
 };
 
 export const STATUS_PEDIDO = [

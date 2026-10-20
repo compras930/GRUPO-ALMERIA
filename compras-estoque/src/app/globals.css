@@ -843,3 +843,40 @@ td.num,
     page-break-inside: avoid;
   }
 }
+
+/* Duas tabelas lado a lado no painel (compras e vendas). Abaixo de 900px elas
+   empilham: no celular, duas colunas de número viram duas colunas ilegíveis. */
+.duas-colunas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .duas-colunas {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Variante discreta da tabbar: filtro secundário (período do painel), não a
+   navegação principal da tela. A faixa vinho cheia é peso visual demais pra
+   "30 / 90 dias" e competia com os próprios números. */
+.tabbar.discreta {
+  background: transparent;
+  padding: 0;
+  margin-bottom: 0;
+}
+.tabbar.discreta .chip {
+  color: var(--muted);
+  background: transparent;
+  border-color: var(--line);
+}
+.tabbar.discreta .chip:hover {
+  background: var(--paper-2);
+  color: var(--ink);
+}
+.tabbar.discreta .chip.ativo {
+  background: var(--wine);
+  color: var(--white);
+  border-color: var(--wine);
+}
