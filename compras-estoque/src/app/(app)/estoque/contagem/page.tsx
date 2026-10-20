@@ -3,7 +3,14 @@ import { prisma } from "@/lib/prisma";
 import { idDaUnidadeFisica } from "@/lib/unidade-fisica";
 import { requireSession } from "@/lib/session";
 import { unidadeVisivel } from "@/lib/permissions";
-import { SEMANAS, semanaDoMes, gruposDaSemana, type Semana } from "@/lib/contagem-rotacao";
+import {
+  SEMANAS,
+  semanaDoMes,
+  gruposDaSemana,
+  entraNaSemanaPura,
+  GRUPO_TODA_SEMANA,
+  type Semana,
+} from "@/lib/contagem-rotacao";
 import ContagemForm from "@/components/ContagemForm";
 import ContagemLoteForm from "@/components/ContagemLoteForm";
 
@@ -37,20 +44,22 @@ export default async function ContagemPage({
   // O filtro do rodízio vive no banco (ParametroEstoqueProduto), não aqui:
   // a mesma classificação alimenta a planilha que vai pra cozinha e esta tela.
   const doRodizio = await prisma.parametroEstoqueProduto.findMany({
-    where: todos
-      ? { unidadeId: unidadeFisicaId, classeAbc: { in: ["A", "B"] } }
-      : {
-          unidadeId: unidadeFisicaId,
-          OR: [
-            { classeAbc: "A", grupoContagem: grupos.a },
-            { classeAbc: "B", grupoContagem: grupos.b },
-          ],
-        },
+    // Carrega a curva A+B inteira e decide em memória com entraNaSemanaPura.
+    //
+    // Antes a regra do rodízio existia DUAS vezes: aqui como `where` do Prisma
+    // e lá como função. As duas saíram do lugar no dia em que `grupoContagem =
+    // 0` (contar toda semana) entrou — a função passou a aceitar, o `where`
+    // não, e o Beira Lago não apareceria na folha. Os testes passavam porque
+    // testavam a função, que nenhuma tela chamava.
+    //
+    // São algumas centenas de linhas por casa; filtrar em memória custa nada e
+    // garante que a tela, a folha impressa e os testes respondam à MESMA regra.
+    where: { unidadeId: unidadeFisicaId, classeAbc: { in: ["A", "B"] } },
     include: { produto: { select: { id: true, nome: true, unidadeMedida: true, ativo: true } } },
   });
 
   const itensDaSemana = doRodizio
-    .filter((p) => p.produto.ativo)
+    .filter((p) => p.produto.ativo && (todos || entraNaSemanaPura(p, semana)))
     .map((p) => ({
       id: p.produto.id,
       nome: p.produto.nome,
@@ -112,7 +121,9 @@ export default async function ContagemPage({
           <p className="eyebrow" style={{ margin: 0 }}>
             {todos
               ? `Contagem inicial · curvas A e B · ${itensDaSemana.length} itens`
-              : `Semana ${semana} · curva A grupo ${grupos.a} + curva B grupo ${grupos.b} · ${itensDaSemana.length} itens`}
+              : doRodizio.length > 0 && doRodizio.every((p) => p.grupoContagem === GRUPO_TODA_SEMANA)
+                ? `Curva A inteira · toda semana · ${itensDaSemana.length} itens`
+                : `Semana ${semana} · curva A grupo ${grupos.a} + curva B grupo ${grupos.b} · ${itensDaSemana.length} itens`}
           </p>
           <ContagemLoteForm
             unidadeId={unidadeId}

@@ -2,7 +2,13 @@ import { prisma } from "@/lib/prisma";
 import { idDaUnidadeFisica } from "@/lib/unidade-fisica";
 import { requireSession } from "@/lib/session";
 import { unidadeVisivel } from "@/lib/permissions";
-import { semanaDoMes, gruposDaSemana, type Semana } from "@/lib/contagem-rotacao";
+import {
+  semanaDoMes,
+  gruposDaSemana,
+  entraNaSemanaPura,
+  GRUPO_TODA_SEMANA,
+  type Semana,
+} from "@/lib/contagem-rotacao";
 import BotaoImprimir from "@/components/BotaoImprimir";
 
 /**
@@ -37,22 +43,35 @@ export default async function ImprimirContagemPage({
   const todos = searchParams.todos === "1";
 
   const registros = await prisma.parametroEstoqueProduto.findMany({
-    where: todos
-      ? { unidadeId: unidadeFisicaId, classeAbc: { in: ["A", "B"] } }
-      : {
-          unidadeId: unidadeFisicaId,
-          OR: [
-            { classeAbc: "A", grupoContagem: grupos.a },
-            { classeAbc: "B", grupoContagem: grupos.b },
-          ],
-        },
+    // Carrega a curva A+B inteira e decide em memória com entraNaSemanaPura.
+    //
+    // Antes a regra do rodízio existia DUAS vezes: aqui como `where` do Prisma
+    // e lá como função. As duas saíram do lugar no dia em que `grupoContagem =
+    // 0` (contar toda semana) entrou — a função passou a aceitar, o `where`
+    // não, e o Beira Lago não apareceria na folha. Os testes passavam porque
+    // testavam a função, que nenhuma tela chamava.
+    //
+    // São algumas centenas de linhas por casa; filtrar em memória custa nada e
+    // garante que a tela, a folha impressa e os testes respondam à MESMA regra.
+    where: { unidadeId: unidadeFisicaId, classeAbc: { in: ["A", "B"] } },
     include: { produto: { select: { nome: true, unidadeMedida: true, ativo: true } } },
   });
 
   const itens = registros
-    .filter((r) => r.produto.ativo)
+    .filter((r) => r.produto.ativo && (todos || entraNaSemanaPura(r, semana)))
     .map((r) => ({ nome: r.produto.nome, un: r.produto.unidadeMedida }))
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+
+  // Casa que conta a curva inteira toda semana (grupoContagem = 0) não tem
+  // "grupo da semana" — dizer "curva A grupo 2" na folha dela seria mentira
+  // impressa, e papel circula.
+  const tudoTodaSemana =
+    registros.length > 0 && registros.every((r) => r.grupoContagem === GRUPO_TODA_SEMANA);
+  const descricao = todos
+    ? "Contagem inicial — curvas A e B"
+    : tudoTodaSemana
+      ? "Curva A inteira — toda semana"
+      : `Semana ${semana} — curva A grupo ${grupos.a} + curva B grupo ${grupos.b}`;
 
   const hoje = new Date().toLocaleDateString("pt-BR");
 
@@ -62,7 +81,7 @@ export default async function ImprimirContagemPage({
         <div>
           <h1 style={{ margin: 0, fontSize: 20 }}>Contagem de estoque — {unidade?.nome}</h1>
           <p style={{ margin: "2px 0 0", fontSize: 13 }}>
-            {todos ? "Contagem inicial — curvas A e B" : `Semana ${semana} — curva A grupo ${grupos.a} + curva B grupo ${grupos.b}`}
+            {descricao}
             {" · "}
             {itens.length} itens · emitida em {hoje}
           </p>
