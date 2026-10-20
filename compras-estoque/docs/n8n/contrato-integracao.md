@@ -266,16 +266,85 @@ compra.
 
 ---
 
+# 3. Reprocessar o que não casou — `POST /api/n8n/reprocessar`
+
+## Repetir a carga NÃO faz a linha entrar. Esta rota existe por isso.
+
+Este passo 4 dizia, até 20/10/2026, "repetir a carga". **Estava errado**, e o
+erro custou uma carga inteira do Beira Lago: 1.477 linhas, R$ 305 mil.
+
+A rota de preços pula a linha repetida pela `chave` **antes** de tentar casar o
+nome. É o comportamento certo para o que ele foi feito — reexecutar o workflow
+não pode somar mercadoria de novo. Mas tem uma consequência:
+
+> Linha que chegou **antes** do produto existir fica gravada com produto nulo e
+> com a chave ocupada. Reenviar a mesma carga depois de cadastrar o produto
+> **não** a traz de volta: ela é pulada antes de chegar perto do catálogo.
+
+O sintoma é uma resposta que parece ótima e não é:
+
+```
+linhasJaCarregadas 2990, casadosPorNome 0, naoReconhecidos [], entradasDeEstoque 0
+```
+
+`naoReconhecidos` vazio aqui não quer dizer "tudo casou". Quer dizer "nenhuma
+linha foi examinada".
+
+## Corpo
+
+Esta rota **não recebe linha nenhuma** — o dado já está no banco.
+
+| campo | tipo | obrigatório | o que é |
+|---|---|---|---|
+| `unidade` | string | **sim** | nome exato da casa: `"Beira Lago"` |
+| `notaCompraId` | string | não | só as linhas daquela carga; sem ele, todas as da despensa |
+
+```json
+{ "unidade": "Beira Lago" }
+```
+
+## O que ela faz
+
+Pega as linhas com produto nulo, reenvia ao mesmo processamento da carga, e
+devolve o mesmo relatório. O que casar agora entra: preço, entrada de estoque e
+movimento **com a data da nota**, não a de hoje.
+
+## Por que isto não soma estoque em dobro
+
+Só são tocadas linhas **sem produto**, e linha sem produto nunca entrou em
+estoque — a entrada é somada dentro do ramo onde o produto existe. Não é uma
+suposição sobre o passado; é o que o próprio dado afirma.
+
+Rodar duas vezes seguidas é inofensivo: na segunda não há mais linha sem
+produto, e a resposta vem com `linhasReenviadas: 0`.
+
+## Resposta
+
+| campo | o que é |
+|---|---|
+| `linhasSemProduto` | quantas havia |
+| `linhasReenviadas` | quantas foram reprocessadas |
+| `puladas.semChave` | linha sem `chave` — não entra em estoque de jeito nenhum |
+| `puladas.semUnidade` | linha gravada sem unidade — não há o que casar |
+| `carga` | o relatório, igual ao de `/api/n8n/precos` |
+
+---
+
 # Ordem sugerida
 
 1. **Compras do Beira Lago**, uma carga de 01/08 até hoje, de uma vez. Serve de
    teste e já popula o histórico para a curva ABC.
 2. Conferir `naoReconhecidos` — vai ser alto na primeira vez, porque os
    produtos ainda não estão cadastrados no app. É esperado.
-3. Cadastrar os produtos da curva A com o nome do XMenu.
-4. Repetir a carga. `linhasJaCarregadas` vai ser igual ao total e os
-   reconhecidos sobem. **Nada duplica** — é para isso que a `chave` existe.
-5. **Vendas**, semana a semana.
+3. Cadastrar os produtos com o nome do XMenu.
+4. **Chamar `POST /api/n8n/reprocessar`.** NÃO repetir a carga: repetir não faz
+   as linhas entrarem, pelo motivo da seção 3.
+5. Conferir o `carga.naoReconhecidos` que ele devolve — agora sim é a lista do
+   que continua sem cadastro.
+6. **Vendas**, semana a semana.
+
+Da segunda semana em diante a ordem é a de sempre: mandar a carga da semana, e
+chamar o reprocessamento só quando alguém cadastrar produto que faltava.
 
 ## O que NÃO vem do painel
 
