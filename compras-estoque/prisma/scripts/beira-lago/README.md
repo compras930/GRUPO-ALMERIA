@@ -26,6 +26,11 @@ Os passos 2, 3 e 4 do SQL só LEEM — são a revisão. O passo 5 é o único qu
 escreve. **Leia o passo 3 antes de rodar o 5**: produto que já existe com outra
 unidade de medida não deve ser cadastrado de novo (parte o estoque em dois).
 
+**Rode em duas execuções**: passos 1 a 4 (linhas 1–504), leia o que voltou, e
+só então os passos 5 a 7. Por isso o arquivo não tem transação em volta do
+todo — ela não sobreviveria à pausa, e a tabela de trabalho também não. Só o
+passo 5 tem `BEGIN`/`COMMIT` próprios: ou os 396 entram, ou nenhum entra.
+
 ### Duas coisas que este passo aprendeu na prática
 
 **A unidade vai normalizada, o nome não.** O app traduz a unidade da linha por

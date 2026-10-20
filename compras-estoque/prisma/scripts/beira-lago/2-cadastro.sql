@@ -24,12 +24,17 @@
 --   HIGIENE E LIMPEZA           33 produtos  R$  26.743,50
 --   DESCARTÁVEIS E EMBALAGENS   38 produtos  R$  24.665,20
 --   EVENTOS                      3 produtos  R$   4.259,50
-
-BEGIN;
+--
+-- SEM transação em volta do arquivo inteiro, de propósito. A revisão só é
+-- revisão se der pra PARAR entre o passo 4 e o passo 5 — e uma transação
+-- aberta no console do Neon não sobrevive a essa pausa (nem a tabela de
+-- trabalho sobreviveria). Então: passos 1 a 4 numa execução, leia, e só depois
+-- o passo 5. O 5 tem BEGIN/COMMIT próprios, que é onde a transação serve pra
+-- alguma coisa: ou os 396 entram, ou nenhum entra.
 
 -- ---------------------------------------------------------------------------
--- 1. A lista, numa tabela de trabalho (não é TEMP: o console do Neon pode
---    abrir sessão nova entre um passo e outro, e TEMP sumiria no meio).
+-- 1. A lista, numa tabela de trabalho (não é TEMP: TEMP sumiria entre uma
+--    execução e outra, e é justamente entre elas que a revisão acontece).
 -- ---------------------------------------------------------------------------
 DROP TABLE IF EXISTS "_bl_cadastro";
 CREATE TABLE "_bl_cadastro" (
@@ -518,6 +523,8 @@ ORDER BY c.valor DESC;
 --    byte a byte, então sem ele "Queijo Gouda" e "QUEIJO GOUDA" entrariam os
 --    dois e o casamento (que ignora caixa) passaria a ter duas respostas.
 -- ---------------------------------------------------------------------------
+BEGIN;
+
 INSERT INTO "Produto" (id, nome, "unidadeMedida", categoria, ativo, "criadoEm")
 SELECT
   'bl' || substr(md5(c.nome || '|' || c.unidade), 1, 23),
@@ -542,6 +549,8 @@ AND NOT EXISTS (
     AND p."unidadeMedida" = c.unidade
 );
 
+COMMIT;
+
 -- ---------------------------------------------------------------------------
 -- 6. CONFERÊNCIA FINAL: quantos dos 396 existem agora, por grupo.
 --    "faltam" só pode ser > 0 nos grupos que você comentou no passo 5, ou nos
@@ -559,11 +568,13 @@ LEFT JOIN "Produto" p
 GROUP BY c.grupo
 ORDER BY valor DESC;
 
--- DROP TABLE "_bl_cadastro";  -- só depois de conferir o passo 6
+-- ---------------------------------------------------------------------------
+-- 7. LIMPEZA, só depois de conferir o passo 6. Descomente e rode.
+--    A tabela não atrapalha nada se ficar — ela só não é do app.
+-- ---------------------------------------------------------------------------
+-- DROP TABLE "_bl_cadastro";
 
-COMMIT;
-
--- Depois do COMMIT: mande a MESMA carga de novo pela rota /api/n8n/precos.
+-- Depois do passo 5: mande a MESMA carga de novo pela rota /api/n8n/precos.
 -- Nada duplica — a `chave` XMENU|id_entrada|sequencia já está gravada e as
 -- linhas repetidas são puladas. O que muda é que agora elas casam: preço e
 -- entrada de estoque entram para os produtos recém-criados, com a data da
