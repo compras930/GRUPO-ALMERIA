@@ -8,30 +8,60 @@ import { PAPEIS, PAPEL_LABEL } from "@/lib/constants";
 import { podeVerPedidos } from "@/lib/permissions";
 
 /**
+ * O menu em três grupos: o que se OLHA (Painel), o que se OPERA todo dia
+ * (Estoque) e o que se CONFIGURA de vez em quando (Ajustes).
+ *
+ * Eles não têm o mesmo peso de uso, e por isso não têm a mesma forma: o
+ * Painel é um link solto no topo, Estoque vem aberto porque é onde se trabalha,
+ * e Ajustes é cadastro — quem entra lá entra de propósito.
+ *
  * `papeis` ausente = todo mundo vê. `daUnidade` = só aparece pra quem tem uma
- * casa; as páginas de contagem e perda dependem de uma unidade, e o ADMIN sem
- * unidade entra nelas pelo Estoque, escolhendo a casa antes.
+ * casa; contagem e perda dependem de uma unidade, e o ADMIN sem unidade entra
+ * nelas pelo Estoque, escolhendo a casa antes.
  *
  * ISTO É MENU, NÃO SEGURANÇA. Quem decide o que pode é o servidor:
  * `requireAdmin` nas páginas de cadastro e `requireSession` + `unidadeVisivel`
  * nas ações de estoque e pedido. Esconder link só evita que alguém se perca.
  */
-const NAV: Array<{ href: string; label: string; papeis?: Papel[]; daUnidade?: boolean }> = [
-  { href: "/dashboard", label: "Painel" },
-  { href: "/cmv", label: "CMV", papeis: ["ADMIN"] },
-  { href: "/receitas", label: "Sub-receitas", papeis: ["ADMIN"] },
-  // Derivado do helper, não repetido à mão: a regra de quem vê pedido mora em
-  // um lugar só, e o menu segue ela.
-  { href: "/pedidos", label: "Pedidos de compra", papeis: PAPEIS.filter(podeVerPedidos) },
-  { href: "/estoque", label: "Estoque" },
-  { href: "/estoque/contagem", label: "Contagem da semana", daUnidade: true },
-  { href: "/estoque/perdas", label: "Perdas e baixas", daUnidade: true },
-  { href: "/estoque/consumo", label: "Consumo" },
-  { href: "/fornecedores", label: "Fornecedores", papeis: ["ADMIN"] },
-  { href: "/produtos", label: "Produtos", papeis: ["ADMIN"] },
-  { href: "/unidades", label: "Unidades", papeis: ["ADMIN"] },
-  { href: "/usuarios", label: "Usuários", papeis: ["ADMIN"] },
+type ItemNav = { href: string; label: string; papeis?: Papel[]; daUnidade?: boolean };
+type GrupoNav = { titulo: string | null; itens: ItemNav[] };
+
+const NAV: GrupoNav[] = [
+  { titulo: null, itens: [{ href: "/dashboard", label: "Painel" }] },
+  {
+    titulo: "Estoque",
+    itens: [
+      { href: "/estoque/contagem", label: "Contagem da semana", daUnidade: true },
+      { href: "/estoque/perdas", label: "Perdas e baixas", daUnidade: true },
+      { href: "/estoque/consumo", label: "Consumo" },
+      { href: "/estoque", label: "Saldos" },
+      { href: "/cmv", label: "CMV", papeis: ["ADMIN"] },
+      { href: "/receitas", label: "Sub-receitas", papeis: ["ADMIN"] },
+      // Derivado do helper, não repetido à mão: a regra de quem vê pedido mora
+      // em um lugar só, e o menu segue ela.
+      { href: "/pedidos", label: "Pedidos de compra", papeis: PAPEIS.filter(podeVerPedidos) },
+    ],
+  },
+  {
+    titulo: "Ajustes",
+    itens: [
+      { href: "/produtos", label: "Produtos", papeis: ["ADMIN"] },
+      { href: "/fornecedores", label: "Fornecedores", papeis: ["ADMIN"] },
+      { href: "/unidades", label: "Unidades", papeis: ["ADMIN"] },
+      { href: "/usuarios", label: "Usuários", papeis: ["ADMIN"] },
+    ],
+  },
 ];
+
+/**
+ * `startsWith` sozinho não serve depois que o menu ganhou irmãos: estando em
+ * /estoque/perdas, "/estoque" também casaria, e dois itens ficariam acesos ao
+ * mesmo tempo. Casa exato, ou um filho de verdade (com a barra).
+ */
+function ativo(pathname: string | null, href: string) {
+  if (!pathname) return false;
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 export default function Sidebar({
   papel,
@@ -68,17 +98,24 @@ export default function Sidebar({
       <div className="unit">
         {unidadeNome ?? "Todas as unidades"} · {PAPEL_LABEL[papel]}
       </div>
-      {NAV.filter(
-        (item) => (!item.papeis || item.papeis.includes(papel)) && (!item.daUnidade || unidadeNome !== null)
-      ).map((item) => (
-        <Link
-          key={item.href}
-          href={item.href}
-          className={pathname?.startsWith(item.href) ? "active" : ""}
-        >
-          {item.label}
-        </Link>
-      ))}
+      {NAV.map((grupo) => {
+        const itens = grupo.itens.filter(
+          (i) => (!i.papeis || i.papeis.includes(papel)) && (!i.daUnidade || unidadeNome !== null)
+        );
+        // Grupo que ficou sem nenhum item some inteiro — título de seção vazia
+        // é promessa de uma tela que a pessoa não tem.
+        if (itens.length === 0) return null;
+        return (
+          <div className="nav-grupo" key={grupo.titulo ?? "topo"}>
+            {grupo.titulo && <p className="nav-titulo">{grupo.titulo}</p>}
+            {itens.map((item) => (
+              <Link key={item.href} href={item.href} className={ativo(pathname, item.href) ? "active" : ""}>
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        );
+      })}
       <div className="signout">
         <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 8 }}>{userName}</div>
         <a onClick={() => signOut({ callbackUrl: "/login" })} style={{ cursor: "pointer" }}>

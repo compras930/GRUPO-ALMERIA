@@ -880,3 +880,104 @@ td.num,
   color: var(--white);
   border-color: var(--wine);
 }
+
+/* ---------------------------------------------------------------------------
+   Menu em grupos
+   --------------------------------------------------------------------------- */
+.nav-grupo {
+  display: flex;
+  flex-direction: column;
+}
+.nav-grupo + .nav-grupo {
+  margin-top: 18px;
+}
+/* O título separa sem competir: é rótulo de seção, não item clicável, e a
+   diferença precisa ser óbvia à primeira olhada — daí caixa alta pequena,
+   espaçada e apagada, em vez de só um texto a mais do mesmo tamanho. */
+.nav-titulo {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  margin: 0 0 6px 18px;
+}
+
+/* ---------------------------------------------------------------------------
+   Barras horizontais do painel por categoria
+
+   UMA SÉRIE, UMA COR. A cor aqui não carrega informação nenhuma — o
+   comprimento já diz tudo. Pintar cada categoria de um tom diferente gastaria
+   o único canal livre repetindo o que a barra mostra, e deixaria o leitor
+   procurando um significado que não existe.
+   --------------------------------------------------------------------------- */
+.barras {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.barra-linha {
+  display: grid;
+  grid-template-columns: minmax(96px, 150px) 1fr auto;
+  gap: 10px;
+  align-items: center;
+  font-size: 12px;
+}
+.barra-rotulo {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.barra-trilho {
+  background: var(--paper-2);
+  border-radius: 4px;
+  height: 14px;
+  overflow: hidden;
+}
+.barra-preenchida {
+  background: var(--wine);
+  height: 100%;
+  /* Ponta arredondada só no fim do dado; o começo fica ancorado na linha de
+     base, que é de onde a comparação parte. */
+  border-radius: 0 4px 4px 0;
+  min-width: 2px;
+}
+.barra-preenchida.vazia {
+  background: var(--line);
+}
+.barra-valor {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.barra-valor .pct {
+  color: var(--muted);
+  margin-left: 6px;
+}
+
+/* Filtros numa linha só acima dos cartões — casa, depois período. Em telas
+   estreitas eles quebram, mas continuam na ordem em que se pensa. */
+.filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+/* Cada filtro com seu rótulo: sem eles, "Todas / Beira Lago / 30 dias / 90
+   dias" lê como uma fileira só de quatro opções, e não como duas perguntas
+   diferentes. */
+.filtro {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.filtro-rotulo {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
