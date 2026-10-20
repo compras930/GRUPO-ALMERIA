@@ -213,10 +213,22 @@ export async function processarNotaCompra(
   });
   const linhasJaCarregadas = itens.length - itensNovos.length;
 
-  // Entrada de estoque é somada por PRODUTO, não gravada linha a linha: a mesma
-  // compra aparece várias vezes no mês e um upsert por linha multiplicaria as
-  // idas ao banco por dez sem mudar o resultado.
+  // Entrada de estoque é somada, não gravada linha a linha: a mesma compra
+  // aparece várias vezes no mês e um upsert por linha multiplicaria as idas ao
+  // banco por dez sem mudar o resultado.
+  //
+  // SALDO soma por PRODUTO — ele é um número só, não tem data.
   const entradaPorProduto = new Map<string, number>();
+  // MOVIMENTO soma por (PRODUTO, DATA DA NOTA), e isso importa: o movimento é
+  // o que o relatório de consumo lê para saber o que entrou entre duas
+  // contagens. Antes ele nascia carimbado com `now()` — a hora em que a carga
+  // rodou —, então nota que chegasse atrasada caía na semana errada: sumia de
+  // uma e aparecia na outra. Num número mensal ninguém percebe; num semanal,
+  // que é o que o Beira Lago passou a medir, troca o resultado de duas semanas.
+  //
+  // Agrupar por data multiplica as linhas por duas ou três, não por mil: uma
+  // carga semanal tem poucas datas distintas por produto.
+  const entradaPorProdutoData = new Map<string, { produtoId: string; dataCompra: Date; quantidade: number }>();
   const entradasSemChave: ResultadoNotaCompra["entradasSemChave"] = {
     linhas: 0,
     quantidadeTotal: 0,
@@ -396,6 +408,10 @@ export async function processarNotaCompra(
     if (quantidadeConvertida && !precoSuspeito) {
       if (chaveOrigem) {
         entradaPorProduto.set(produto.id, (entradaPorProduto.get(produto.id) ?? 0) + quantidadeConvertida);
+        const chaveData = `${produto.id}|${dataCompra.toISOString()}`;
+        const acumulado = entradaPorProdutoData.get(chaveData);
+        if (acumulado) acumulado.quantidade += quantidadeConvertida;
+        else entradaPorProdutoData.set(chaveData, { produtoId: produto.id, dataCompra, quantidade: quantidadeConvertida });
       } else {
         entradasSemChave.linhas++;
         entradasSemChave.quantidadeTotal += quantidadeConvertida;
@@ -465,27 +481,29 @@ export async function processarNotaCompra(
       });
     }
 
-    // Entrada de estoque: um upsert e um movimento por PRODUTO, com a soma do
-    // que veio na carga. Gravar linha a linha multiplicaria as idas ao banco
-    // sem mudar o saldo final, e é justamente dentro da transação que isso
-    // custa caro.
+    // Saldo: um upsert por PRODUTO, com a soma da carga inteira.
     for (const [produtoId, quantidadeEntrada] of entradaPorProduto) {
       await tx.estoqueSaldo.upsert({
         where: { unidadeId_produtoId: { unidadeId: unidadeFisicaId, produtoId } },
         update: { quantidade: { increment: quantidadeEntrada } },
         create: { unidadeId: unidadeFisicaId, produtoId, quantidade: quantidadeEntrada },
       });
-      await tx.movimentoEstoque.create({
-        data: {
-          unidadeId: unidadeFisicaId,
-          produtoId,
-          tipo: "ENTRADA_NOTA",
-          quantidade: quantidadeEntrada,
-          referencia: notaCompra.id,
-          observacao: `Entrada pela nota do Teknisa (${arquivoNome ?? "n8n"})`,
-        },
-      });
     }
+
+    // Movimento: um por (PRODUTO, DATA DA NOTA), carimbado com a data da nota.
+    // É o `criadoEm` que o relatório de consumo usa pra decidir se a entrada
+    // caiu entre duas contagens — ver src/lib/consumo.ts.
+    await tx.movimentoEstoque.createMany({
+      data: [...entradaPorProdutoData.values()].map((e) => ({
+        unidadeId: unidadeFisicaId,
+        produtoId: e.produtoId,
+        tipo: "ENTRADA_NOTA",
+        quantidade: e.quantidade,
+        referencia: notaCompra.id,
+        observacao: `Entrada pela nota de compra (${arquivoNome ?? "n8n"})`,
+        criadoEm: e.dataCompra,
+      })),
+    });
 
     return notaCompra.id;
   }, { timeout: 60_000 });
