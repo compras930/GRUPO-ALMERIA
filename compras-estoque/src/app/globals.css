@@ -891,16 +891,43 @@ td.num,
 .nav-grupo + .nav-grupo {
   margin-top: 18px;
 }
-/* O título separa sem competir: é rótulo de seção, não item clicável, e a
-   diferença precisa ser óbvia à primeira olhada — daí caixa alta pequena,
-   espaçada e apagada, em vez de só um texto a mais do mesmo tamanho. */
-.nav-titulo {
+/* O grupo é um botão, não um rótulo: ele abre e fecha, então precisa parecer
+   clicável — mas sem competir com os links de dentro, que são o destino. Daí
+   caixa alta pequena e apagada, com a seta carregando o estado. */
+.nav-botao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+  color: var(--white);
   opacity: 0.55;
-  margin: 0 0 6px 18px;
+  padding: 6px 18px;
+  text-align: left;
+}
+.nav-botao:hover,
+.nav-botao.aberto {
+  opacity: 0.9;
+}
+.nav-seta {
+  font-size: 15px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+.nav-botao.aberto .nav-seta {
+  transform: rotate(90deg);
+}
+.nav-itens {
+  display: flex;
+  flex-direction: column;
+  margin-top: 2px;
 }
 
 /* ---------------------------------------------------------------------------
@@ -980,4 +1007,15 @@ td.num,
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+/* Título de grupo para quem NÃO tem o menu recolhível: mesma hierarquia
+   visual do botão, sem a affordance de clique — porque não há clique. */
+.nav-titulo {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  margin: 0 0 6px 18px;
 }

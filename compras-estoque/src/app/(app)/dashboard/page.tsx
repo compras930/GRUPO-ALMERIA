@@ -7,20 +7,30 @@ import { fmtCurrency } from "@/lib/format";
 import { totaisPorCategoriaPura, SEM_CATEGORIA } from "@/lib/painel-categoria";
 import { curvaAbcPura, resumoAbcPura, CORTE_A } from "@/lib/curva-abc";
 import { carregarIndiceReceitas, carregarPrecoAtualPorProduto, explodirReceitaPura, CicloReceitaError } from "@/lib/receita";
+import { calcularConsumoPuro, TIPOS_DE_ENTRADA } from "@/lib/consumo";
+import { mesDaChave, mesDaData, ultimosMeses, rotuloCurto } from "@/lib/mes";
 
 /**
- * O painel: o que a casa VENDEU, o que COMPROU e qual o CMV teórico, com a
- * compra aberta por categoria e por item.
+ * O painel: o que a casa VENDEU, o que COMPROU e os DOIS CMV, com a compra
+ * aberta por categoria e por item.
  *
- * TEÓRICO, E A PALAVRA IMPORTA. Este CMV vem da ficha técnica: quantidade
- * vendida × custo da ficha. Ele responde "quanto DEVERIA ter sido gasto pra
- * fazer o que foi vendido". O CMV contado — o que saiu de verdade da despensa
- * entre duas contagens — é outro número, e mora em /estoque/consumo. A
- * diferença entre os dois é justamente o que o projeto existe pra enxergar:
- * receita mal executada, perda, ou coisa sumindo. Somar ou confundir os dois
- * apaga a única pergunta que interessa.
+ * OS DOIS CMV, E POR QUE SÃO DOIS.
+ *
+ *   TEÓRICO  vem da ficha: quantidade vendida × custo da ficha. Responde
+ *            "quanto DEVERIA ter sido gasto pra fazer o que foi vendido".
+ *   CONTADO  vem do inventário: saldo antes + entradas − saldo depois.
+ *            Responde "quanto SAIU da despensa de verdade".
+ *
+ * A diferença entre eles é o que o projeto existe pra enxergar — receita mal
+ * executada, perda, ou coisa sumindo. Por isso ficam lado a lado e com nome
+ * diferente, e por isso nunca se somam.
+ *
+ * Eles também não medem a mesma JANELA: o teórico é do mês escolhido; o
+ * contado é das contagens, que cada produto fecha quando é contado. O card do
+ * contado mostra as datas que mediu, em vez de herdar o rótulo do mês.
  */
-const PERIODOS = [30, 90] as const;
+/** Quantos meses o seletor oferece pra trás. */
+const MESES_NO_SELETOR = 6;
 const TOP = 15;
 
 /**
@@ -58,15 +68,14 @@ function BarrasPorCategoria({ dados }: { dados: { categoria: string; valor: numb
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: { dias?: string; unidadeId?: string };
+  searchParams: { mes?: string; unidadeId?: string };
 }) {
   const user = await requireSession();
   const isAdmin = user.papel === "ADMIN";
 
-  const dias = PERIODOS.includes(Number(searchParams.dias) as (typeof PERIODOS)[number])
-    ? Number(searchParams.dias)
-    : 30;
-  const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000);
+  const agora = new Date();
+  const meses = ultimosMeses(agora, MESES_NO_SELETOR);
+  const mes = mesDaChave(searchParams.mes) ?? mesDaData(agora);
 
   const casas = await prisma.unidade.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true } });
 
@@ -87,7 +96,7 @@ export default async function DashboardPage({
     // foi paga. Elas caem em "Sem categoria" — que é onde de fato estão,
     // faltando cadastro.
     prisma.itemNotaCompra.findMany({
-      where: { dataCompra: { gte: desde }, notaCompra: escopoCompra },
+      where: { dataCompra: { gte: mes.inicio, lt: mes.fim }, notaCompra: escopoCompra },
       select: {
         valorTotal: true,
         quantidade: true,
@@ -98,7 +107,10 @@ export default async function DashboardPage({
       },
     }),
     prisma.itemVendaSemanal.findMany({
-      where: { vendaSemanal: { ...escopoVenda, periodoFim: { gte: desde } } },
+      // A venda entra pelo FIM do período: uma semana que fecha dia 2 é venda
+      // de quem a recebeu, e contá-la pelo começo jogaria toda virada de mês
+      // pro mês anterior.
+      where: { vendaSemanal: { ...escopoVenda, periodoFim: { gte: mes.inicio, lt: mes.fim } } },
       select: {
         quantidadeVendida: true,
         itemVenda: { select: { id: true, nome: true, categoria: true, precoVenda: true, receitaId: true } },
@@ -187,9 +199,69 @@ export default async function DashboardPage({
   }
   const cmvTeorico = vendaComFicha > 0 ? (100 * custoTeorico) / vendaComFicha : null;
 
+  // CMV CONTADO (real): o que SAIU da despensa entre duas contagens, valorizado
+  // a preço atual, sobre o faturamento da mesma janela.
+  //
+  //   consumo = saldo contado antes + entradas do período − saldo contado depois
+  //
+  // Ele não depende de ficha técnica nenhuma — é a diferença entre dois
+  // inventários. E não depende do mês escolhido lá em cima: a janela é a das
+  // CONTAGENS, que cada produto fecha quando é contado. Por isso o card mostra
+  // as datas que ele de fato mediu, em vez de herdar o rótulo do mês; herdar
+  // seria dizer "outubro" para um número que mede outra coisa.
+  let cmvContado: number | null = null;
+  let consumoValor = 0;
+  let janela: { de: Date; ate: Date } | null = null;
+  let produtosContados = 0;
+  if (despensaId) {
+    const [contagens, entradas, precosDespensa] = await Promise.all([
+      prisma.contagemEstoque.findMany({
+        where: { unidadeId: despensaId },
+        select: { produtoId: true, quantidadeContada: true, criadoEm: true },
+      }),
+      prisma.movimentoEstoque.findMany({
+        where: { unidadeId: despensaId, tipo: { in: [...TIPOS_DE_ENTRADA] } },
+        select: { produtoId: true, quantidade: true, criadoEm: true },
+      }),
+      prisma.precoAtualProduto.findMany({
+        where: { unidadeId: despensaId },
+        select: { produtoId: true, preco: true },
+      }),
+    ]);
+    const linhas = calcularConsumoPuro(
+      contagens.map((c) => ({ produtoId: c.produtoId, quantidade: c.quantidadeContada, em: c.criadoEm })),
+      entradas.map((m) => ({ produtoId: m.produtoId, quantidade: m.quantidade, em: m.criadoEm }))
+    );
+    if (linhas.length > 0) {
+      const preco = new Map(precosDespensa.map((x) => [x.produtoId, x.preco]));
+      // Consumo negativo é impossível fisicamente e já vem sinalizado; somá-lo
+      // aqui abateria o consumo de outro produto e esconderia os dois erros de
+      // uma vez. Fica de fora, e a tela de Consumo mostra quais são.
+      for (const l of linhas) if (l.consumo > 0) consumoValor += l.consumo * (preco.get(l.produtoId) ?? 0);
+      produtosContados = linhas.length;
+      janela = {
+        de: new Date(Math.min(...linhas.map((l) => l.de.getTime()))),
+        ate: new Date(Math.max(...linhas.map((l) => l.ate.getTime()))),
+      };
+      const vendasJanela = await prisma.itemVendaSemanal.findMany({
+        where: {
+          vendaSemanal: { ...escopoVenda, periodoFim: { gt: janela.de, lte: janela.ate } },
+        },
+        select: { quantidadeVendida: true, itemVenda: { select: { precoVenda: true } } },
+      });
+      const faturamentoJanela = vendasJanela.reduce(
+        (soma, v) => soma + v.quantidadeVendida * (v.itemVenda?.precoVenda ?? 0),
+        0
+      );
+      if (faturamentoJanela > 0) cmvContado = (100 * consumoValor) / faturamentoJanela;
+    }
+  }
+  const dataCurta = (d: Date) =>
+    d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "UTC" });
+
   const qs = (extra: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
-    p.set("dias", String(dias));
+    p.set("mes", mes.chave);
     if (casaId) p.set("unidadeId", casaId);
     for (const [k, v] of Object.entries(extra)) {
       if (v === undefined) p.delete(k);
@@ -204,8 +276,8 @@ export default async function DashboardPage({
         <p className="eyebrow">Grupo Almeria</p>
         <h1>Painel</h1>
         <p className="sub-explica">
-          {casa ? casa.nome : "Todas as casas"} · últimos {dias} dias. Compra segue a despensa e venda
-          segue a casa, e a compra entra pela data da NOTA — não pela data da carga.
+          {casa ? casa.nome : "Todas as casas"} · {mes.rotulo}. Compra segue a despensa e venda segue a
+          casa, e a compra entra pela data da NOTA — não pela data da carga.
         </p>
 
         <div className="filtros">
@@ -225,11 +297,15 @@ export default async function DashboardPage({
             </div>
           )}
           <div className="filtro">
-            <span className="filtro-rotulo">Período</span>
+            <span className="filtro-rotulo">Mês</span>
             <div className="tabbar discreta">
-              {PERIODOS.map((d) => (
-              <Link key={d} href={qs({ dias: String(d) })} className={`chip${dias === d ? " ativo" : ""}`}>
-                  {d} dias
+              {meses.map((m) => (
+                <Link
+                  key={m.chave}
+                  href={qs({ mes: m.chave })}
+                  className={`chip${mes.chave === m.chave ? " ativo" : ""}`}
+                >
+                  {rotuloCurto(m)}
                 </Link>
               ))}
             </div>
@@ -250,6 +326,17 @@ export default async function DashboardPage({
           <div className="val">{fmtCurrency(totalCompra)}</div>
           <p className="sub">{linhasCompra.length} linhas de nota</p>
         </div>
+        <div className="kpi">
+          <p className="lbl">CMV contado (real)</p>
+          <div className="val">{cmvContado === null ? "—" : `${cmvContado.toFixed(1)}%`}</div>
+          <p className="sub">
+            {janela === null
+              ? "precisa de duas contagens do mesmo produto"
+              : cmvContado === null
+                ? `${fmtCurrency(consumoValor)} consumidos entre ${dataCurta(janela.de)} e ${dataCurta(janela.ate)}, sem venda carregada na janela`
+                : `${produtosContados} produtos, entre ${dataCurta(janela.de)} e ${dataCurta(janela.ate)}`}
+          </p>
+        </div>
         <div className="kpi destaque">
           <p className="lbl">CMV teórico</p>
           <div className="val">{cmvTeorico === null ? "—" : `${cmvTeorico.toFixed(1)}%`}</div>
@@ -269,7 +356,7 @@ export default async function DashboardPage({
         <div className="card">
           <h2 style={{ fontSize: 15, marginBottom: 4 }}>Compras por categoria</h2>
           <p className="sub-explica" style={{ marginBottom: 16 }}>
-            {fmtCurrency(totalCompra)} no período, pelo valor da nota (com imposto e frete).
+            {fmtCurrency(totalCompra)} em {mes.rotulo}, pelo valor da nota (com imposto e frete).
           </p>
           {compraPorCategoria.length === 0 ? (
             <div className="empty">Nenhuma compra carregada neste período.</div>
