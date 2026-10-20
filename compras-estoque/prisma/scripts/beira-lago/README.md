@@ -26,10 +26,24 @@ Os passos 2, 3 e 4 do SQL só LEEM — são a revisão. O passo 5 é o único qu
 escreve. **Leia o passo 3 antes de rodar o 5**: produto que já existe com outra
 unidade de medida não deve ser cadastrado de novo (parte o estoque em dois).
 
-**Rode em duas execuções**: passos 1 a 4 (linhas 1–504), leia o que voltou, e
-só então os passos 5 a 7. Por isso o arquivo não tem transação em volta do
-todo — ela não sobreviveria à pausa, e a tabela de trabalho também não. Só o
-passo 5 tem `BEGIN`/`COMMIT` próprios: ou os 396 entram, ou nenhum entra.
+**No console do Neon, use as partes numeradas**, não o arquivo inteiro:
+
+```
+2-cadastro-01-lista.sql  ...  04-lista.sql   a lista, 100 produtos por vez
+2-cadastro-05-conferir.sql                    as três conferências (só leem)
+2-cadastro-06-gravar.sql                      o cadastro
+```
+
+O arquivo completo tem ~45 KB e **o editor do Neon corta — e corta calado**:
+responde "Statement executed successfully" com metade dos produtos de fora.
+Apareceu no histórico como `-- QUERY TRUNCATED --`. `psql -f` não tem esse
+limite, o console tem; por isso o `2-cadastro.sql` continua existindo, para
+quem roda por fora.
+
+Cada parte é uma execução inteira e nenhuma deixa transação aberta para a
+seguinte — é por isso que a tabela de trabalho é real e não `TEMP`. Só a
+`06-gravar` tem `BEGIN`/`COMMIT`, onde a transação serve para alguma coisa: ou
+os 396 entram, ou nenhum entra.
 
 ### Duas coisas que este passo aprendeu na prática
 

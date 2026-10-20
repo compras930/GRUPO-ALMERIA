@@ -169,25 +169,35 @@ CREATE TABLE "_bl_cadastro" (
 
 INSERT INTO "_bl_cadastro" (nome, unidade, unidade_bruta, grupo, valor, linhas, ultima) VALUES`);
 
-const valores: string[] = [];
-const comentario = new Map<number, string>();
-for (const g of grupos) {
-  const lista = itens.filter((i) => i.grupo === g).sort((a, b) => b.valor - a.valor);
-  valores.push(`-- ${g} — ${lista.length} produtos, R$ ${brl(lista.reduce((s, i) => s + i.valor, 0))}`);
-  for (const i of lista) {
-    valores.push(
-      `  (${sql(i.nome)}, ${sql(i.unidade)}, ${sql(i.unidadeBruta)}, ${sql(i.grupo)}, ${i.valor}, ${i.linhas}, ${sql(i.ultima)})`
-    );
-    comentario.set(valores.length - 1, i.unidade !== i.unidadeBruta ? `  -- ${i.unidadeBruta} -> ${i.unidade}` : "");
+/**
+ * As linhas de VALUES de um lote, já com vírgula entre elas e `;` na última.
+ *
+ * A vírgula vai ANTES do comentário de unidade — senão ela vira parte do
+ * comentário e o SQL quebra sem dizer onde.
+ */
+function blocoDeValores(lista: Linha[]): string {
+  const linhas: string[] = [];
+  const comentario = new Map<number, string>();
+  for (const g of grupos) {
+    const doGrupo = lista.filter((i) => i.grupo === g);
+    if (!doGrupo.length) continue;
+    linhas.push(`-- ${g} — ${doGrupo.length} produtos, R$ ${brl(doGrupo.reduce((s, i) => s + i.valor, 0))}`);
+    for (const i of doGrupo) {
+      linhas.push(
+        `  (${sql(i.nome)}, ${sql(i.unidade)}, ${sql(i.unidadeBruta)}, ${sql(i.grupo)}, ${i.valor}, ${i.linhas}, ${sql(i.ultima)})`
+      );
+      comentario.set(linhas.length - 1, i.unidade !== i.unidadeBruta ? `  -- ${i.unidadeBruta} -> ${i.unidade}` : "");
+    }
   }
+  const deValor = linhas.map((v, n) => (v.startsWith("  (") ? n : -1)).filter((n) => n >= 0);
+  for (const n of deValor.slice(0, -1)) linhas[n] += ",";
+  linhas[deValor[deValor.length - 1]] += ";";
+  for (const [n, c] of comentario) linhas[n] += c;
+  return linhas.join("\n");
 }
-// Vírgula só entre linhas de valor — os comentários de grupo não contam. E ela
-// vai ANTES do comentário de unidade, senão vira parte dele e o SQL quebra.
-const indicesDeValor = valores.map((v, n) => (v.startsWith("  (") ? n : -1)).filter((n) => n >= 0);
-for (const n of indicesDeValor.slice(0, -1)) valores[n] += ",";
-valores[indicesDeValor[indicesDeValor.length - 1]] += ";";
-for (const [n, c] of comentario) valores[n] += c;
-out.push(valores.join("\n"));
+
+const ordenados = grupos.flatMap((g) => itens.filter((i) => i.grupo === g).sort((a, b) => b.valor - a.valor));
+out.push(blocoDeValores(ordenados));
 
 out.push(`
 -- ---------------------------------------------------------------------------
@@ -321,7 +331,74 @@ ORDER BY valor DESC;
 `);
 
 writeFileSync(caminhoSaida, out.join("\n"));
+
+// ---------------------------------------------------------------------------
+// E as PARTES, pro console do Neon.
+//
+// O arquivo inteiro tem ~45 KB e o editor do Neon CORTA — e corta calado: a
+// consulta roda, responde "Statement executed successfully", e metade dos
+// produtos não entrou. Apareceu no histórico dele como "-- QUERY TRUNCATED --".
+// `psql -f` não tem esse limite; o console tem. Então o mesmo conteúdo sai
+// também em pedaços pequenos, numerados na ordem de rodar.
+//
+// Cada pedaço é uma execução inteira e termina em `;`. Nenhum depende de
+// transação aberta no anterior — só da tabela de trabalho, que é real (não
+// TEMP) justamente pra sobreviver entre uma execução e outra.
+// ---------------------------------------------------------------------------
+const POR_PARTE = 100;
+const base = caminhoSaida.replace(/\.sql$/, "");
+const [cabecalho, , conferirEGravar] = out;
+const corte = conferirEGravar.indexOf("-- 5. O CADASTRO");
+const inicioDoBloco = conferirEGravar.lastIndexOf("-- ---", corte);
+const conferir = conferirEGravar.slice(0, inicioDoBloco);
+const gravar = conferirEGravar.slice(inicioDoBloco);
+
+const lotes: Linha[][] = [];
+for (let i = 0; i < ordenados.length; i += POR_PARTE) lotes.push(ordenados.slice(i, i + POR_PARTE));
+
+const partes: { arquivo: string; conteudo: string }[] = [];
+lotes.forEach((lote, n) => {
+  const numero = String(n + 1).padStart(2, "0");
+  const titulo = `-- PARTE ${numero} de ${String(lotes.length + 2).padStart(2, "0")} — a lista, produtos ${
+    n * POR_PARTE + 1
+  } a ${n * POR_PARTE + lote.length} de ${ordenados.length}.
+-- Rode na ordem. Cada parte é uma execução inteira; nenhuma deixa transação
+-- aberta pra próxima. Só LÊ e escreve na tabela de trabalho "_bl_cadastro" —
+-- o catálogo de produtos ainda não é tocado aqui.
+${n === 0 ? "-- Esta primeira cria a tabela do zero: rodar de novo recomeça a lista." : ""}`;
+  const criacao = n === 0 ? cabecalho.slice(cabecalho.indexOf('DROP TABLE IF EXISTS "_bl_cadastro";')) : "";
+  const insert = n === 0 ? "" : `INSERT INTO "_bl_cadastro" (nome, unidade, unidade_bruta, grupo, valor, linhas, ultima) VALUES`;
+  partes.push({
+    arquivo: `${base}-${numero}-lista.sql`,
+    conteudo: [titulo, criacao || insert, blocoDeValores(lote)].filter(Boolean).join("\n") + "\n",
+  });
+});
+
+const nConferir = String(lotes.length + 1).padStart(2, "0");
+const nGravar = String(lotes.length + 2).padStart(2, "0");
+partes.push({
+  arquivo: `${base}-${nConferir}-conferir.sql`,
+  conteudo: `-- PARTE ${nConferir} de ${nGravar} — as três conferências. SÓ LEEM.
+-- Rode e LEIA as três respostas antes da parte ${nGravar}. A segunda (passo 3) é a
+-- que pode mudar o que fazer: o que aparecer lá não deve ser cadastrado.
+-- Conferência vazia é a resposta boa.
+${conferir}`,
+});
+partes.push({
+  arquivo: `${base}-${nGravar}-gravar.sql`,
+  conteudo: `-- PARTE ${nGravar} de ${nGravar} — o cadastro. É A ÚNICA QUE ESCREVE no catálogo.
+-- Só depois de ler a parte ${nConferir}.
+${gravar}`,
+});
+
+for (const p of partes) writeFileSync(p.arquivo, p.conteudo);
+
 console.log(`${itens.length} produtos, R$ ${brl(total)} -> ${caminhoSaida}`);
+const maiorKb = Math.max(...partes.map((p) => Buffer.byteLength(p.conteudo))) / 1024;
+console.log(`  e em ${partes.length} partes pro console do Neon (a maior tem ${maiorKb.toFixed(1)} KB):`);
+for (const p of partes) {
+  console.log(`    ${p.arquivo.split("/").pop()}  ${(Buffer.byteLength(p.conteudo) / 1024).toFixed(1)} KB`);
+}
 for (const g of grupos) {
   const l = itens.filter((i) => i.grupo === g);
   console.log(`  ${g.padEnd(26)} ${String(l.length).padStart(3)}  R$ ${brl(l.reduce((s, i) => s + i.valor, 0))}`);
