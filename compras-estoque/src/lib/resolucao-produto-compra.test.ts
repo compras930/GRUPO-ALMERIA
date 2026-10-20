@@ -99,6 +99,17 @@ describe("resolverLinhaCompraPura", () => {
     expect(resolverLinhaCompraPura({ nome: "x", unidadeMedida: "FD", codigo: "905000005158" }, idx).via).toBe("CODIGO");
   });
 
+  it("PCT é pacote, e pacote é um CX — veio do XMenu do Beira Lago", () => {
+    const catalogo: ProdutoResumo[] = [
+      { id: "d1", nome: "GUARDANAPO", unidadeMedida: "CX", codigoTeknisa: "900000000001" },
+    ];
+    const r = resolverLinhaCompraPura(
+      { nome: "x", unidadeMedida: "PCT", codigo: "900000000001" },
+      montarIndiceProdutos(catalogo)
+    );
+    expect(r.via).toBe("CODIGO");
+  });
+
   it("NÃO trata como sinônimo o par que exige saber o conteúdo da embalagem", () => {
     // Caixa com 360 ovos contra ovo avulso: falta um número (quantos) que não
     // está no sistema. Aceitar aqui gravaria R$ 170 como preço de um ovo.

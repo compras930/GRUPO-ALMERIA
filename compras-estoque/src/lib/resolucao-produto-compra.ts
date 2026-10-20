@@ -54,6 +54,7 @@ const SINONIMO_UNIDADE: Record<string, string> = {
   PR: "UND",  // par
   // um pacote fechado
   FD: "CX",   // fardo
+  PCT: "CX",  // pacote — apareceu em 75 linhas do XMenu do Beira Lago
   LA: "CX",   // lata
   BD: "CX",   // balde
   BB: "CX",   // bombona

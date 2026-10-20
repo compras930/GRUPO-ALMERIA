@@ -74,11 +74,31 @@ O app guarda preço unitário e multiplica. Para o custo bater com o que a casa
 realmente pagou:
 
 ```
-preco      = total_liquido / quantidade
+preco      = (total_liquido > 0 ? total_liquido : valor_total) / quantidade
 valorTotal = total_liquido
 ```
 
-Usar `valor_unitario` cru deixaria ICMS-ST, IPI e frete de fora do CMV.
+Usar `valor_unitario` cru deixaria ICMS-ST, IPI e frete de fora do CMV. No
+export de 01/08 a 19/10 a diferença é de **R$ 39.127 — 3,19%** no total, e em
+linhas isoladas chega a muito mais: Alma Viva +20%, Sobrassada +35%, Chopp
+Brahma +117%.
+
+**O `> 0` não é paranoia.** Há 15 linhas em que `total_liquido` é MENOR que
+`valor_total`, e uma delas é zero:
+
+```
+FEIJÃO CARIOCA 1KG - FUNCIONÁRIO    valor_total 88,77  →  total_liquido 0,00
+```
+
+Provavelmente bonificação. Com `preco = 0`, o app grava **custo zero** naquele
+produto — e se for produto novo não há preço anterior para a trava de salto
+comparar, então o zero passa. Todo prato que usar aquele insumo fica com custo
+subestimado, e o CMV sai bonito e errado. Cair para o valor sem imposto é pior
+que o certo e muito melhor que zero.
+
+Nenhuma linha do export tem quantidade zero ou negativa, então a divisão é
+segura — mas vale guardar contra isso também se o painel passar a mandar
+devolução.
 
 **4. `chave` é o que impede o estoque dobrar.**
 

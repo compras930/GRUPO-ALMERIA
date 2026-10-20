@@ -32,9 +32,30 @@ export function gruposDaSemana(semana: Semana) {
 
 export type ProdutoClassificado = { classeAbc: string | null; grupoContagem: number | null };
 
+/**
+ * GRUPO ZERO = TODA SEMANA.
+ *
+ * O rodízio de dois grupos existe porque contar a curva A inteira toda semana
+ * é trabalho que a operação não sustenta — está escrito no topo deste arquivo.
+ * Mas isso é verdade para uma casa que quer MEDIR CONSUMO; para uma casa que
+ * quer CMV SEMANAL, não serve: consumo só existe entre duas contagens DO MESMO
+ * item, e com o rodízio o mesmo item só fecha período de quinze em quinze dias.
+ *
+ * O Beira Lago escolheu CMV semanal — 112 itens, toda segunda. Em vez de uma
+ * coluna nova em Unidade (migração, e o banco teria que mudar antes do código),
+ * a frequência vira uma convenção no valor que já existe: `grupoContagem = 0`
+ * quer dizer "não faz parte do rodízio, entra sempre".
+ *
+ * Assim cada casa escolhe a sua: 104 Sul segue com 1 e 2 e conta metade da
+ * curva A por semana; Beira Lago usa 0 e conta tudo. Mesma tela, mesma folha,
+ * mesmo código.
+ */
+export const GRUPO_TODA_SEMANA = 0;
+
 /** O produto entra na contagem desta semana? */
 export function entraNaSemanaPura(p: ProdutoClassificado, semana: Semana): boolean {
   const { a, b } = GRUPOS[semana];
+  if (p.grupoContagem === GRUPO_TODA_SEMANA && (p.classeAbc === "A" || p.classeAbc === "B")) return true;
   if (p.classeAbc === "A") return p.grupoContagem === a;
   if (p.classeAbc === "B") return p.grupoContagem === b;
   // Sem classe, ou classe C: não entra no rodízio. Continua contável pela tela

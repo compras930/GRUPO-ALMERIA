@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { entraNaSemanaPura, gruposDaSemana, semanaDoMes } from "@/lib/contagem-rotacao";
+import { entraNaSemanaPura, gruposDaSemana, semanaDoMes, GRUPO_TODA_SEMANA } from "@/lib/contagem-rotacao";
 
 describe("rodízio de contagem", () => {
   it("a curva A aparece duas vezes por mês e a B uma", () => {
@@ -41,5 +41,33 @@ describe("rodízio de contagem", () => {
   it("os grupos da semana são os combinados", () => {
     expect(gruposDaSemana(1)).toEqual({ a: 1, b: 1 });
     expect(gruposDaSemana(3)).toEqual({ a: 1, b: 3 });
+  });
+});
+
+describe("grupo 0 — contagem toda semana", () => {
+  // O Beira Lago quer CMV SEMANAL, e consumo só existe entre duas contagens do
+  // MESMO item. Com o rodízio de dois grupos, um item da curva A fecha período
+  // de quinze em quinze dias — o que dá CMV quinzenal, não semanal.
+  const todasAsSemanas = (p: { classeAbc: string | null; grupoContagem: number | null }) =>
+    [1, 2, 3, 4].filter((s) => entraNaSemanaPura(p, s as 1 | 2 | 3 | 4));
+
+  it("curva A no grupo 0 entra nas quatro semanas", () => {
+    expect(todasAsSemanas({ classeAbc: "A", grupoContagem: GRUPO_TODA_SEMANA })).toEqual([1, 2, 3, 4]);
+  });
+
+  it("curva B no grupo 0 também", () => {
+    expect(todasAsSemanas({ classeAbc: "B", grupoContagem: GRUPO_TODA_SEMANA })).toEqual([1, 2, 3, 4]);
+  });
+
+  it("NÃO muda o rodízio de quem usa 1 e 2 — é o 104 Sul que não pode quebrar", () => {
+    expect(todasAsSemanas({ classeAbc: "A", grupoContagem: 1 })).toEqual([1, 3]);
+    expect(todasAsSemanas({ classeAbc: "A", grupoContagem: 2 })).toEqual([2, 4]);
+    expect(todasAsSemanas({ classeAbc: "B", grupoContagem: 4 })).toEqual([4]);
+  });
+
+  it("grupo 0 na curva C continua fora: 0 é frequência, não promoção", () => {
+    // Senão, zerar o grupo de um item sem querer o colocaria na folha semanal.
+    expect(todasAsSemanas({ classeAbc: "C", grupoContagem: GRUPO_TODA_SEMANA })).toEqual([]);
+    expect(todasAsSemanas({ classeAbc: null, grupoContagem: GRUPO_TODA_SEMANA })).toEqual([]);
   });
 });

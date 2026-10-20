@@ -1,0 +1,427 @@
+-- Curva A do Beira Lago: criar os produtos e marcar para contagem SEMANAL.
+--
+-- 112 itens, 80% do que a casa compra em matéria-prima, bebidas e vinhos
+-- (R$ 933.080 de R$ 1.164.999 em 12 semanas, 01/08 a 17/10/2026).
+--
+-- O NOME É O DO XMENU, DE PROPÓSITO. A carga de compras do Beira Lago vai
+-- casar por NOME + UNIDADE, não por código — o espaço de código do app é do
+-- Teknisa, e um número igual do XMenu casaria com o produto errado. Se alguém
+-- "arrumar" esses nomes aqui, a carga para de casar.
+--
+-- IDEMPOTENTE: só cria o que não existe, comparando sem maiúscula/minúscula
+-- (que é como o índice Produto_nome_ignorando_caixa_unidadeMedida_key compara).
+-- Rodar duas vezes não duplica.
+--
+-- Rode um passo de cada vez, conferindo entre eles.
+
+-- ---------------------------------------------------------------------------
+-- PASSO 1 — CONFERIR ANTES. Quantos destes já existem no catálogo?
+--
+-- Produto do grupo é compartilhado entre as casas, então parte destes nomes
+-- pode já estar lá, cadastrada por outra casa. Reaproveitar é o certo — o
+-- insumo é o mesmo.
+-- ---------------------------------------------------------------------------
+WITH alvo(nome, un) AS (VALUES
+  ('FILÉ MIGNON BOVINO', 'KG'),
+  ('ROBALO FILÉ', 'KG'),
+  ('WHISKEY SINGLE MALT THE MACALLAN 18 ANOS 700ML', 'LT'),
+  ('CAMARAO LIMPO - 31/40 ROSA', 'KG'),
+  ('BACALHAU', 'KG'),
+  ('QUEIJO PECORINO ROMANO', 'KG'),
+  ('AGUA PRATA RETORNÁVEL C/G 300ML', 'UND'),
+  ('BURRATA CAMPANA 200GR', 'UND'),
+  ('FILÉ DE ATUM', 'KG'),
+  ('AZEITE EXTRA VIRGEM PAGANINI 3L', 'LT'),
+  ('QUEIJO GRANA PADANO', 'KG'),
+  ('POLVO NAC 1,5/2,0KG', 'KG'),
+  ('CREME DE LEITE FRESCO 35% GORDURA', 'KG'),
+  ('T-BONE ANGUS', 'KG'),
+  ('AGUA SAN PELLEGRINO C/G 500ML', 'UND'),
+  ('PEITO PATO SEM OSSO', 'KG'),
+  ('AGUA PRATA RETORNÁVEL S/G 300ML', 'UND'),
+  ('DESTINO CHARDONNAY - ARGENTINA', 'UND'),
+  ('POLVO BABY LIMPO', 'KG'),
+  ('MANTEIGA PIC NIC COMUM S/SAL 5 KG', 'KG'),
+  ('CARRE FRANCES DE CORDEIRO', 'KG'),
+  ('CABERT PINOT GRIGIO FRIULLI - ITALIA', 'UND'),
+  ('BATATA ASTERIX', 'KG'),
+  ('JAMON PERNIL IBERICO BELOTA JOSELITO C/ OSSO', 'KG'),
+  ('CHOPP STELLA ARTOIS - ESTOQUE', 'LT'),
+  ('CHOCOLATE BARRA 70% LABARR', 'KG'),
+  ('VIDIGUEIRA SIGNATURE ALENTEJO DOC - PORTUGAL - EVENTO', 'UND'),
+  ('AGUA ACQUA PANNA S/G 500ML', 'UND'),
+  ('CHOCOLATE SICAO BARRA/GOTAS BRANCO', 'KG'),
+  ('MANTEIGA COM TRUFAS TARTUFE', 'KG'),
+  ('QUEIJO MUSSARELA NODINI/NOZINHO', 'KG'),
+  ('1913 SPARKLING BRANCO BRUT - BRASIL', 'UND'),
+  ('SOBRASSADA KG', 'KG'),
+  ('RICCITELLI THE PARTY - ARGENTINA', 'UND'),
+  ('COCA COLA ZERO 310ML', 'UND'),
+  ('CHABLIS  MAISON GOICHOT FRERES ANDRE - FRANCA', 'UND'),
+  ('PISTACHE CRU SEM CASCA', 'KG'),
+  ('OLEO DE ALGODAO BALDE LT', 'LT'),
+  ('TOSO BRUT MILLESIMATO DOC - ITALIA', 'UND'),
+  ('OSSOBUCO BOVINO 3CM', 'KG'),
+  ('LULA BABY TENTACULOS', 'KG'),
+  ('CHABLIS MAURICE LECESTER - FRANCA', 'UND'),
+  ('TOMATE HOLANDES', 'KG'),
+  ('LIMÃO TAHIT', 'KG'),
+  ('ALMA VIVA - CHILE', 'UND'),
+  ('ASPARGO', 'KG'),
+  ('KAIKEN ESTATE MALBEC - ARGENTINA', 'UND'),
+  ('HARAS DE PIRQUE GALANTAS - CHILE', 'UND'),
+  ('VILLA ANTINORI BIANCO - ITALIA', 'UND'),
+  ('VINHO TINTO SAINT GERMAIN 750ML (COZINHA)', 'LT'),
+  ('SCHROEDER PINOT NOIR SAURUS - ARGENTINA', 'UND'),
+  ('CHATEAU LOS BOLDOS TRAD CHARDONNAY - CHILE', 'UND'),
+  ('MONTCHENOT GRAN RESERVA 10 ANOS - ARGENTINA', 'UND'),
+  ('CHORIZO CANTIMPLALO KG', 'KG'),
+  ('ALTA YARI MALBEC - ARGENTINA', 'UND'),
+  ('CHOCOLATE SICAO BARRA/GOTAS 40%', 'KG'),
+  ('BENEGAS ESTATE CHARDONNAY - CHILE - EVENTO', 'UND'),
+  ('REGIA COLHEITA RESERVA - PORTUGAL - EVENTO', 'UND'),
+  ('NUESTRO 8 MESES ROBLE - ESPANHA', 'UND'),
+  ('VINHEDO ALBERDI RESERVA - ESPANHA', 'UND'),
+  ('PIPER HEIDSIECK RARE  - FRANCA', 'UND'),
+  ('MONTCHENOT CHENIN BLANC - ARGENTINA', 'UND'),
+  ('QUEIJO PARMESÃO ESPECIAL SCALA', 'KG'),
+  ('PETIRROJO CABERNET SAUVIGNON RESERVA 750ML - CHILE', 'UND'),
+  ('PINTIA - ESPANHA', 'UND'),
+  ('VINHO BRANCO SAINT GERMAIN 750ML  (COZINHA)', 'LT'),
+  ('OLEO DE SOJA LT', 'LT'),
+  ('CHOPP BRAHMA - ESTOQUE', 'LT'),
+  ('CEBOLA BRANCA', 'KG'),
+  ('CREME DE LEITE 17%', 'LT'),
+  ('TOMATE PELADO 1,700GR', 'KG'),
+  ('LINGUIÇA HAMU', 'KG'),
+  ('WHISKEY SINGLE MALT THE MACALLAN 15 ANOS 700ML', 'LT'),
+  ('CREME DE LEITE 35% - NESTILLY', 'LT'),
+  ('POGGIO MARU PRIMITIVO DI MANDURIA - ITALIA', 'UND'),
+  ('DEHESA LA GRANJA TEMPRANILLO - ESPANHA', 'UND'),
+  ('WHISKEY SINGLE MALT THE MACALLAN 12 ANOS 700ML', 'LT'),
+  ('MASCARA DE FUEGO CARMENERE - CHILE', 'UND'),
+  ('PASTA DE PISTACHE 100% CALIFORNIA 3,5KG', 'KG'),
+  ('CREME DE LEITE 25%', 'LT'),
+  ('BRACALLE - JACOPO BIONDI-SANTI - ITALIA', 'UND'),
+  ('MASCARPONE GRANAROLO KG', 'KG'),
+  ('COBOGO SAUVIGNON BLANC - BRASILIA', 'UND'),
+  ('GUANCIALE - CASA DO HOLANDES', 'KG'),
+  ('PALETA DE CORDEIRO', 'KG'),
+  ('OVOS GRANDES BRANCO CX COM 360UN - CONTAR A UNIDADE', 'UND'),
+  ('FRAMBOESA CONGELADA', 'KG'),
+  ('BANANA DA TERRA', 'KG'),
+  ('COGUMELO PORTO BELO 200G', 'KG'),
+  ('TOMATE CEREJA', 'KG'),
+  ('LAPOSTOLLE APALTA - CHILE', 'UND'),
+  ('CHAKA CABERNET SAUVIGNON - CHILE - EVENTO', 'UND'),
+  ('LEITE INTEGRAL UHT 1L', 'LT'),
+  ('AGUA MINERAL 1,5LT S/G', 'UND'),
+  ('CHOPP PATAGONIA IPA - ESTOQUE', 'LT'),
+  ('MANJERICAO BASÍLICO', 'KG'),
+  ('CASTELO DE BORBA RESERVA - PORTUGAL', 'UND'),
+  ('AZEVEDO LOUREIRO ALVARINHO - PORTUGAL', 'UND'),
+  ('ADEGA DE MONCOES - PORTUGAL', 'UND'),
+  ('LICOR 43 700ML', 'LT'),
+  ('ARROZ ARBOREO 1KG', 'KG'),
+  ('CAPSULA DE CAFE EXPRESSO GUATEMALA UNIDADES', 'UND'),
+  ('MOCOTO', 'KG'),
+  ('COGUMELO SHITAKE 200G', 'KG'),
+  ('POLPA DE MARACUJA', 'KG'),
+  ('WHISKEY BUFFALO TRACE BOURBON 750ML', 'LT'),
+  ('PÉS CORTADOS DE FRANGO', 'KG'),
+  ('ALCAPARRONES EM CONSERVA', 'KG'),
+  ('QUEIJO GRUYERE', 'KG'),
+  ('HARAS DE PIRQUE ALBACLARA - CHILE', 'UND'),
+  ('RIBEIRO SANTO RESERVA ENCRUZADO - PORTUGAL', 'UND'),
+  ('GIN BON VIVANT 750ML', 'LT')
+)
+SELECT count(*) FILTER (WHERE p.id IS NOT NULL) AS ja_existem,
+       count(*) FILTER (WHERE p.id IS NULL)     AS a_criar,
+       count(*)                                  AS total
+FROM alvo a
+LEFT JOIN "Produto" p
+       ON lower(btrim(p.nome)) = lower(btrim(a.nome))
+      AND p."unidadeMedida" = a.un;
+
+-- ---------------------------------------------------------------------------
+-- PASSO 2 — CRIAR o que falta.
+-- ---------------------------------------------------------------------------
+WITH alvo(nome, un) AS (VALUES
+  ('FILÉ MIGNON BOVINO', 'KG'),
+  ('ROBALO FILÉ', 'KG'),
+  ('WHISKEY SINGLE MALT THE MACALLAN 18 ANOS 700ML', 'LT'),
+  ('CAMARAO LIMPO - 31/40 ROSA', 'KG'),
+  ('BACALHAU', 'KG'),
+  ('QUEIJO PECORINO ROMANO', 'KG'),
+  ('AGUA PRATA RETORNÁVEL C/G 300ML', 'UND'),
+  ('BURRATA CAMPANA 200GR', 'UND'),
+  ('FILÉ DE ATUM', 'KG'),
+  ('AZEITE EXTRA VIRGEM PAGANINI 3L', 'LT'),
+  ('QUEIJO GRANA PADANO', 'KG'),
+  ('POLVO NAC 1,5/2,0KG', 'KG'),
+  ('CREME DE LEITE FRESCO 35% GORDURA', 'KG'),
+  ('T-BONE ANGUS', 'KG'),
+  ('AGUA SAN PELLEGRINO C/G 500ML', 'UND'),
+  ('PEITO PATO SEM OSSO', 'KG'),
+  ('AGUA PRATA RETORNÁVEL S/G 300ML', 'UND'),
+  ('DESTINO CHARDONNAY - ARGENTINA', 'UND'),
+  ('POLVO BABY LIMPO', 'KG'),
+  ('MANTEIGA PIC NIC COMUM S/SAL 5 KG', 'KG'),
+  ('CARRE FRANCES DE CORDEIRO', 'KG'),
+  ('CABERT PINOT GRIGIO FRIULLI - ITALIA', 'UND'),
+  ('BATATA ASTERIX', 'KG'),
+  ('JAMON PERNIL IBERICO BELOTA JOSELITO C/ OSSO', 'KG'),
+  ('CHOPP STELLA ARTOIS - ESTOQUE', 'LT'),
+  ('CHOCOLATE BARRA 70% LABARR', 'KG'),
+  ('VIDIGUEIRA SIGNATURE ALENTEJO DOC - PORTUGAL - EVENTO', 'UND'),
+  ('AGUA ACQUA PANNA S/G 500ML', 'UND'),
+  ('CHOCOLATE SICAO BARRA/GOTAS BRANCO', 'KG'),
+  ('MANTEIGA COM TRUFAS TARTUFE', 'KG'),
+  ('QUEIJO MUSSARELA NODINI/NOZINHO', 'KG'),
+  ('1913 SPARKLING BRANCO BRUT - BRASIL', 'UND'),
+  ('SOBRASSADA KG', 'KG'),
+  ('RICCITELLI THE PARTY - ARGENTINA', 'UND'),
+  ('COCA COLA ZERO 310ML', 'UND'),
+  ('CHABLIS  MAISON GOICHOT FRERES ANDRE - FRANCA', 'UND'),
+  ('PISTACHE CRU SEM CASCA', 'KG'),
+  ('OLEO DE ALGODAO BALDE LT', 'LT'),
+  ('TOSO BRUT MILLESIMATO DOC - ITALIA', 'UND'),
+  ('OSSOBUCO BOVINO 3CM', 'KG'),
+  ('LULA BABY TENTACULOS', 'KG'),
+  ('CHABLIS MAURICE LECESTER - FRANCA', 'UND'),
+  ('TOMATE HOLANDES', 'KG'),
+  ('LIMÃO TAHIT', 'KG'),
+  ('ALMA VIVA - CHILE', 'UND'),
+  ('ASPARGO', 'KG'),
+  ('KAIKEN ESTATE MALBEC - ARGENTINA', 'UND'),
+  ('HARAS DE PIRQUE GALANTAS - CHILE', 'UND'),
+  ('VILLA ANTINORI BIANCO - ITALIA', 'UND'),
+  ('VINHO TINTO SAINT GERMAIN 750ML (COZINHA)', 'LT'),
+  ('SCHROEDER PINOT NOIR SAURUS - ARGENTINA', 'UND'),
+  ('CHATEAU LOS BOLDOS TRAD CHARDONNAY - CHILE', 'UND'),
+  ('MONTCHENOT GRAN RESERVA 10 ANOS - ARGENTINA', 'UND'),
+  ('CHORIZO CANTIMPLALO KG', 'KG'),
+  ('ALTA YARI MALBEC - ARGENTINA', 'UND'),
+  ('CHOCOLATE SICAO BARRA/GOTAS 40%', 'KG'),
+  ('BENEGAS ESTATE CHARDONNAY - CHILE - EVENTO', 'UND'),
+  ('REGIA COLHEITA RESERVA - PORTUGAL - EVENTO', 'UND'),
+  ('NUESTRO 8 MESES ROBLE - ESPANHA', 'UND'),
+  ('VINHEDO ALBERDI RESERVA - ESPANHA', 'UND'),
+  ('PIPER HEIDSIECK RARE  - FRANCA', 'UND'),
+  ('MONTCHENOT CHENIN BLANC - ARGENTINA', 'UND'),
+  ('QUEIJO PARMESÃO ESPECIAL SCALA', 'KG'),
+  ('PETIRROJO CABERNET SAUVIGNON RESERVA 750ML - CHILE', 'UND'),
+  ('PINTIA - ESPANHA', 'UND'),
+  ('VINHO BRANCO SAINT GERMAIN 750ML  (COZINHA)', 'LT'),
+  ('OLEO DE SOJA LT', 'LT'),
+  ('CHOPP BRAHMA - ESTOQUE', 'LT'),
+  ('CEBOLA BRANCA', 'KG'),
+  ('CREME DE LEITE 17%', 'LT'),
+  ('TOMATE PELADO 1,700GR', 'KG'),
+  ('LINGUIÇA HAMU', 'KG'),
+  ('WHISKEY SINGLE MALT THE MACALLAN 15 ANOS 700ML', 'LT'),
+  ('CREME DE LEITE 35% - NESTILLY', 'LT'),
+  ('POGGIO MARU PRIMITIVO DI MANDURIA - ITALIA', 'UND'),
+  ('DEHESA LA GRANJA TEMPRANILLO - ESPANHA', 'UND'),
+  ('WHISKEY SINGLE MALT THE MACALLAN 12 ANOS 700ML', 'LT'),
+  ('MASCARA DE FUEGO CARMENERE - CHILE', 'UND'),
+  ('PASTA DE PISTACHE 100% CALIFORNIA 3,5KG', 'KG'),
+  ('CREME DE LEITE 25%', 'LT'),
+  ('BRACALLE - JACOPO BIONDI-SANTI - ITALIA', 'UND'),
+  ('MASCARPONE GRANAROLO KG', 'KG'),
+  ('COBOGO SAUVIGNON BLANC - BRASILIA', 'UND'),
+  ('GUANCIALE - CASA DO HOLANDES', 'KG'),
+  ('PALETA DE CORDEIRO', 'KG'),
+  ('OVOS GRANDES BRANCO CX COM 360UN - CONTAR A UNIDADE', 'UND'),
+  ('FRAMBOESA CONGELADA', 'KG'),
+  ('BANANA DA TERRA', 'KG'),
+  ('COGUMELO PORTO BELO 200G', 'KG'),
+  ('TOMATE CEREJA', 'KG'),
+  ('LAPOSTOLLE APALTA - CHILE', 'UND'),
+  ('CHAKA CABERNET SAUVIGNON - CHILE - EVENTO', 'UND'),
+  ('LEITE INTEGRAL UHT 1L', 'LT'),
+  ('AGUA MINERAL 1,5LT S/G', 'UND'),
+  ('CHOPP PATAGONIA IPA - ESTOQUE', 'LT'),
+  ('MANJERICAO BASÍLICO', 'KG'),
+  ('CASTELO DE BORBA RESERVA - PORTUGAL', 'UND'),
+  ('AZEVEDO LOUREIRO ALVARINHO - PORTUGAL', 'UND'),
+  ('ADEGA DE MONCOES - PORTUGAL', 'UND'),
+  ('LICOR 43 700ML', 'LT'),
+  ('ARROZ ARBOREO 1KG', 'KG'),
+  ('CAPSULA DE CAFE EXPRESSO GUATEMALA UNIDADES', 'UND'),
+  ('MOCOTO', 'KG'),
+  ('COGUMELO SHITAKE 200G', 'KG'),
+  ('POLPA DE MARACUJA', 'KG'),
+  ('WHISKEY BUFFALO TRACE BOURBON 750ML', 'LT'),
+  ('PÉS CORTADOS DE FRANGO', 'KG'),
+  ('ALCAPARRONES EM CONSERVA', 'KG'),
+  ('QUEIJO GRUYERE', 'KG'),
+  ('HARAS DE PIRQUE ALBACLARA - CHILE', 'UND'),
+  ('RIBEIRO SANTO RESERVA ENCRUZADO - PORTUGAL', 'UND'),
+  ('GIN BON VIVANT 750ML', 'LT')
+)
+INSERT INTO "Produto" (id, nome, "unidadeMedida", ativo, "criadoEm")
+SELECT 'pbl' || left(md5(lower(btrim(a.nome)) || '|' || a.un), 22), btrim(a.nome), a.un, true, now()
+FROM alvo a
+WHERE NOT EXISTS (
+  SELECT 1 FROM "Produto" p
+  WHERE lower(btrim(p.nome)) = lower(btrim(a.nome)) AND p."unidadeMedida" = a.un
+);
+
+-- ---------------------------------------------------------------------------
+-- PASSO 3 — MARCAR para a contagem semanal do Beira Lago.
+--
+-- classeAbc = 'A' e grupoContagem = 0.
+--
+-- ZERO QUER DIZER "TODA SEMANA" — ver src/lib/contagem-rotacao.ts. O rodízio
+-- normal parte a curva A em dois grupos e cada item cai de quinze em quinze
+-- dias; isso dá CMV quinzenal, não semanal. O Beira Lago escolheu semanal, e
+-- essa é a única diferença em relação ao 104 Sul, que segue com 1 e 2.
+--
+-- A classificação é por (despensa, produto): o mesmo insumo pode ser curva A
+-- aqui e curva C em outra casa, porque depende do quanto cada uma gasta.
+-- ---------------------------------------------------------------------------
+WITH alvo(nome, un) AS (VALUES
+  ('FILÉ MIGNON BOVINO', 'KG'),
+  ('ROBALO FILÉ', 'KG'),
+  ('WHISKEY SINGLE MALT THE MACALLAN 18 ANOS 700ML', 'LT'),
+  ('CAMARAO LIMPO - 31/40 ROSA', 'KG'),
+  ('BACALHAU', 'KG'),
+  ('QUEIJO PECORINO ROMANO', 'KG'),
+  ('AGUA PRATA RETORNÁVEL C/G 300ML', 'UND'),
+  ('BURRATA CAMPANA 200GR', 'UND'),
+  ('FILÉ DE ATUM', 'KG'),
+  ('AZEITE EXTRA VIRGEM PAGANINI 3L', 'LT'),
+  ('QUEIJO GRANA PADANO', 'KG'),
+  ('POLVO NAC 1,5/2,0KG', 'KG'),
+  ('CREME DE LEITE FRESCO 35% GORDURA', 'KG'),
+  ('T-BONE ANGUS', 'KG'),
+  ('AGUA SAN PELLEGRINO C/G 500ML', 'UND'),
+  ('PEITO PATO SEM OSSO', 'KG'),
+  ('AGUA PRATA RETORNÁVEL S/G 300ML', 'UND'),
+  ('DESTINO CHARDONNAY - ARGENTINA', 'UND'),
+  ('POLVO BABY LIMPO', 'KG'),
+  ('MANTEIGA PIC NIC COMUM S/SAL 5 KG', 'KG'),
+  ('CARRE FRANCES DE CORDEIRO', 'KG'),
+  ('CABERT PINOT GRIGIO FRIULLI - ITALIA', 'UND'),
+  ('BATATA ASTERIX', 'KG'),
+  ('JAMON PERNIL IBERICO BELOTA JOSELITO C/ OSSO', 'KG'),
+  ('CHOPP STELLA ARTOIS - ESTOQUE', 'LT'),
+  ('CHOCOLATE BARRA 70% LABARR', 'KG'),
+  ('VIDIGUEIRA SIGNATURE ALENTEJO DOC - PORTUGAL - EVENTO', 'UND'),
+  ('AGUA ACQUA PANNA S/G 500ML', 'UND'),
+  ('CHOCOLATE SICAO BARRA/GOTAS BRANCO', 'KG'),
+  ('MANTEIGA COM TRUFAS TARTUFE', 'KG'),
+  ('QUEIJO MUSSARELA NODINI/NOZINHO', 'KG'),
+  ('1913 SPARKLING BRANCO BRUT - BRASIL', 'UND'),
+  ('SOBRASSADA KG', 'KG'),
+  ('RICCITELLI THE PARTY - ARGENTINA', 'UND'),
+  ('COCA COLA ZERO 310ML', 'UND'),
+  ('CHABLIS  MAISON GOICHOT FRERES ANDRE - FRANCA', 'UND'),
+  ('PISTACHE CRU SEM CASCA', 'KG'),
+  ('OLEO DE ALGODAO BALDE LT', 'LT'),
+  ('TOSO BRUT MILLESIMATO DOC - ITALIA', 'UND'),
+  ('OSSOBUCO BOVINO 3CM', 'KG'),
+  ('LULA BABY TENTACULOS', 'KG'),
+  ('CHABLIS MAURICE LECESTER - FRANCA', 'UND'),
+  ('TOMATE HOLANDES', 'KG'),
+  ('LIMÃO TAHIT', 'KG'),
+  ('ALMA VIVA - CHILE', 'UND'),
+  ('ASPARGO', 'KG'),
+  ('KAIKEN ESTATE MALBEC - ARGENTINA', 'UND'),
+  ('HARAS DE PIRQUE GALANTAS - CHILE', 'UND'),
+  ('VILLA ANTINORI BIANCO - ITALIA', 'UND'),
+  ('VINHO TINTO SAINT GERMAIN 750ML (COZINHA)', 'LT'),
+  ('SCHROEDER PINOT NOIR SAURUS - ARGENTINA', 'UND'),
+  ('CHATEAU LOS BOLDOS TRAD CHARDONNAY - CHILE', 'UND'),
+  ('MONTCHENOT GRAN RESERVA 10 ANOS - ARGENTINA', 'UND'),
+  ('CHORIZO CANTIMPLALO KG', 'KG'),
+  ('ALTA YARI MALBEC - ARGENTINA', 'UND'),
+  ('CHOCOLATE SICAO BARRA/GOTAS 40%', 'KG'),
+  ('BENEGAS ESTATE CHARDONNAY - CHILE - EVENTO', 'UND'),
+  ('REGIA COLHEITA RESERVA - PORTUGAL - EVENTO', 'UND'),
+  ('NUESTRO 8 MESES ROBLE - ESPANHA', 'UND'),
+  ('VINHEDO ALBERDI RESERVA - ESPANHA', 'UND'),
+  ('PIPER HEIDSIECK RARE  - FRANCA', 'UND'),
+  ('MONTCHENOT CHENIN BLANC - ARGENTINA', 'UND'),
+  ('QUEIJO PARMESÃO ESPECIAL SCALA', 'KG'),
+  ('PETIRROJO CABERNET SAUVIGNON RESERVA 750ML - CHILE', 'UND'),
+  ('PINTIA - ESPANHA', 'UND'),
+  ('VINHO BRANCO SAINT GERMAIN 750ML  (COZINHA)', 'LT'),
+  ('OLEO DE SOJA LT', 'LT'),
+  ('CHOPP BRAHMA - ESTOQUE', 'LT'),
+  ('CEBOLA BRANCA', 'KG'),
+  ('CREME DE LEITE 17%', 'LT'),
+  ('TOMATE PELADO 1,700GR', 'KG'),
+  ('LINGUIÇA HAMU', 'KG'),
+  ('WHISKEY SINGLE MALT THE MACALLAN 15 ANOS 700ML', 'LT'),
+  ('CREME DE LEITE 35% - NESTILLY', 'LT'),
+  ('POGGIO MARU PRIMITIVO DI MANDURIA - ITALIA', 'UND'),
+  ('DEHESA LA GRANJA TEMPRANILLO - ESPANHA', 'UND'),
+  ('WHISKEY SINGLE MALT THE MACALLAN 12 ANOS 700ML', 'LT'),
+  ('MASCARA DE FUEGO CARMENERE - CHILE', 'UND'),
+  ('PASTA DE PISTACHE 100% CALIFORNIA 3,5KG', 'KG'),
+  ('CREME DE LEITE 25%', 'LT'),
+  ('BRACALLE - JACOPO BIONDI-SANTI - ITALIA', 'UND'),
+  ('MASCARPONE GRANAROLO KG', 'KG'),
+  ('COBOGO SAUVIGNON BLANC - BRASILIA', 'UND'),
+  ('GUANCIALE - CASA DO HOLANDES', 'KG'),
+  ('PALETA DE CORDEIRO', 'KG'),
+  ('OVOS GRANDES BRANCO CX COM 360UN - CONTAR A UNIDADE', 'UND'),
+  ('FRAMBOESA CONGELADA', 'KG'),
+  ('BANANA DA TERRA', 'KG'),
+  ('COGUMELO PORTO BELO 200G', 'KG'),
+  ('TOMATE CEREJA', 'KG'),
+  ('LAPOSTOLLE APALTA - CHILE', 'UND'),
+  ('CHAKA CABERNET SAUVIGNON - CHILE - EVENTO', 'UND'),
+  ('LEITE INTEGRAL UHT 1L', 'LT'),
+  ('AGUA MINERAL 1,5LT S/G', 'UND'),
+  ('CHOPP PATAGONIA IPA - ESTOQUE', 'LT'),
+  ('MANJERICAO BASÍLICO', 'KG'),
+  ('CASTELO DE BORBA RESERVA - PORTUGAL', 'UND'),
+  ('AZEVEDO LOUREIRO ALVARINHO - PORTUGAL', 'UND'),
+  ('ADEGA DE MONCOES - PORTUGAL', 'UND'),
+  ('LICOR 43 700ML', 'LT'),
+  ('ARROZ ARBOREO 1KG', 'KG'),
+  ('CAPSULA DE CAFE EXPRESSO GUATEMALA UNIDADES', 'UND'),
+  ('MOCOTO', 'KG'),
+  ('COGUMELO SHITAKE 200G', 'KG'),
+  ('POLPA DE MARACUJA', 'KG'),
+  ('WHISKEY BUFFALO TRACE BOURBON 750ML', 'LT'),
+  ('PÉS CORTADOS DE FRANGO', 'KG'),
+  ('ALCAPARRONES EM CONSERVA', 'KG'),
+  ('QUEIJO GRUYERE', 'KG'),
+  ('HARAS DE PIRQUE ALBACLARA - CHILE', 'UND'),
+  ('RIBEIRO SANTO RESERVA ENCRUZADO - PORTUGAL', 'UND'),
+  ('GIN BON VIVANT 750ML', 'LT')
+), despensa AS (
+  SELECT COALESCE(u."estoqueEmId", u.id) AS id FROM "Unidade" u WHERE u.nome = 'Beira Lago'
+), produtos AS (
+  SELECT p.id FROM alvo a
+  JOIN "Produto" p ON lower(btrim(p.nome)) = lower(btrim(a.nome)) AND p."unidadeMedida" = a.un
+)
+INSERT INTO "ParametroEstoqueProduto" (id, "unidadeId", "produtoId", "classeAbc", "grupoContagem")
+SELECT 'qbl' || left(md5(d.id || pr.id), 22), d.id, pr.id, 'A', 0
+FROM produtos pr CROSS JOIN despensa d
+ON CONFLICT ("unidadeId", "produtoId") DO UPDATE
+  SET "classeAbc" = 'A', "grupoContagem" = 0;
+
+-- ---------------------------------------------------------------------------
+-- PASSO 4 — VERIFICAR. Esperado: 112 linhas, todas com classe A e grupo 0.
+-- ---------------------------------------------------------------------------
+SELECT par."classeAbc", par."grupoContagem", count(*) AS itens
+FROM "ParametroEstoqueProduto" par
+JOIN "Unidade" u ON u.id = par."unidadeId"
+WHERE u.nome = 'Beira Lago'
+GROUP BY par."classeAbc", par."grupoContagem"
+ORDER BY 1, 2;
+
+-- ---------------------------------------------------------------------------
+-- PASSO 5 — A lista que vai sair na folha de contagem de segunda.
+-- ---------------------------------------------------------------------------
+SELECT p.nome, p."unidadeMedida"
+FROM "ParametroEstoqueProduto" par
+JOIN "Produto" p ON p.id = par."produtoId"
+JOIN "Unidade" u ON u.id = par."unidadeId"
+WHERE u.nome = 'Beira Lago' AND par."classeAbc" = 'A'
+ORDER BY p.nome;
