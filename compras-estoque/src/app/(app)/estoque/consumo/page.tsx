@@ -2,7 +2,8 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { unidadesComEstoqueProprio, idDaUnidadeFisica } from "@/lib/unidade-fisica";
 import { requireSession } from "@/lib/session";
-import { calcularConsumoPuro, TIPOS_DE_ENTRADA } from "@/lib/consumo";
+import { calcularConsumoPuro, perdasPorProdutoPura, TIPOS_DE_ENTRADA } from "@/lib/consumo";
+import { TIPO_PERDA } from "@/lib/constants";
 import { fmtCurrency } from "@/lib/format";
 
 const data = (d: Date) => d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
@@ -19,13 +20,21 @@ export default async function ConsumoPage({ searchParams }: { searchParams: { un
     return <div className="empty">Nenhuma unidade selecionada.</div>;
   }
 
-  const [contagens, movimentos, precos, produtos] = await Promise.all([
+  const [contagens, movimentos, baixas, precos, produtos] = await Promise.all([
     prisma.contagemEstoque.findMany({
       where: { unidadeId },
       select: { produtoId: true, quantidadeContada: true, criadoEm: true },
     }),
     prisma.movimentoEstoque.findMany({
       where: { unidadeId, tipo: { in: [...TIPOS_DE_ENTRADA] } },
+      select: { produtoId: true, quantidade: true, criadoEm: true },
+    }),
+    // As baixas declaradas vêm numa consulta própria, e NÃO entram em
+    // `movimentos`: PERDA_* está fora de TIPOS_DE_ENTRADA de propósito. A
+    // perda já está dentro do consumo — somar contaria duas vezes. Aqui ela só
+    // EXPLICA parte do que saiu. Ver perdasPorProdutoPura.
+    prisma.movimentoEstoque.findMany({
+      where: { unidadeId, tipo: { in: [...TIPO_PERDA] } },
       select: { produtoId: true, quantidade: true, criadoEm: true },
     }),
     prisma.precoAtualProduto.findMany({ where: { unidadeId }, select: { produtoId: true, preco: true } }),
@@ -35,6 +44,11 @@ export default async function ConsumoPage({ searchParams }: { searchParams: { un
   const linhas = calcularConsumoPuro(
     contagens.map((c) => ({ produtoId: c.produtoId, quantidade: c.quantidadeContada, em: c.criadoEm })),
     movimentos.map((m) => ({ produtoId: m.produtoId, quantidade: m.quantidade, em: m.criadoEm }))
+  );
+
+  const perdaPorProduto = perdasPorProdutoPura(
+    linhas,
+    baixas.map((m) => ({ produtoId: m.produtoId, quantidade: m.quantidade, em: m.criadoEm }))
   );
 
   const precoPorProduto = new Map(precos.map((p) => [p.produtoId, p.preco]));
@@ -48,10 +62,13 @@ export default async function ConsumoPage({ searchParams }: { searchParams: { un
       ...l,
       produto: produtoPorId.get(l.produtoId),
       valor: l.consumo * (precoPorProduto.get(l.produtoId) ?? 0),
+      perda: perdaPorProduto.get(l.produtoId) ?? 0,
+      valorPerda: (perdaPorProduto.get(l.produtoId) ?? 0) * (precoPorProduto.get(l.produtoId) ?? 0),
     }))
     .sort((a, b) => b.valor - a.valor);
 
   const total = comValor.reduce((s, l) => s + (l.valor > 0 ? l.valor : 0), 0);
+  const totalPerda = comValor.reduce((s, l) => s + l.valorPerda, 0);
   const alertas = comValor.filter((l) => l.alerta);
 
   return (
@@ -86,6 +103,11 @@ export default async function ConsumoPage({ searchParams }: { searchParams: { un
           É o que saiu de verdade: vendido, perdido, quebrado, consumido pela equipe. Não depende de ficha
           técnica. Cada produto aparece assim que tem duas contagens — a primeira é só o marco zero.
         </p>
+        <p style={{ margin: "6px 0 0", opacity: 0.75 }}>
+          A coluna <strong>baixa</strong> é a parte desse consumo que alguém declarou como perda, cortesia
+          ou consumo da equipe. Ela <strong>não soma</strong> ao consumo — ela o explica: o que foi jogado
+          fora já não estava na contagem final.
+        </p>
       </div>
 
       {comValor.length === 0 ? (
@@ -95,10 +117,19 @@ export default async function ConsumoPage({ searchParams }: { searchParams: { un
         </div>
       ) : (
         <>
-          <div className="kpis" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+          <div className="kpis" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
             <div className="kpi destaque">
               <p className="lbl">Consumo no período</p>
               <div className="val">{fmtCurrency(total)}</div>
+            </div>
+            <div className="kpi">
+              <p className="lbl">Baixa declarada</p>
+              <div className="val">{fmtCurrency(totalPerda)}</div>
+              <p className="sub">
+                {total > 0
+                  ? `${((100 * totalPerda) / total).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% do consumo — o resto virou venda ou sumiu`
+                  : "sem consumo medido no período"}
+              </p>
             </div>
             <div className="kpi">
               <p className="lbl">Produtos medidos</p>
@@ -120,6 +151,7 @@ export default async function ConsumoPage({ searchParams }: { searchParams: { un
                   <th style={{ textAlign: "right" }}>entradas</th>
                   <th style={{ textAlign: "right" }}>saldo depois</th>
                   <th style={{ textAlign: "right" }}>consumo</th>
+                  <th style={{ textAlign: "right" }}>baixa</th>
                   <th style={{ textAlign: "right" }}>valor</th>
                 </tr>
               </thead>
@@ -143,6 +175,9 @@ export default async function ConsumoPage({ searchParams }: { searchParams: { un
                     <td style={{ textAlign: "right" }}>{qtd(l.entradas)}</td>
                     <td style={{ textAlign: "right" }}>{qtd(l.saldoFinal)}</td>
                     <td style={{ textAlign: "right" }}>{qtd(l.consumo)}</td>
+                    <td style={{ textAlign: "right", opacity: l.perda ? 1 : 0.35 }}>
+                      {l.perda ? qtd(l.perda) : "—"}
+                    </td>
                     <td style={{ textAlign: "right" }}>{fmtCurrency(l.valor)}</td>
                   </tr>
                 ))}

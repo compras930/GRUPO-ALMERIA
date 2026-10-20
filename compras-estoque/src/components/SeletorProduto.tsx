@@ -32,6 +32,10 @@ export default function SeletorProduto({
 }) {
   const [buscando, setBuscando] = useState(selecionado === null);
   const [termo, setTermo] = useState("");
+  // A lista só abre quando o campo recebe foco (ou quando já se digitou algo).
+  // Aberta de saída, ela tapava o campo logo abaixo na tela de perdas — quem
+  // chegava no formulário via a lista por cima do que queria preencher.
+  const [focado, setFocado] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -81,6 +85,11 @@ export default function SeletorProduto({
         autoFocus={autoFocus}
         placeholder="Digite parte do nome"
         onChange={(e) => setTermo(e.target.value)}
+        onFocus={() => setFocado(true)}
+        onBlur={() => {
+          // Atraso para o clique num item da lista acontecer antes de ela fechar.
+          setTimeout(() => setFocado(false), 150);
+        }}
         onKeyDown={(e) => {
           // Enter com um resultado só escolhe direto: quem lança perda no fim
           // do expediente digita e sai, não navega com o mouse.
@@ -91,7 +100,7 @@ export default function SeletorProduto({
           if (e.key === "Escape" && selecionado) setBuscando(false);
         }}
       />
-      {(termo || !selecionado) && (
+      {(focado || termo) && (
         <div className="combobox-dropdown">
           <ul>
             {filtradas.map((o) => (

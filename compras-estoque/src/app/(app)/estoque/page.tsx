@@ -48,6 +48,9 @@ export default async function EstoquePage({
           <Link href={`/estoque/consumo${unidadeId ? `?unidadeId=${unidadeId}` : ""}`} className="btn">
             Consumo entre contagens
           </Link>
+          <Link href={`/estoque/perdas${unidadeId ? `?unidadeId=${unidadeId}` : ""}`} className="btn">
+            Perdas e baixas
+          </Link>
           <Link href={`/estoque/contagem${unidadeId ? `?unidadeId=${unidadeId}` : ""}`} className="btn primary">
             + Registrar contagem
           </Link>
