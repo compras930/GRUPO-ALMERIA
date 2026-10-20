@@ -525,6 +525,36 @@ ORDER BY c.valor DESC;
 -- ---------------------------------------------------------------------------
 BEGIN;
 
+-- 5a. O que vai ficar DE FORA: nome que já existe no catálogo em OUTRA
+--     unidade de medida.
+--
+--     Isto não é zelo extra, é o que o NOT EXISTS do passo 5 NÃO cobre: ele
+--     compara (nome, unidade), então um "ACELGA" em KG passa limpo por cima de
+--     um "ACELGA" em LT que já existe — e aí são dois produtos de mesmo nome,
+--     com a compra num e a contagem no outro. O consumo dos dois sai errado, e
+--     sai errado em silêncio, que é o pior jeito.
+--
+--     O que fica de fora aqui continua aparecendo como "não reconhecido" na
+--     carga, que é visível e cobra uma decisão. Produto partido em dois não
+--     cobra nada de ninguém.
+--
+--     A decisão, depois, é uma de duas: ConversaoUnidadeCompra (quando são
+--     embalagens do mesmo produto — 1 LT de Aperol = 1,333 garrafas de 750ml)
+--     ou corrigir a unidade do cadastro (quando ela está simplesmente errada).
+--     As duas mexem em produto que as OUTRAS casas já usam — por isso não são
+--     feitas aqui.
+--     Esta consulta SÓ LISTA. A exclusão acontece no WHERE do INSERT logo
+--     abaixo, e não apagando linha daqui: a lista das 396 continua inteira na
+--     tabela de trabalho, que é de onde o 4-conflito-de-unidade.sql lê — antes
+--     ou depois deste passo, tanto faz. Script que destrói o próprio insumo de
+--     diagnóstico obriga a acertar a ordem na primeira tentativa.
+SELECT c.nome, c.unidade AS unidade_da_compra, p."unidadeMedida" AS ja_cadastrado_em, c.valor
+FROM "_bl_cadastro" c
+JOIN "Produto" p
+  ON lower(regexp_replace(btrim(p.nome), '\s+', ' ', 'g')) = lower(c.nome)
+ AND p."unidadeMedida" <> c.unidade
+ORDER BY c.valor DESC;
+
 INSERT INTO "Produto" (id, nome, "unidadeMedida", categoria, ativo, "criadoEm")
 SELECT
   'bl' || substr(md5(c.nome || '|' || c.unidade), 1, 23),
@@ -543,23 +573,38 @@ WHERE c.grupo IN (
   'HIGIENE E LIMPEZA',
   'DESCARTÁVEIS E EMBALAGENS'
 )
+-- Já existe com ESTA unidade: nada a fazer, a linha devia ter casado sozinha.
 AND NOT EXISTS (
   SELECT 1 FROM "Produto" p
   WHERE lower(regexp_replace(btrim(p.nome), '\s+', ' ', 'g')) = lower(c.nome)
     AND p."unidadeMedida" = c.unidade
+)
+-- Já existe com OUTRA unidade: é o do passo 5a, e é o que não pode entrar.
+AND NOT EXISTS (
+  SELECT 1 FROM "Produto" p
+  WHERE lower(regexp_replace(btrim(p.nome), '\s+', ' ', 'g')) = lower(c.nome)
+    AND p."unidadeMedida" <> c.unidade
 );
 
 COMMIT;
 
 -- ---------------------------------------------------------------------------
--- 6. CONFERÊNCIA FINAL: quantos dos 396 existem agora, por grupo.
---    "faltam" só pode ser > 0 nos grupos que você comentou no passo 5, ou nos
---    que o passo 3 mandou tirar.
+-- 6. CONFERÊNCIA FINAL, por grupo.
+--
+--    "cadastrados" + "fora_por_conflito" tem que fechar com "na_lista" em
+--    todo grupo que você NÃO comentou no passo 5. "fora_por_conflito" é
+--    exatamente o que o passo 5a listou — e continua pendente, não resolvido:
+--    essas linhas vão voltar como "não reconhecidas" na próxima carga, até
+--    alguém decidir conversão ou correção de unidade (4-conflito-de-unidade.sql).
 -- ---------------------------------------------------------------------------
 SELECT c.grupo,
        count(*) AS na_lista,
        count(p.id) AS cadastrados,
-       count(*) - count(p.id) AS faltam,
+       count(*) FILTER (
+         WHERE EXISTS (SELECT 1 FROM "Produto" x
+                        WHERE lower(regexp_replace(btrim(x.nome), '\s+', ' ', 'g')) = lower(c.nome)
+                          AND x."unidadeMedida" <> c.unidade)
+       ) AS fora_por_conflito,
        round(sum(c.valor), 2) AS valor
 FROM "_bl_cadastro" c
 LEFT JOIN "Produto" p
