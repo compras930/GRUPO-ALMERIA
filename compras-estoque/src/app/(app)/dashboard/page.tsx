@@ -6,6 +6,7 @@ import { idDaUnidadeFisica } from "@/lib/unidade-fisica";
 import { fmtCurrency } from "@/lib/format";
 import { totaisPorCategoriaPura, SEM_CATEGORIA } from "@/lib/painel-categoria";
 import { curvaAbcPura, resumoAbcPura, CORTE_A } from "@/lib/curva-abc";
+import { ehEnxuto } from "@/lib/escopo-cmv";
 import { carregarIndiceReceitas, carregarPrecoAtualPorProduto, explodirReceitaPura, CicloReceitaError } from "@/lib/receita";
 import { calcularConsumoPuro, TIPOS_DE_ENTRADA } from "@/lib/consumo";
 import { mesDaChave, mesDaData, ultimosMeses, rotuloCurto } from "@/lib/mes";
@@ -135,6 +136,10 @@ export default async function DashboardPage({
   );
 
   const totalCompra = compraPorCategoria.reduce((s, c) => s + c.valor, 0);
+  // ENXUTO × CHEIO, o mesmo corte do painel de compras: o enxuto é o que vira
+  // prato vendido e é o número que se compara com a meta — a casa não controla
+  // CMV comprando menos detergente. O cheio é o que saiu do caixa.
+  const compraEnxuta = compraPorCategoria.filter((c) => ehEnxuto(c.categoria)).reduce((s, c) => s + c.valor, 0);
   const totalVenda = vendaPorCategoria.reduce((s, c) => s + c.valor, 0);
 
   // Curva ABC da COMPRA, por item. Linha sem produto entra agrupada pelo nome
@@ -198,6 +203,13 @@ export default async function DashboardPage({
     itensSemFicha = semFicha.size;
   }
   const cmvTeorico = vendaComFicha > 0 ? (100 * custoTeorico) / vendaComFicha : null;
+  // CMV DE COMPRAS: compras ÷ vendas do mesmo mês. É o que o painel de compras
+  // mostra, e é um PROXY — ele supõe que o estoque não mudou no período. Numa
+  // semana em que a casa estoca vinho pra um evento, ele acusa CMV alto sem
+  // nada ter saído da despensa. É o único número possível antes de existir
+  // contagem, e por isso fica aqui nomeado como o que é, ao lado dos outros.
+  const cmvComprasEnxuto = totalVenda > 0 ? (100 * compraEnxuta) / totalVenda : null;
+  const cmvComprasCheio = totalVenda > 0 ? (100 * totalCompra) / totalVenda : null;
 
   // CMV CONTADO (real): o que SAIU da despensa entre duas contagens, valorizado
   // a preço atual, sobre o faturamento da mesma janela.
@@ -324,32 +336,89 @@ export default async function DashboardPage({
         <div className="kpi">
           <p className="lbl">Compras</p>
           <div className="val">{fmtCurrency(totalCompra)}</div>
-          <p className="sub">{linhasCompra.length} linhas de nota</p>
-        </div>
-        <div className="kpi">
-          <p className="lbl">CMV contado (real)</p>
-          <div className="val">{cmvContado === null ? "—" : `${cmvContado.toFixed(1)}%`}</div>
           <p className="sub">
-            {janela === null
-              ? "precisa de duas contagens do mesmo produto"
-              : cmvContado === null
-                ? `${fmtCurrency(consumoValor)} consumidos entre ${dataCurta(janela.de)} e ${dataCurta(janela.ate)}, sem venda carregada na janela`
-                : `${produtosContados} produtos, entre ${dataCurta(janela.de)} e ${dataCurta(janela.ate)}`}
+            {fmtCurrency(compraEnxuta)} enxuto · {linhasCompra.length} linhas de nota
           </p>
         </div>
-        <div className="kpi destaque">
-          <p className="lbl">CMV teórico</p>
-          <div className="val">{cmvTeorico === null ? "—" : `${cmvTeorico.toFixed(1)}%`}</div>
-          <p className="sub">
-            {cmvTeorico === null
-              ? "precisa de venda carregada e ficha técnica"
-              : itensSemFicha > 0
-                ? itensSemFicha === 1
-                  ? "1 item vendido sem ficha ficou de fora"
-                  : `${itensSemFicha} itens vendidos sem ficha ficaram de fora`
-                : "todo item vendido tem ficha"}
+      </div>
+
+      {/*
+        OS TRÊS CMV, numa tabela e não em três tiles.
+
+        Três porcentagens soltas lado a lado convidam à leitura errada — a de
+        que uma delas é "a certa" e as outras são variação. Elas medem coisas
+        diferentes, em janelas diferentes, e é a DIFERENÇA entre elas que
+        carrega a informação. Em tabela, cada linha pode dizer o que responde e
+        sobre que período, que é o mínimo pra ninguém comparar maçã com laranja.
+      */}
+      <div className="card" style={{ marginTop: 4 }}>
+        <h2 style={{ fontSize: 15, marginBottom: 4 }}>Os três CMV</h2>
+        <p className="sub-explica" style={{ marginBottom: 16 }}>
+          Eles vão discordar, e isso não é defeito — é a informação. Enxuto é matéria-prima,
+          bebidas e vinhos; cheio é tudo o que foi comprado.
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>medida</th>
+              <th className="num" style={{ width: 90 }}>valor</th>
+              <th>o que responde</th>
+              <th style={{ width: 170 }}>janela</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Compras ÷ vendas — enxuto</td>
+              <td className="num">{cmvComprasEnxuto === null ? "—" : `${cmvComprasEnxuto.toFixed(1)}%`}</td>
+              <td className="cat">quanto comprei de insumo em relação ao que vendi</td>
+              <td className="cat">{mes.rotulo}</td>
+            </tr>
+            <tr>
+              <td>Compras ÷ vendas — cheio</td>
+              <td className="num">{cmvComprasCheio === null ? "—" : `${cmvComprasCheio.toFixed(1)}%`}</td>
+              <td className="cat">o mesmo, somando embalagem, higiene, funcionário e eventos</td>
+              <td className="cat">{mes.rotulo}</td>
+            </tr>
+            <tr>
+              <td>Teórico (ficha técnica)</td>
+              <td className="num">{cmvTeorico === null ? "—" : `${cmvTeorico.toFixed(1)}%`}</td>
+              <td className="cat">quanto DEVERIA ter sido gasto pra fazer o que foi vendido</td>
+              <td className="cat">
+                {cmvTeorico === null
+                  ? "precisa de venda e ficha"
+                  : itensSemFicha > 0
+                    ? `${mes.rotulo} · ${itensSemFicha} ${itensSemFicha === 1 ? "item sem ficha de fora" : "itens sem ficha de fora"}`
+                    : mes.rotulo}
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <strong>Contado (inventário)</strong>
+              </td>
+              <td className="num">
+                <strong>{cmvContado === null ? "—" : `${cmvContado.toFixed(1)}%`}</strong>
+              </td>
+              <td className="cat">quanto SAIU da despensa de verdade</td>
+              <td className="cat">
+                {janela === null
+                  ? "precisa de duas contagens do mesmo produto"
+                  : `${dataCurta(janela.de)} a ${dataCurta(janela.ate)} · ${produtosContados} produtos`}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        {janela !== null && cmvContado === null && (
+          <p className="sub-explica" style={{ marginTop: 14 }}>
+            O consumo contado foi de {fmtCurrency(consumoValor)}, mas não há venda carregada nessa
+            janela — sem denominador não há percentual.
           </p>
-        </div>
+        )}
+        <p className="sub-explica" style={{ marginTop: 14 }}>
+          <strong>Compras ÷ vendas é um proxy:</strong> ele supõe que o estoque não mudou. Numa
+          semana em que a casa estoca vinho para um evento, acusa CMV alto sem nada ter saído da
+          despensa. É o único número possível antes de existir contagem — e é por isso que o contado
+          está em negrito.
+        </p>
       </div>
 
       <div className="duas-colunas">
