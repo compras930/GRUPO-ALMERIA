@@ -9,7 +9,8 @@ import { curvaAbcPura, resumoAbcPura, CORTE_A } from "@/lib/curva-abc";
 import { ehEnxuto } from "@/lib/escopo-cmv";
 import { faturamentoDaLinhaPura, linhasEstimadasPura } from "@/lib/faturamento";
 import { carregarIndiceReceitas, carregarPrecoAtualPorProduto, explodirReceitaPura, CicloReceitaError } from "@/lib/receita";
-import { calcularConsumoPuro, TIPOS_DE_ENTRADA } from "@/lib/consumo";
+import { TIPOS_DE_ENTRADA } from "@/lib/consumo";
+import { calcularConsumoDoMesPuro } from "@/lib/consumo-mensal";
 import { mesDaChave, mesDaData, ultimosMeses, rotuloCurto } from "@/lib/mes";
 
 /**
@@ -243,10 +244,16 @@ export default async function DashboardPage({
   //   consumo = saldo contado antes + entradas do período − saldo contado depois
   //
   // Ele não depende de ficha técnica nenhuma — é a diferença entre dois
-  // inventários. E não depende do mês escolhido lá em cima: a janela é a das
-  // CONTAGENS, que cada produto fecha quando é contado. Por isso o card mostra
-  // as datas que ele de fato mediu, em vez de herdar o rótulo do mês; herdar
-  // seria dizer "outubro" para um número que mede outra coisa.
+  // inventários.
+  //
+  // A JANELA É ANCORADA NO MÊS ESCOLHIDO, não nas duas últimas contagens — ver
+  // src/lib/consumo-mensal.ts. A contagem da virada fecha um mês e abre o
+  // seguinte, mesmo que o mês acabe no meio da semana. Antes daqui o card
+  // usava sempre as duas últimas contagens: em 10 de novembro ele mostraria
+  // uma semana de novembro com o rótulo "outubro" em cima.
+  //
+  // O card continua mostrando as DATAS que mediu, porque a contagem é feita
+  // por gente e a virada real pode ser 31/10 à noite ou 02/11 de manhã.
   let cmvContado: number | null = null;
   let consumoValor = 0;
   let janela: { de: Date; ate: Date } | null = null;
@@ -266,9 +273,10 @@ export default async function DashboardPage({
         select: { produtoId: true, preco: true },
       }),
     ]);
-    const linhas = calcularConsumoPuro(
+    const linhas = calcularConsumoDoMesPuro(
       contagens.map((c) => ({ produtoId: c.produtoId, quantidade: c.quantidadeContada, em: c.criadoEm })),
-      entradas.map((m) => ({ produtoId: m.produtoId, quantidade: m.quantidade, em: m.criadoEm }))
+      entradas.map((m) => ({ produtoId: m.produtoId, quantidade: m.quantidade, em: m.criadoEm })),
+      { inicio: mes.inicio, fim: mes.fim }
     );
     if (linhas.length > 0) {
       const preco = new Map(precosDespensa.map((x) => [x.produtoId, x.preco]));
@@ -437,7 +445,7 @@ export default async function DashboardPage({
               <td className="cat">quanto SAIU da despensa de verdade</td>
               <td className="cat">
                 {janela === null
-                  ? "precisa de duas contagens do mesmo produto"
+                  ? "precisa de uma contagem na virada de cada ponta do mês"
                   : `${dataCurta(janela.de)} a ${dataCurta(janela.ate)} · ${produtosContados} produtos`}
               </td>
             </tr>
