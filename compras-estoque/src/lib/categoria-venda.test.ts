@@ -17,8 +17,8 @@ describe("chaveCategoria", () => {
 
 describe("categoriaCanonicaPura", () => {
   it("sobe tudo para MAIÚSCULA, que é a convenção da casa", () => {
-    expect(categoriaCanonicaPura("Carnes")).toBe("CARNES");
-    expect(categoriaCanonicaPura("Pescados")).toBe("PESCADOS");
+    expect(categoriaCanonicaPura("Sucos")).toBe("SUCOS");
+    expect(categoriaCanonicaPura("Cafés")).toBe("CAFÉS");
     expect(categoriaCanonicaPura("Rosé")).toBe("ROSÉ");
     expect(categoriaCanonicaPura("Espumante")).toBe("ESPUMANTE");
   });
@@ -45,13 +45,29 @@ describe("categoriaCanonicaPura", () => {
     expect(categoriaCanonicaPura(uma)).toBe(uma);
   });
 
+  it("junta as categorias que a casa decidiu juntar", () => {
+    expect(categoriaCanonicaPura("ANTIPASTI")).toBe("ENTRADAS");
+    expect(categoriaCanonicaPura("Antipasti")).toBe("ENTRADAS");
+    expect(categoriaCanonicaPura("Saladas")).toBe("ENTRADAS");
+    expect(categoriaCanonicaPura("Carnes")).toBe("PRINCIPAIS");
+    expect(categoriaCanonicaPura("Pescados")).toBe("PRINCIPAIS");
+    expect(categoriaCanonicaPura("MASSAS")).toBe("PRINCIPAIS");
+    expect(categoriaCanonicaPura("Bambinos")).toBe("PRINCIPAIS");
+  });
+
+  it("o agrupamento sobrevive a uma segunda passada", () => {
+    // ENTRADAS e PRINCIPAIS não podem, eles próprios, ser reagrupados.
+    expect(categoriaCanonicaPura(categoriaCanonicaPura("ANTIPASTI"))).toBe("ENTRADAS");
+    expect(categoriaCanonicaPura(categoriaCanonicaPura("Carnes"))).toBe("PRINCIPAIS");
+  });
+
   it("não inventa plural para quem não está no mapa", () => {
     // Pluralizar por conta própria criaria "TAXASS", "CAFÉSS" ou coisa pior.
     // Fora do mapa, a única coisa que acontece é subir a caixa.
     expect(categoriaCanonicaPura("TAXAS")).toBe("TAXAS");
     expect(categoriaCanonicaPura("CAFÉS")).toBe("CAFÉS");
-    expect(categoriaCanonicaPura("Antipasti")).toBe("ANTIPASTI");
     expect(categoriaCanonicaPura("SERVICOS")).toBe("SERVICOS");
+    expect(categoriaCanonicaPura("Espanha")).toBe("ESPANHA");
   });
 
   it("devolve null para vazio, em vez de uma sexta forma de dizer 'sem categoria'", () => {
@@ -63,7 +79,7 @@ describe("categoriaCanonicaPura", () => {
 
   it("apara espaço de sobra do export", () => {
     expect(categoriaCanonicaPura("  TINTO  ")).toBe("TINTOS");
-    expect(categoriaCanonicaPura("  Massas  ")).toBe("MASSAS");
+    expect(categoriaCanonicaPura("  Massas  ")).toBe("PRINCIPAIS");
   });
 });
 

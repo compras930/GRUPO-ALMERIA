@@ -54,6 +54,30 @@ const PLURAL_CANONICO: Record<string, string> = {
 };
 
 /**
+ * Categorias que FORAM JUNTADAS a outra, por decisão da casa.
+ *
+ * É um mapa SEPARADO do plural, e a separação é de propósito: ali se corrige
+ * como um nome se escreve, aqui se diz que uma categoria deixou de existir.
+ * Misturar os dois faria uma lista onde ninguém distingue "erro de grafia" de
+ * "decisão de cardápio" — e a segunda é a que alguém vai querer rever um dia.
+ *
+ * ANTIPASTI tem um motivo a mais para estar aqui: o XMenu continua mandando
+ * esse subgrupo em toda carga. Juntar só no banco faria a próxima leva de
+ * itens trazê-lo de volta, que foi exatamente como a duplicação TINTO/Tintos
+ * nasceu. CARNES, PESCADOS, MASSAS, SALADAS e BAMBINOS só existiam no cadastro
+ * antigo e não voltariam sozinhos — estão aqui para que o app e o banco contem
+ * a MESMA história, venha o item de onde vier.
+ */
+const AGRUPAMENTO: Record<string, string> = {
+  antipasti: "ENTRADAS",
+  salada: "ENTRADAS",
+  carne: "PRINCIPAIS",
+  pescado: "PRINCIPAIS",
+  massa: "PRINCIPAIS",
+  bambino: "PRINCIPAIS",
+};
+
+/**
  * Devolve o nome canônico, ou o próprio nome quando não há par conhecido.
  *
  * Nome vazio vira `null` em vez de string vazia: o painel já trata ausência de
@@ -63,7 +87,10 @@ const PLURAL_CANONICO: Record<string, string> = {
 export function categoriaCanonicaPura(nome: string | null | undefined): string | null {
   const limpo = (nome ?? "").trim();
   if (limpo === "") return null;
-  return PLURAL_CANONICO[chaveCategoria(limpo)] ?? limpo.toUpperCase();
+  const chave = chaveCategoria(limpo);
+  // Agrupamento primeiro: uma categoria que deixou de existir não precisa ter
+  // o plural arrumado antes de desaparecer.
+  return AGRUPAMENTO[chave] ?? PLURAL_CANONICO[chave] ?? limpo.toUpperCase();
 }
 
 /**
