@@ -39,6 +39,7 @@ const NAV: GrupoNav[] = [
       { href: "/estoque/contagem", label: "Contagem da semana", daUnidade: true },
       { href: "/estoque/perdas", label: "Perdas e baixas", daUnidade: true },
       { href: "/estoque/consumo", label: "Consumo" },
+      { href: "/estoque/conciliacao", label: "Conferência da contagem", papeis: ["ADMIN"] },
       { href: "/estoque", label: "Saldos" },
       { href: "/cmv", label: "Fichas técnicas", papeis: ["ADMIN"] },
       { href: "/receitas", label: "Sub-receitas", papeis: ["ADMIN"] },
