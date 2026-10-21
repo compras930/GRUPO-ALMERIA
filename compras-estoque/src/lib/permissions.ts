@@ -28,6 +28,22 @@ export function podeVerPedidos(papel: Papel) {
   return papel !== "GERENTE";
 }
 
+/**
+ * Só o ADMIN pode existir sem casa. Qualquer outro papel SEM unidade é um
+ * usuário quebrado nos dois sentidos, e o segundo é o grave:
+ *
+ *   - não OPERA: contagem e perda pegam a casa do próprio usuário, então as
+ *     telas respondem "Nenhuma unidade selecionada" e não há o que fazer;
+ *   - VÊ DEMAIS: o Painel escopa por `user.unidadeId`, e nulo não escopa nada
+ *     — o gerente de uma casa abriria o mês somado de TODAS elas.
+ *
+ * É por isso que a regra mora aqui e não só na tela: um gerente criado sem
+ * casa não falha, o que seria visível; ele vaza, calado.
+ */
+export function exigeUnidade(papel: Papel) {
+  return papel !== "ADMIN";
+}
+
 /** Um usuário só vê/opera dados da própria unidade, a menos que seja ADMIN. */
 export function unidadeVisivel(papel: Papel, unidadeUsuario: string | null, unidadeAlvo: string) {
   if (papel === "ADMIN") return true;

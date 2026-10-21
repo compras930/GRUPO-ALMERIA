@@ -83,6 +83,18 @@ export default async function DashboardPage({
 
   // Quem não é ADMIN nunca escolhe: é sempre a própria casa, venha o que vier
   // na URL. O seletor é conveniência de quem vê tudo, não uma porta.
+  // Rede de segurança para o usuário não-admin SEM casa, que `exigeUnidade` já
+  // impede de nascer: sem isto, `pedida` sairia indefinido, o escopo sairia
+  // vazio e o mês somado de todas as casas apareceria pra quem só podia ver a
+  // sua. A criação recusa; este `if` cobre quem foi criado antes da regra.
+  if (!isAdmin && !user.unidadeId) {
+    return (
+      <div className="empty">
+        Seu usuário não está ligado a nenhuma casa, então não há painel pra mostrar. Peça ao
+        administrador para definir sua unidade na tela de Usuários.
+      </div>
+    );
+  }
   const pedida = isAdmin ? searchParams.unidadeId : user.unidadeId ?? undefined;
   const casaId = pedida && unidadeVisivel(user.papel, user.unidadeId, pedida) ? pedida : null;
   const casa = casaId ? casas.find((c) => c.id === casaId) ?? null : null;

@@ -51,7 +51,9 @@ export default async function UsuariosPage() {
             <div className="field-group">
               <label htmlFor="unidadeId">Unidade</label>
               <select id="unidadeId" name="unidadeId" defaultValue="">
-                <option value="">Todas (admin)</option>
+                {/* Só o admin fica sem casa — ver `exigeUnidade`. O rótulo diz
+                    isso em vez de "Todas", que convidava a deixar em branco. */}
+                <option value="">Nenhuma (só para administrador)</option>
                 {unidades.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.nome}
