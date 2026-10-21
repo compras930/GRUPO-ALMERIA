@@ -9,6 +9,8 @@
 import { prisma } from "@/lib/prisma";
 import { normalizarNome } from "@/lib/nome-normalizado";
 import { idDaUnidadeFisica, casasDaUnidadeFisica } from "@/lib/unidade-fisica";
+import { emOrdemDeBloqueio } from "@/lib/ordem-de-bloqueio";
+import { comRetentativaDeConflito } from "@/lib/transacao";
 import {
   montarIndiceProdutos,
   resolverLinhaCompraPura,
@@ -485,7 +487,8 @@ export async function processarNotaCompra(
     precosDepois.set(produtoId, p.preco);
   }
 
-  const notaCompraId = await prisma.$transaction(async (tx) => {
+  const notaCompraId = await comRetentativaDeConflito(() =>
+    prisma.$transaction(async (tx) => {
     const notaCompra = await tx.notaCompra.create({
       data: { unidadeId: unidadeFisicaId, arquivoNome: arquivoNome ?? "n8n", importadoPorId },
     });
@@ -515,7 +518,9 @@ export async function processarNotaCompra(
     }
 
     // Saldo: um upsert por PRODUTO, com a soma da carga inteira.
-    for (const [produtoId, quantidadeEntrada] of entradaPorProduto) {
+    // Ordem estável de id, igual na venda: duas cargas simultâneas têm que
+    // pegar as linhas pelo mesmo caminho. Ver src/lib/ordem-de-bloqueio.ts.
+    for (const [produtoId, quantidadeEntrada] of emOrdemDeBloqueio(entradaPorProduto)) {
       await tx.estoqueSaldo.upsert({
         where: { unidadeId_produtoId: { unidadeId: unidadeFisicaId, produtoId } },
         update: { quantidade: { increment: quantidadeEntrada } },
@@ -538,8 +543,9 @@ export async function processarNotaCompra(
       })),
     });
 
-    return notaCompra.id;
-  }, { timeout: 60_000 });
+      return notaCompra.id;
+    }, { timeout: 60_000 })
+  );
 
   // Aprender código roda FORA da transação da nota, e cada UPDATE sozinho.
   //

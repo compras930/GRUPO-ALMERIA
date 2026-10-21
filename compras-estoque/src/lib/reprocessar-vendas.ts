@@ -34,6 +34,8 @@ import { prisma } from "@/lib/prisma";
 import { idDaUnidadeFisica } from "@/lib/unidade-fisica";
 import { carregarIndiceReceitas, explodirReceitaPura, CicloReceitaError } from "@/lib/receita";
 import { resolverItensVendaPura, EXPLICACAO_MOTIVO } from "@/lib/resolucao-item-venda";
+import { emOrdemDeBloqueio } from "@/lib/ordem-de-bloqueio";
+import { comRetentativaDeConflito } from "@/lib/transacao";
 
 export type ResultadoReprocessamentoVendas = {
   linhasSemItem: number;
@@ -148,11 +150,13 @@ export async function reprocessarVendasNaoReconhecidas(
     select: { id: true, nome: true, unidadeMedida: true },
   });
 
-  await prisma.$transaction(async (tx) => {
+  await comRetentativaDeConflito(() =>
+    prisma.$transaction(async (tx) => {
     for (const { linhaId, itemVendaId } of aCasar) {
       await tx.itemVendaSemanal.update({ where: { id: linhaId }, data: { itemVendaId } });
     }
-    for (const [produtoId, quantidade] of consumoTotal) {
+    // Ordem estável de id — ver src/lib/ordem-de-bloqueio.ts.
+    for (const [produtoId, quantidade] of emOrdemDeBloqueio(consumoTotal)) {
       if (quantidade <= 0) continue;
       await tx.estoqueSaldo.upsert({
         where: { unidadeId_produtoId: { unidadeId: unidadeFisicaId, produtoId } },
@@ -171,7 +175,8 @@ export async function reprocessarVendasNaoReconhecidas(
         },
       });
     }
-  }, { timeout: 60_000 });
+    }, { timeout: 60_000 })
+  );
 
   const nomePorId = new Map(produtos.map((p) => [p.id, p]));
   return {

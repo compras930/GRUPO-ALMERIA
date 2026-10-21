@@ -9,6 +9,8 @@ import { normalizarNome } from "@/lib/nome-normalizado";
 import { carregarIndiceReceitas, carregarPrecoAtualPorProduto, explodirReceitaPura } from "@/lib/receita";
 import { idDaUnidadeFisica } from "@/lib/unidade-fisica";
 import { resolverItensVendaPura, EXPLICACAO_MOTIVO } from "@/lib/resolucao-item-venda";
+import { emOrdemDeBloqueio } from "@/lib/ordem-de-bloqueio";
+import { comRetentativaDeConflito } from "@/lib/transacao";
 
 export type ItemVendaSemanalInput = {
   nome: string;
@@ -143,7 +145,8 @@ export async function processarVendaSemanal(
   const saldosAtuais = await prisma.estoqueSaldo.findMany({ where: { unidadeId: unidadeFisicaId } });
   const saldoPorProduto = new Map(saldosAtuais.map((s) => [s.produtoId, s.quantidade]));
 
-  const { vendaSemanalId, pedidoCompraId, itensListaCompra } = await prisma.$transaction(async (tx) => {
+  const { vendaSemanalId, pedidoCompraId, itensListaCompra } = await comRetentativaDeConflito(() =>
+    prisma.$transaction(async (tx) => {
     const vendaSemanal = await tx.vendaSemanal.create({
       data: {
         unidadeId: unidade.id,
@@ -154,7 +157,9 @@ export async function processarVendaSemanal(
       },
     });
 
-    for (const [produtoId, quantidadeConsumida] of consumoTotal) {
+    // Ordem estável de id: é o que impede duas cargas simultâneas de se
+    // travarem em cruz. Ver src/lib/ordem-de-bloqueio.ts.
+    for (const [produtoId, quantidadeConsumida] of emOrdemDeBloqueio(consumoTotal)) {
       if (quantidadeConsumida <= 0) continue;
       await tx.estoqueSaldo.upsert({
         where: { unidadeId_produtoId: { unidadeId: unidadeFisicaId, produtoId } },
@@ -217,8 +222,9 @@ export async function processarVendaSemanal(
       pedidoCompraId = pedido.id;
     }
 
-    return { vendaSemanalId: vendaSemanal.id, pedidoCompraId, itensListaCompra };
-  }, { timeout: 60_000 });
+      return { vendaSemanalId: vendaSemanal.id, pedidoCompraId, itensListaCompra };
+    }, { timeout: 60_000 })
+  );
 
   return {
     vendaSemanalId,
