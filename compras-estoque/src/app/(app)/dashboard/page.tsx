@@ -7,6 +7,7 @@ import { fmtCurrency } from "@/lib/format";
 import { totaisPorCategoriaPura, SEM_CATEGORIA } from "@/lib/painel-categoria";
 import { curvaAbcPura, resumoAbcPura, CORTE_A } from "@/lib/curva-abc";
 import { ehEnxuto } from "@/lib/escopo-cmv";
+import { faturamentoDaLinhaPura, linhasEstimadasPura } from "@/lib/faturamento";
 import { carregarIndiceReceitas, carregarPrecoAtualPorProduto, explodirReceitaPura, CicloReceitaError } from "@/lib/receita";
 import { calcularConsumoPuro, TIPOS_DE_ENTRADA } from "@/lib/consumo";
 import { mesDaChave, mesDaData, ultimosMeses, rotuloCurto } from "@/lib/mes";
@@ -114,6 +115,7 @@ export default async function DashboardPage({
       where: { vendaSemanal: { ...escopoVenda, periodoFim: { gte: mes.inicio, lt: mes.fim } } },
       select: {
         quantidadeVendida: true,
+        valorVendido: true,
         itemVenda: { select: { id: true, nome: true, categoria: true, precoVenda: true, receitaId: true } },
       },
     }),
@@ -125,14 +127,22 @@ export default async function DashboardPage({
   const compraPorCategoria = totaisPorCategoriaPura(
     linhasCompra.map((l) => ({ categoria: l.produto?.categoria ?? null, valor: valorDaLinha(l) }))
   );
-  // O faturamento é CALCULADO aqui: a rota de vendas traz só quantidade, e o
-  // valor sai do preço de venda cadastrado. Preço de cardápio desatualizado
-  // erra este número e, com ele, o CMV inteiro.
+  // O faturamento usa o valor DECLARADO pela origem quando ele vem, e só cai
+  // no preço cadastrado quando não vem — ver src/lib/faturamento.ts. Enquanto
+  // houver linha estimada, o painel diz quantas são, porque essa parte do
+  // número é palpite e palpite tem que vir rotulado.
   const vendaPorCategoria = totaisPorCategoriaPura(
     vendas.map((v) => ({
       categoria: v.itemVenda?.categoria ?? null,
-      valor: v.quantidadeVendida * (v.itemVenda?.precoVenda ?? 0),
+      valor: faturamentoDaLinhaPura({
+        quantidadeVendida: v.quantidadeVendida,
+        valorVendido: v.valorVendido,
+        precoVenda: v.itemVenda?.precoVenda,
+      }),
     }))
+  );
+  const vendasEstimadas = linhasEstimadasPura(
+    vendas.map((v) => ({ quantidadeVendida: v.quantidadeVendida, valorVendido: v.valorVendido }))
   );
 
   const totalCompra = compraPorCategoria.reduce((s, c) => s + c.valor, 0);
@@ -191,7 +201,11 @@ export default async function DashboardPage({
         for (const [produtoId, qtd] of insumos) custoLote += qtd * (precos.get(produtoId) ?? 0);
         const custoUnit = receita?.rendimentoQtd && receita.rendimentoQtd > 0 ? custoLote / receita.rendimentoQtd : custoLote;
         custoTeorico += custoUnit * v.quantidadeVendida;
-        vendaComFicha += v.quantidadeVendida * item.precoVenda;
+        vendaComFicha += faturamentoDaLinhaPura({
+          quantidadeVendida: v.quantidadeVendida,
+          valorVendido: v.valorVendido,
+          precoVenda: item.precoVenda,
+        });
       } catch (e) {
         // Ficha em ciclo não derruba o painel inteiro: ela some da conta e
         // aparece como "sem ficha", que é o que ela é na prática até alguém
@@ -259,10 +273,16 @@ export default async function DashboardPage({
         where: {
           vendaSemanal: { ...escopoVenda, periodoFim: { gt: janela.de, lte: janela.ate } },
         },
-        select: { quantidadeVendida: true, itemVenda: { select: { precoVenda: true } } },
+        select: { quantidadeVendida: true, valorVendido: true, itemVenda: { select: { precoVenda: true } } },
       });
       const faturamentoJanela = vendasJanela.reduce(
-        (soma, v) => soma + v.quantidadeVendida * (v.itemVenda?.precoVenda ?? 0),
+        (soma, v) =>
+          soma +
+          faturamentoDaLinhaPura({
+            quantidadeVendida: v.quantidadeVendida,
+            valorVendido: v.valorVendido,
+            precoVenda: v.itemVenda?.precoVenda,
+          }),
         0
       );
       if (faturamentoJanela > 0) cmvContado = (100 * consumoValor) / faturamentoJanela;
@@ -330,7 +350,11 @@ export default async function DashboardPage({
           <p className="lbl">Vendas</p>
           <div className="val">{totalVenda > 0 ? fmtCurrency(totalVenda) : "—"}</div>
           <p className="sub">
-            {totalVenda > 0 ? "faturamento calculado pelo preço de venda" : "nenhuma venda carregada"}
+            {totalVenda === 0
+              ? "nenhuma venda carregada"
+              : vendasEstimadas === 0
+                ? "valor declarado pela origem"
+                : `${vendasEstimadas} ${vendasEstimadas === 1 ? "linha estimada" : "linhas estimadas"} pelo preço cadastrado`}
           </p>
         </div>
         <div className="kpi">
@@ -443,8 +467,9 @@ export default async function DashboardPage({
         <div className="card">
           <h2 style={{ fontSize: 15, marginBottom: 4 }}>Vendas por categoria</h2>
           <p className="sub-explica" style={{ marginBottom: 16 }}>
-            Faturamento = quantidade vendida × preço de venda cadastrado. O app não recebe valor do
-            painel; preço de cardápio desatualizado erra este número.
+            O faturamento é o valor declarado pela origem. Linha que vier sem valor é estimada pelo
+            preço cadastrado — e cardápio reajustado sem repassar ao cadastro subestima o
+            faturamento, inflando todo CMV.
           </p>
           {vendaPorCategoria.length === 0 ? (
             <div className="empty">

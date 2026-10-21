@@ -15,6 +15,12 @@ export type ItemVendaSemanalInput = {
   /** Código do produto no PDV, quando a origem manda. Casa por aqui de preferência. */
   codigo?: string | null;
   quantidadeVendida: number;
+  /**
+   * Valor vendido da linha, como a origem declara. Quando vem, é ELE que vira
+   * faturamento — ver src/lib/faturamento.ts. Opcional: a origem antiga manda
+   * só quantidade, e aí o app estima pelo preço cadastrado.
+   */
+  valorTotal?: number | null;
 };
 
 export type ResultadoVendaSemanal = {
@@ -83,6 +89,7 @@ export async function processarVendaSemanal(
     nomeBruto: string;
     codigoBruto: string | null;
     quantidadeVendida: number;
+    valorVendido: number | null;
   }[] = [];
   let casadosPorCodigo = 0;
   let casadosPorNome = 0;
@@ -100,7 +107,13 @@ export async function processarVendaSemanal(
       // A linha fica gravada mesmo sem casar: é o registro de que aquela venda
       // existiu, e o que permite reconciliar depois sem pedir a planilha de novo.
       naoReconhecidos.push({ ...item, motivo: EXPLICACAO_MOTIVO[r.motivo!] });
-      linhasParaGravar.push({ itemVendaId: null, nomeBruto, codigoBruto, quantidadeVendida: item.quantidadeVendida });
+      linhasParaGravar.push({
+        itemVendaId: null,
+        nomeBruto,
+        codigoBruto,
+        quantidadeVendida: item.quantidadeVendida,
+        valorVendido: item.valorTotal ?? null,
+      });
       continue;
     }
 
@@ -110,7 +123,13 @@ export async function processarVendaSemanal(
       codigosASugerir.push({ itemVendaId: r.itemVendaId, nome: nomeBruto, codigo: r.codigoSugerido });
     }
 
-    linhasParaGravar.push({ itemVendaId: r.itemVendaId, nomeBruto, codigoBruto, quantidadeVendida: item.quantidadeVendida });
+    linhasParaGravar.push({
+      itemVendaId: r.itemVendaId,
+      nomeBruto,
+      codigoBruto,
+      quantidadeVendida: item.quantidadeVendida,
+      valorVendido: item.valorTotal ?? null,
+    });
 
     const itemVenda = itemVendaPorId.get(r.itemVendaId)!;
     if (!itemVenda.receitaId) continue; // sem ficha técnica — não dá pra explodir consumo, mas a venda ainda fica registrada

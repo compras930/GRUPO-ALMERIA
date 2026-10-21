@@ -38,6 +38,15 @@ export async function POST(request: Request) {
     if (item.codigo != null && typeof item.codigo !== "string") {
       item.codigo = String(item.codigo);
     }
+    // `valorTotal` é opcional, mas texto aqui seria pior que ausência: a linha
+    // entraria faturando o preço de cardápio e ninguém veria. Recusa a carga,
+    // como se faz com quantidade na compra.
+    if (item.valorTotal != null && typeof item.valorTotal !== "number") {
+      return Response.json(
+        { erro: `valorTotal inválido em "${item.nome}": mande número, não texto.` },
+        { status: 400 }
+      );
+    }
   }
 
   const servico = await prisma.usuario.findUnique({ where: { email: N8N_SERVICE_USER_EMAIL } });

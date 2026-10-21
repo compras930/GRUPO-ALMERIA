@@ -234,6 +234,7 @@ Cada item:
 |---|---|---|---|
 | `nome` | string | **sim** | nome do item como aparece no PDV |
 | `quantidadeVendida` | number | **sim** | quantas unidades saíram no período |
+| `valorTotal` | number | **sim na prática** | valor vendido da linha — ver abaixo |
 | `codigo` | string | não | código do item no PDV da casa |
 
 ## Aqui o `codigo` PODE vir, ao contrário das compras
@@ -254,20 +255,32 @@ ele devolve em `codigosASugerir` para alguém confirmar.
   "periodoInicio": "2026-10-13",
   "periodoFim": "2026-10-19",
   "itens": [
-    { "nome": "Filé au Poivre", "codigo": "4412", "quantidadeVendida": 37 },
-    { "nome": "Burrata com tomate confit", "quantidadeVendida": 12 }
+    { "nome": "Filé au Poivre", "codigo": "4412", "quantidadeVendida": 37, "valorTotal": 6475.00 },
+    { "nome": "Burrata com tomate confit", "codigo": "4418", "quantidadeVendida": 12, "valorTotal": 1536.00 }
   ]
 }
 ```
 
 ## Três coisas que surpreendem
 
-**1. Não existe campo de valor.** A rota recebe só quantidade. O faturamento é
-calculado pelo app, multiplicando pelo `precoVenda` cadastrado em cada item.
+**1. MANDE `valorTotal`.** Ele é opcional no contrato só porque a origem
+antiga não tinha; na prática é o campo que faz o faturamento ser exato.
 
-Consequência prática: **o preço de venda no app precisa estar atualizado**, ou
-o denominador do CMV sai errado. Se o painel tiver o preço praticado, vale uma
-conversa à parte sobre sincronizar isso também.
+Quando ele vem, é ele que vira faturamento. Quando não vem, o app estima por
+`quantidade × precoVenda cadastrado` — e estimar erra sempre no mesmo sentido,
+porque cardápio sobe e cadastro fica parado.
+
+Medido na primeira carga do Beira Lago, semana de 13 a 19/10: o recálculo deu
+**R$ 400.989,60** contra **R$ 403.360,64** de verdade. 12 de 68 preços estavam
+defasados (FILETTO DI MANZO a R$ 155 quando o cardápio já cobrava R$ 175), e
+uma garrafa de cortesia lançada a R$ 0,01 entrava valendo R$ 400.
+
+São 0,6% — e 0,6% para baixo no FATURAMENTO infla todo CMV, porque ele é o
+denominador. CMV inflado é o tipo de número que ninguém questiona, porque
+"ruim" parece plausível.
+
+`valorTotal` em texto é recusado com **400**: a linha entraria faturando o
+preço de cardápio e ninguém veria.
 
 **2. Recarregar o mesmo período é recusado, não ignorado.** Mandar duas vezes a
 mesma `unidade` + `periodoInicio` + `periodoFim` devolve **409**. Ao contrário

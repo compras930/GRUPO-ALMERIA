@@ -472,6 +472,21 @@ model ItemVendaSemanal {
   // identificáveis sem ter que adivinhar pelo nome de novo.
   codigoBruto       String?
   quantidadeVendida Float
+
+  /// Valor vendido da linha, como a ORIGEM declara. Null = origem antiga, que
+  /// não mandava valor.
+  ///
+  /// POR QUE RECEBER EM VEZ DE RECALCULAR. O app calculava faturamento como
+  /// quantidade × precoVenda cadastrado, e isso nunca bate com o PDV: toda
+  /// cortesia, todo preço promocional e todo reajuste não repassado ao
+  /// cadastro viram diferença — e sempre no mesmo sentido, porque cardápio
+  /// sobe e cadastro fica parado. Na semana de 13–19/10 do Beira Lago deu
+  /// R$ 2.371 (0,6%), com 12 de 68 preços defasados.
+  ///
+  /// O preço cadastrado continua, e serve pras duas coisas que ele faz bem:
+  /// estimar o que ainda não veio, e ser o número que alguém compara com o
+  /// cardápio. Mas o faturamento passa a ser o declarado.
+  valorVendido Float?
 }
 
 // Sugestão de quantidade de compra sem exigir cadastro prévio de todos os produtos —
