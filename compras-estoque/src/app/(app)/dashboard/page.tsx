@@ -5,6 +5,7 @@ import { unidadeVisivel } from "@/lib/permissions";
 import { idDaUnidadeFisica } from "@/lib/unidade-fisica";
 import { fmtCurrency } from "@/lib/format";
 import { totaisPorCategoriaPura, SEM_CATEGORIA } from "@/lib/painel-categoria";
+import { ehCategoriaDeEventoPura } from "@/lib/categoria-venda";
 import { curvaAbcPura, resumoAbcPura, CORTE_A } from "@/lib/curva-abc";
 import { ehEnxuto } from "@/lib/escopo-cmv";
 import { faturamentoDaLinhaPura, linhasEstimadasPura } from "@/lib/faturamento";
@@ -230,6 +231,42 @@ export default async function DashboardPage({
     itensSemFicha = semFicha.size;
   }
   const cmvTeorico = vendaComFicha > 0 ? (100 * custoTeorico) / vendaComFicha : null;
+
+  // QUANTO DA CASA O TEÓRICO MEDE, em dinheiro.
+  //
+  // "47 itens sem ficha" não diz nada sobre tamanho: pode ser 47 cafezinhos ou
+  // metade do faturamento. Em outubro era metade — só os quatro itens de
+  // EVENTO somam 45,2% do mês.
+  //
+  // E o evento NÃO é cadastro atrasado: ele é faturado como pacote fechado e o
+  // PDV não detalha prato a prato, então essa parte do faturamento nunca vai
+  // ter ficha. Escrever as 367 fichas que faltam aumenta a cobertura até um
+  // teto bem abaixo de 100%, e quem lê o painel precisa saber onde é o teto —
+  // senão cobra uma meta que não existe.
+  const faturamentoMes = vendas.reduce(
+    (soma, v) =>
+      soma +
+      faturamentoDaLinhaPura({
+        quantidadeVendida: v.quantidadeVendida,
+        valorVendido: v.valorVendido,
+        precoVenda: v.itemVenda?.precoVenda,
+      }),
+    0
+  );
+  const faturamentoEventos = vendas
+    .filter((v) => ehCategoriaDeEventoPura(v.itemVenda?.categoria))
+    .reduce(
+      (soma, v) =>
+        soma +
+        faturamentoDaLinhaPura({
+          quantidadeVendida: v.quantidadeVendida,
+          valorVendido: v.valorVendido,
+          precoVenda: v.itemVenda?.precoVenda,
+        }),
+      0
+    );
+  const coberturaTeorico = faturamentoMes > 0 ? (100 * vendaComFicha) / faturamentoMes : null;
+  const pctEventos = faturamentoMes > 0 ? (100 * faturamentoEventos) / faturamentoMes : 0;
   // CMV DE COMPRAS: compras ÷ vendas do mesmo mês. É o que o painel de compras
   // mostra, e é um PROXY — ele supõe que o estoque não mudou no período. Numa
   // semana em que a casa estoca vinho pra um evento, ele acusa CMV alto sem
@@ -430,9 +467,11 @@ export default async function DashboardPage({
               <td className="cat">
                 {cmvTeorico === null
                   ? "precisa de venda e ficha"
-                  : itensSemFicha > 0
-                    ? `${mes.rotulo} · ${itensSemFicha} ${itensSemFicha === 1 ? "item sem ficha de fora" : "itens sem ficha de fora"}`
-                    : mes.rotulo}
+                  : coberturaTeorico === null
+                    ? mes.rotulo
+                    : `mede ${coberturaTeorico.toFixed(0)}% do faturamento${
+                        itensSemFicha > 0 ? ` · ${itensSemFicha} itens sem ficha` : ""
+                      }`}
               </td>
             </tr>
             <tr>
@@ -455,6 +494,15 @@ export default async function DashboardPage({
           <p className="sub-explica" style={{ marginTop: 14 }}>
             O consumo contado foi de {fmtCurrency(consumoValor)}, mas não há venda carregada nessa
             janela — sem denominador não há percentual.
+          </p>
+        )}
+        {pctEventos > 0 && (
+          <p className="sub-explica" style={{ marginTop: 14 }}>
+            <strong>{pctEventos.toFixed(0)}% do faturamento é EVENTO</strong> ({fmtCurrency(faturamentoEventos)}
+            ), faturado como pacote fechado. O PDV não detalha prato a prato, então essa parte nunca
+            vai ter ficha técnica — o teto da cobertura do CMV teórico é{" "}
+            {(100 - pctEventos).toFixed(0)}%, não 100%. O CMV contado não tem esse limite: o evento
+            come da mesma despensa e aparece inteiro nele.
           </p>
         )}
         <p className="sub-explica" style={{ marginTop: 14 }}>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { categoriaCanonicaPura, chaveCategoria } from "@/lib/categoria-venda";
+import { categoriaCanonicaPura, chaveCategoria, ehCategoriaDeEventoPura } from "@/lib/categoria-venda";
 
 describe("chaveCategoria", () => {
   it("junta o que só difere em caixa, acento ou plural", () => {
@@ -54,5 +54,19 @@ describe("categoriaCanonicaPura", () => {
   it("apara espaço de sobra do export", () => {
     expect(categoriaCanonicaPura("  TINTO  ")).toBe("Tintos");
     expect(categoriaCanonicaPura("  Massas  ")).toBe("Massas");
+  });
+});
+
+describe("ehCategoriaDeEventoPura", () => {
+  it("reconhece as quatro categorias de evento", () => {
+    for (const c of ["Eventos · Menu", "Eventos · Bebidas", "Eventos · Serviços", "Eventos · Vinhos"]) {
+      expect(ehCategoriaDeEventoPura(c)).toBe(true);
+    }
+  });
+
+  it("não confunde com a venda do salão", () => {
+    for (const c of ["Tintos", "Brancos", "Entradas", "PRINCIPAIS", "BEBIDAS", "MENU", null, ""]) {
+      expect(ehCategoriaDeEventoPura(c), String(c)).toBe(false);
+    }
   });
 });

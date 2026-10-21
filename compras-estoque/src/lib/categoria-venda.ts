@@ -64,3 +64,24 @@ export function categoriaCanonicaPura(nome: string | null | undefined): string |
   if (limpo === "") return null;
   return CANONICAS[chaveCategoria(limpo)] ?? limpo;
 }
+
+/**
+ * Venda de EVENTO — pacote fechado, sem ficha técnica por construção.
+ *
+ * No Beira Lago são quatro itens (`EVT-MENU`, `EVT-BEBIDAS`, `EVT-SERVICOS`,
+ * `EVT-VINHOS`) que somaram 45,2% do faturamento de outubro. O evento é
+ * faturado como pacote e o PDV não detalha prato a prato, então esse
+ * faturamento NUNCA vai ter ficha — não é cadastro atrasado, é o dado que não
+ * existe.
+ *
+ * Importa saber disso ao ler o CMV teórico: ele mede só o que tem ficha, e sem
+ * este número ninguém tem como saber que ele está falando de pouco mais da
+ * metade da casa.
+ *
+ * Reconhece pela categoria, e não pelo código do PDV, porque o prefixo `EVT-`
+ * é invenção da carga do XMenu: outra casa, com outro PDV, usa outro código. A
+ * categoria é do app.
+ */
+export function ehCategoriaDeEventoPura(categoria: string | null | undefined): boolean {
+  return (categoria ?? "").trim().toLowerCase().startsWith("eventos");
+}
