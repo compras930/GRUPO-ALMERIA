@@ -137,7 +137,17 @@ export default async function ConciliacaoPage({
             <div className="card">
               <p className="eyebrow">Falta</p>
               <p className="big bad">{fmtCurrency(totais.faltaEmReais)}</p>
-              <p className="hint">Saiu mais do que a ficha e as perdas explicam.</p>
+              <p className="hint">
+                Saiu mais do que a ficha e as perdas explicam. Só produto COM ficha entra aqui.
+              </p>
+            </div>
+            <div className="card">
+              <p className="eyebrow">Falta sem ficha</p>
+              <p className="big">{fmtCurrency(totais.faltaSemFichaEmReais)}</p>
+              <p className="hint">
+                Produto que nenhuma receita menciona: a venda dele conta zero, então toda a saída
+                aparece como falta. Isto mede ficha por escrever, não mercadoria sumida.
+              </p>
             </div>
             <div className="card">
               <p className="eyebrow">Sobra</p>
@@ -155,7 +165,7 @@ export default async function ConciliacaoPage({
             <div className="card">
               <p className="eyebrow">Produtos conferidos</p>
               <p className="big">{totais.produtos}</p>
-              <p className="hint">{totais.semFicha} sem ficha técnica — veja a nota abaixo.</p>
+              <p className="hint">{totais.semFicha} ainda sem ficha técnica.</p>
             </div>
           </div>
 

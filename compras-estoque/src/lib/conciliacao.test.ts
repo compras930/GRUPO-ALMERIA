@@ -82,8 +82,10 @@ describe("conciliarPuro", () => {
 describe("totalizarPuro", () => {
   it("separa falta de sobra em vez de só somar", () => {
     const linhas = conciliarPuro([
-      { ...base, produtoId: "a", saldoInicial: 10, vendido: 0, saldoContado: 0, preco: 300 },
-      { ...base, produtoId: "b", saldoInicial: 0, comprado: 10, vendido: 0, saldoContado: 20, preco: 290 },
+      // Os dois COM ficha de propósito: aqui o que se testa é falta contra
+      // sobra, e `vendido: 0` jogaria a linha "a" para o balde de sem ficha.
+      { ...base, produtoId: "a", saldoInicial: 11, vendido: 1, saldoContado: 0, preco: 300 },
+      { ...base, produtoId: "b", saldoInicial: 0, comprado: 11, vendido: 1, saldoContado: 20, preco: 290 },
     ]);
     const t = totalizarPuro(linhas);
     expect(t.faltaEmReais).toBeCloseTo(3000, 10);
@@ -100,5 +102,21 @@ describe("totalizarPuro", () => {
       { ...base, produtoId: "b", saldoInicial: 5, vendido: 4, saldoContado: 1, preco: 10 },
     ]);
     expect(totalizarPuro(linhas).semFicha).toBe(1);
+  });
+});
+
+describe("falta sem ficha, separada", () => {
+  it("não mistura ficha por escrever com mercadoria sumida", () => {
+    const linhas = conciliarPuro([
+      // tem ficha e falta de verdade
+      { ...base, produtoId: "com-ficha", saldoInicial: 10, vendido: 5, saldoContado: 3, preco: 100 },
+      // nenhuma ficha menciona: toda a saída vira "falta" por construção
+      { ...base, produtoId: "sem-ficha", saldoInicial: 10, vendido: 0, saldoContado: 2, preco: 100 },
+    ]);
+    const t = totalizarPuro(linhas);
+    expect(t.faltaEmReais).toBeCloseTo(200, 10);
+    expect(t.faltaSemFichaEmReais).toBeCloseTo(800, 10);
+    // O líquido continua fechando tudo que a prateleira contradiz.
+    expect(t.liquidoEmReais).toBeCloseTo(-1000, 10);
   });
 });

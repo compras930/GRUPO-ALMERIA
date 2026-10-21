@@ -92,7 +92,18 @@ export function conciliarPuro(parcelas: ParcelasProduto[]): LinhaConciliacao[] {
 }
 
 export type TotaisConciliacao = {
+  /** Falta de produto QUE TEM FICHA — a única que acusa alguma coisa. */
   faltaEmReais: number;
+  /**
+   * Falta de produto sem ficha, somada à parte.
+   *
+   * Sem essa separação o card de falta vira um número grande e sem sentido:
+   * insumo sem ficha tem venda zero, então TODA a saída dele conta como falta.
+   * Com 47 fichas escritas de 414 itens vendidos, a maior parte da "falta" do
+   * primeiro relatório seria isso — e um número grande e falso na primeira
+   * tela que a diretoria vê queima a confiança no relatório inteiro.
+   */
+  faltaSemFichaEmReais: number;
   sobraEmReais: number;
   liquidoEmReais: number;
   produtos: number;
@@ -101,18 +112,25 @@ export type TotaisConciliacao = {
 
 export function totalizarPuro(linhas: LinhaConciliacao[]): TotaisConciliacao {
   let faltaEmReais = 0;
+  let faltaSemFichaEmReais = 0;
   let sobraEmReais = 0;
   for (const l of linhas) {
-    if (l.diferencaEmReais < 0) faltaEmReais += -l.diferencaEmReais;
-    else sobraEmReais += l.diferencaEmReais;
+    if (l.diferencaEmReais >= 0) sobraEmReais += l.diferencaEmReais;
+    else if (l.alerta === "SEM_FICHA") faltaSemFichaEmReais += -l.diferencaEmReais;
+    else faltaEmReais += -l.diferencaEmReais;
   }
   return {
     faltaEmReais,
+    faltaSemFichaEmReais,
     sobraEmReais,
     // Separados, e não só o saldo: R$ 3.000 de falta com R$ 2.900 de sobra não
     // é "R$ 100 de problema" — são dois problemas grandes que por acaso quase
     // se cancelam, e quase sempre significam troca de produto na contagem.
-    liquidoEmReais: sobraEmReais - faltaEmReais,
+    //
+    // O líquido inclui a falta sem ficha porque ele é o fechamento de tudo que
+    // a prateleira contradiz; as colunas acima é que separam o que acusa do que
+    // só falta escrever.
+    liquidoEmReais: sobraEmReais - faltaEmReais - faltaSemFichaEmReais,
     produtos: linhas.length,
     semFicha: linhas.filter((l) => l.alerta === "SEM_FICHA").length,
   };
