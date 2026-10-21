@@ -24,6 +24,9 @@
 // próprio, e o nome traz a data. Os 4 entram com precoVenda 1,00 justamente
 // pra que quantidade × preço reproduza o valor vendido.
 import { readFileSync, writeFileSync } from "node:fs";
+// O mesmo canonizador que o app usa, e não uma cópia da regra: foi uma cópia
+// de regra (a normalização de unidade) que deixou 75 linhas de PCT sem casar.
+import { categoriaCanonicaPura } from "../../../src/lib/categoria-venda";
 
 const normalizarNome = (s: string) => s.trim().replace(/\s+/g, " ");
 const sql = (s: string) => `'${s.replace(/'/g, "''")}'`;
@@ -112,12 +115,27 @@ const novos = [...porCodigo.values()].filter((a) => !jaCadastrados.has(a.codigo)
 const precoModal = (a: Agregado) =>
   [...a.receitaPorPreco].sort((x, y) => y[1] - x[1] || y[0] - x[0])[0][0];
 
+// A CATEGORIA SAI CANÔNICA, não crua do export.
+//
+// O subgrupo do XMenu vem em MAIÚSCULA, e o cadastro antigo da casa usa
+// Capitalizada. Gravar cru foi o que encheu o painel de barras duplicadas:
+// TINTO ao lado de Tintos, BRANCO ao lado de Brancos — dez barras para cinco
+// categorias, e mais de R$ 160 mil de vinho picados em nove delas.
+//
+// Consertar só o dado gravado não bastaria: a próxima leva de itens novos
+// traria MAIÚSCULA de volta por este mesmo caminho.
+const categoria = (a: Agregado) => categoriaCanonicaPura(a.subgrupo) ?? a.subgrupo;
+
 // Duas linhas com o mesmo (tipo, categoria, nome) quebrariam o unique do
 // banco. Acontece quando o XMenu tem dois códigos pro mesmo nome no mesmo
 // subgrupo — e aí é decisão humana, não do script.
+//
+// A chave usa a categoria CANÔNICA, não o subgrupo cru: dois itens de mesmo
+// nome em "TINTO" e "Tintos" são a mesma linha depois da normalização, e com a
+// chave crua eles passariam batido aqui para quebrar o INSERT lá no banco.
 const porChave = new Map<string, Agregado[]>();
 for (const a of novos) {
-  const k = `${tipoDoGrupo(a.grupo, a.subgrupo)}|||${a.subgrupo}|||${a.nome.toLowerCase()}`;
+  const k = `${tipoDoGrupo(a.grupo, a.subgrupo)}|||${categoria(a)}|||${a.nome.toLowerCase()}`;
   porChave.set(k, [...(porChave.get(k) ?? []), a]);
 }
 const colisoes = [...porChave.values()].filter((v) => v.length > 1);
@@ -132,7 +150,7 @@ const porGrupo = [...new Set(novos.map((a) => a.grupo))].sort();
 const valores = novos
   .sort((a, b) => a.grupo.localeCompare(b.grupo) || a.subgrupo.localeCompare(b.subgrupo) || a.nome.localeCompare(b.nome))
   .map((a, n, arr) => {
-    const linha = `  (${sql(a.codigo)}, ${sql(a.nome)}, ${sql(tipoDoGrupo(a.grupo, a.subgrupo))}, ${sql(a.subgrupo)}, ${precoModal(a)})`;
+    const linha = `  (${sql(a.codigo)}, ${sql(a.nome)}, ${sql(tipoDoGrupo(a.grupo, a.subgrupo))}, ${sql(categoria(a))}, ${precoModal(a)})`;
     // A vírgula vai ANTES do comentário; dentro dele, ela viraria texto.
     return linha + (n < arr.length - 1 ? "," : "") + `  -- ${a.grupo} · vendeu R$ ${brl(a.valor)}`;
   });
