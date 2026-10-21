@@ -1,7 +1,9 @@
+import { Fragment } from "react";
 import { prisma } from "@/lib/prisma";
 import { idDaUnidadeFisica } from "@/lib/unidade-fisica";
 import { requireSession } from "@/lib/session";
 import { unidadeVisivel } from "@/lib/permissions";
+import { agruparPorCategoriaPura } from "@/lib/agrupar-contagem";
 import {
   semanaDoMes,
   gruposDaSemana,
@@ -54,13 +56,29 @@ export default async function ImprimirContagemPage({
     // São algumas centenas de linhas por casa; filtrar em memória custa nada e
     // garante que a tela, a folha impressa e os testes respondam à MESMA regra.
     where: { unidadeId: unidadeFisicaId, classeAbc: { in: ["A", "B"] } },
-    include: { produto: { select: { nome: true, unidadeMedida: true, ativo: true } } },
+    include: {
+      produto: { select: { id: true, nome: true, unidadeMedida: true, ativo: true, categoria: true } },
+    },
   });
 
   const itens = registros
     .filter((r) => r.produto.ativo && (todos || entraNaSemanaPura(r, semana)))
-    .map((r) => ({ nome: r.produto.nome, un: r.produto.unidadeMedida }))
-    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+    .map((r) => ({
+      id: r.produto.id,
+      nome: r.produto.nome,
+      unidadeMedida: r.produto.unidadeMedida,
+      classeAbc: r.classeAbc,
+      categoria: r.produto.categoria,
+    }));
+
+  // MESMA ORDEM DA TELA, pelo mesmo agrupador — ver src/lib/agrupar-contagem.ts.
+  //
+  // Isto não é capricho: a pessoa conta com a folha impressa na mão e outra
+  // pessoa digita na tela. Se as duas listas tiverem ordens diferentes, cada
+  // linha digitada vira uma busca, e a chance de lançar a quantidade de um
+  // produto na linha do vizinho deixa de ser remota. Duas ordens seria pior
+  // que a ordem alfabética que havia antes.
+  const gruposDeCategoria = agruparPorCategoriaPura(itens);
 
   // Casa que conta a curva inteira toda semana (grupoContagem = 0) não tem
   // "grupo da semana" — dizer "curva A grupo 2" na folha dela seria mentira
@@ -102,13 +120,22 @@ export default async function ImprimirContagemPage({
           </tr>
         </thead>
         <tbody>
-          {itens.map((i, n) => (
-            <tr key={i.nome + n}>
-              <td>{n + 1}</td>
-              <td>{i.nome}</td>
-              <td>{i.un}</td>
-              <td />
-            </tr>
+          {gruposDeCategoria.map((g) => (
+            <Fragment key={g.categoria}>
+              <tr>
+                <td colSpan={4} className="folha-categoria">
+                  {g.categoria} · {g.itens.length}
+                </td>
+              </tr>
+              {g.itens.map((i, n) => (
+                <tr key={i.id}>
+                  <td>{g.primeiroNumero + n}</td>
+                  <td>{i.nome}</td>
+                  <td>{i.unidadeMedida}</td>
+                  <td />
+                </tr>
+              ))}
+            </Fragment>
           ))}
         </tbody>
       </table>

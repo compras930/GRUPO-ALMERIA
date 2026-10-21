@@ -13,6 +13,7 @@ import {
 } from "@/lib/contagem-rotacao";
 import ContagemForm from "@/components/ContagemForm";
 import ContagemLoteForm from "@/components/ContagemLoteForm";
+import { agruparPorCategoriaPura } from "@/lib/agrupar-contagem";
 
 export default async function ContagemPage({
   searchParams,
@@ -55,7 +56,9 @@ export default async function ContagemPage({
     // São algumas centenas de linhas por casa; filtrar em memória custa nada e
     // garante que a tela, a folha impressa e os testes respondam à MESMA regra.
     where: { unidadeId: unidadeFisicaId, classeAbc: { in: ["A", "B"] } },
-    include: { produto: { select: { id: true, nome: true, unidadeMedida: true, ativo: true } } },
+    include: {
+      produto: { select: { id: true, nome: true, unidadeMedida: true, ativo: true, categoria: true } },
+    },
   });
 
   const itensDaSemana = doRodizio
@@ -65,11 +68,14 @@ export default async function ContagemPage({
       nome: p.produto.nome,
       unidadeMedida: p.produto.unidadeMedida,
       classeAbc: p.classeAbc,
-    }))
-    // Ordem alfabética: quem conta procura pelo nome na prateleira, não pelo
-    // valor. E a classe fica discreta de propósito — saber que um item "vale
-    // mais" convida a caprichar nele e correr nos outros.
-    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+      categoria: p.produto.categoria,
+    }));
+
+  // Agrupado por categoria, alfabético dentro do grupo — ver
+  // src/lib/agrupar-contagem.ts. A ordem alfabética pura punha o vinho entre a
+  // carne e a mercearia, e quem conta anda pela despensa por corredor, não por
+  // letra.
+  const gruposDeCategoria = agruparPorCategoriaPura(itensDaSemana);
 
   const produtos = await prisma.produto.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } });
   const saldos = await prisma.estoqueSaldo.findMany({ where: { unidadeId: unidadeFisicaId } });
@@ -128,7 +134,7 @@ export default async function ContagemPage({
           <ContagemLoteForm
             unidadeId={unidadeId}
             rotulo={todos ? "contagem inicial" : `contagem da semana ${semana}`}
-            itens={itensDaSemana}
+            grupos={gruposDeCategoria}
           />
         </div>
       )}

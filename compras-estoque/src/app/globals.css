@@ -559,6 +559,26 @@ td {
   padding: 5px 8px;
   text-align: left;
 }
+/*
+  O cabeçalho de categoria na folha impressa.
+
+  Fundo chapado e caixa alta porque a folha sai em preto e branco, na prancheta,
+  muitas vezes em fotocópia: cor e peso de fonte somem, área preenchida não.
+
+  `break-inside: avoid` e `break-after: avoid` mantêm o cabeçalho junto do
+  primeiro item do grupo — um "VINHOS" sozinho no pé da página manda a pessoa
+  procurar vinho na prateleira errada ao virar a folha.
+*/
+.folha-categoria {
+  background: var(--ink);
+  color: var(--paper);
+  font-family: ui-monospace, "DejaVu Sans Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  break-inside: avoid;
+  break-after: avoid;
+}
 .folha-tabela th {
   font-family: ui-monospace, "DejaVu Sans Mono", monospace;
   font-size: 10px;
