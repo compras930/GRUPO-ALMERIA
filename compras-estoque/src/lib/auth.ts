@@ -19,10 +19,27 @@ export const authOptions: AuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.senha) return null;
 
-        const usuario = await prisma.usuario.findUnique({
-          where: { email: credentials.email.toLowerCase().trim() },
-          include: { unidade: true },
-        });
+        // SENHA ERRADA E BANCO FORA SÃO COISAS DIFERENTES, e `return null` diz
+        // as duas com a mesma frase.
+        //
+        // Sem este try, uma indisponibilidade do banco — Neon acordando de
+        // suspensão, limite de conexões, rede — faz o `findUnique` estourar, o
+        // NextAuth tratar como credencial recusada, e a tela dizer "E-mail ou
+        // senha inválidos". Aí a pessoa troca a senha, pede para redefinir,
+        // desconfia do cadastro: tudo menos olhar o banco, que é o problema.
+        //
+        // Descoberto quando o Postgres local caiu no meio de um teste: a tela
+        // acusou senha inválida para uma senha certa.
+        let usuario;
+        try {
+          usuario = await prisma.usuario.findUnique({
+            where: { email: credentials.email.toLowerCase().trim() },
+            include: { unidade: true },
+          });
+        } catch (e) {
+          console.error("Login: banco indisponível.", e);
+          throw new Error("BANCO_INDISPONIVEL");
+        }
         if (!usuario || !usuario.ativo) return null;
 
         const senhaOk = await bcrypt.compare(credentials.senha, usuario.senhaHash);

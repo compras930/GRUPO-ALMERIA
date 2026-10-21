@@ -23,7 +23,14 @@ function LoginForm() {
     });
     setLoading(false);
     if (res?.error) {
-      setErro("E-mail ou senha inválidos.");
+      // Ver o `authorize` em src/lib/auth.ts: banco fora chega aqui com uma
+      // etiqueta própria, em vez de se passar por senha errada e mandar a
+      // pessoa caçar o problema no lugar errado.
+      setErro(
+        res.error.includes("BANCO_INDISPONIVEL")
+          ? "Não foi possível falar com o banco de dados. A senha não chegou a ser conferida — tente de novo em alguns segundos."
+          : "E-mail ou senha inválidos."
+      );
       return;
     }
     router.push(searchParams.get("callbackUrl") || "/dashboard");
