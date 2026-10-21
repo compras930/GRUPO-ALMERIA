@@ -10,16 +10,16 @@
 // convenções são as duas origens — a maiúscula é o campo `grupo` do export do
 // XMenu, a capitalizada é o cadastro antigo da casa.
 //
-// POR QUE UM MAPA E NÃO "DEIXA TUDO CAPITALIZADO". Porque o legado não segue
-// regra: é "Tintos" no plural e "Espumante" no singular. Normalizar só a caixa
-// transformaria TINTO em "Tinto", que continua sendo uma barra separada de
-// "Tintos" — o bug sobreviveria com outra roupa.
+// A CONVENÇÃO ESCOLHIDA É MAIÚSCULA, decidida pela casa. Tudo sobe de caixa.
 //
-// POR QUE O MAPA É CURTO, E FICA CURTO. Só os pares que de fato existem nas
-// duas convenções. Categoria que só aparece em maiúscula (SERVICOS, TAXAS,
-// MENU, PRINCIPAIS, NÃO ALCOÓLICAS) é deixada EXATAMENTE como veio: capitalizar
-// por conta própria inventaria um nome novo que não casa com nada que já está
-// gravado, criando a segunda convenção em vez de eliminá-la.
+// MAS CAIXA SOZINHA NÃO RESOLVE, e é por isso que ainda existe um mapa:
+// "TINTO" e "TINTOS" continuam sendo duas barras depois de subir a caixa, e
+// nenhuma regra automática adivinha que "ESPUMANTE" fica no singular enquanto
+// "TINTO" vira plural. O mapa carrega só essa decisão — quatro linhas —, e a
+// caixa é regra.
+//
+// O MAPA FICA CURTO de propósito. Nome que não está nele sobe de caixa e
+// pronto; nada é inventado. Ver o teste "não inventa plural".
 //
 // Núcleo puro: sem Prisma, sem I/O.
 
@@ -39,17 +39,18 @@ export function chaveCategoria(nome: string): string {
 }
 
 /**
- * Os nomes que o app considera corretos, por chave de comparação.
+ * A forma plural canônica, por chave de comparação.
  *
- * Fica a grafia do CADASTRO ANTIGO, não a do export: é a que já está nas telas,
- * a que o salão lê, e a mais legível num gráfico de barras.
+ * SÓ O PLURAL mora aqui. A caixa é resolvida por regra — tudo vai para
+ * MAIÚSCULA —, mas plural não é regra: nenhuma transformação automática
+ * adivinha que "TINTO" e "TINTOS" são a mesma coisa e que "ESPUMANTE" fica no
+ * singular. Essas quatro linhas são a lista inteira do que precisa de decisão.
  */
-const CANONICAS: Record<string, string> = {
-  tinto: "Tintos",
-  branco: "Brancos",
-  espumante: "Espumante",
-  rose: "Rosé",
-  entrada: "Entradas",
+const PLURAL_CANONICO: Record<string, string> = {
+  tinto: "TINTOS",
+  branco: "BRANCOS",
+  entrada: "ENTRADAS",
+  sobremesa: "SOBREMESAS",
 };
 
 /**
@@ -62,7 +63,7 @@ const CANONICAS: Record<string, string> = {
 export function categoriaCanonicaPura(nome: string | null | undefined): string | null {
   const limpo = (nome ?? "").trim();
   if (limpo === "") return null;
-  return CANONICAS[chaveCategoria(limpo)] ?? limpo;
+  return PLURAL_CANONICO[chaveCategoria(limpo)] ?? limpo.toUpperCase();
 }
 
 /**
