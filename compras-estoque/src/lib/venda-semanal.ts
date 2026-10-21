@@ -150,6 +150,11 @@ export async function processarVendaSemanal(
           quantidade: -quantidadeConsumida,
           referencia: vendaSemanal.id,
           observacao: `Consumo calculado da venda semanal de ${periodoInicioStr} a ${periodoFimStr}`,
+          // Carimbado com o FIM DO PERÍODO da venda, não com a hora da carga.
+          // É o `criadoEm` do movimento que diz em que semana a saída caiu, e
+          // uma carga feita com atraso jogaria a baixa inteira pra semana
+          // errada. Mesma razão da data da nota na compra — ver nota-compra.ts.
+          criadoEm: periodoFim,
         },
       });
     }

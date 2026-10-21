@@ -281,6 +281,35 @@ mas vale saber antes de ver um pedido aparecer sozinho.
 
 ## O que olhar na resposta
 
+## Reenviar a semana NÃO resolve — use `POST /api/n8n/reprocessar-vendas`
+
+Mesma armadilha das compras, por um mecanismo diferente. Na compra, a linha é
+pulada pela `chave`. Na venda **não há chave por linha**: a identidade é o
+período inteiro, e reenviar a mesma semana devolve **409**. A linha que não
+casou fica gravada com item nulo e não há como mandar de novo.
+
+Depois de cadastrar os itens de venda que faltavam, chame:
+
+```json
+POST /api/n8n/reprocessar-vendas
+{ "unidade": "Beira Lago" }
+```
+
+Opcionalmente `vendaSemanalId` para limitar a uma semana. Ela não recebe linha
+nenhuma — o dado já está no banco.
+
+**Por que não dá pra apagar a venda e reenviar:** a carga também dá BAIXA de
+estoque (explodindo a ficha de cada item casado) e cria um pedido rascunho.
+Apagar só a venda deixaria os movimentos de pé, e o reenvio baixaria tudo de
+novo — consumo em dobro, calado.
+
+**Por que o reprocessamento não baixa em dobro:** ele só toca linhas com item
+nulo, e linha sem item nunca explodiu ficha. Rodar duas vezes é inofensivo.
+Ele também **não** cria um segundo pedido de compra; a sugestão de reposição
+vem na resposta.
+
+## O que olhar na resposta
+
 `naoReconhecidos` (item de venda que não casou), `casadosPorCodigo` /
 `casadosPorNome`, `codigosASugerir`, e `itensListaCompra` com a sugestão de
 compra.
