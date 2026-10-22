@@ -600,7 +600,13 @@ export default async function DashboardPage({
                         seguinte é sempre "de onde veio esse número". A tela do
                         produto mostra nota a nota.
                       */}
-                      <Link href={`/estoque/produto/${i.id}${casaId ? `?unidadeId=${casaId}` : ""}`}>
+                      {/*
+                        O MÊS VAI NO LINK. Sem ele a tela do produto abria a
+                        compra inteira, desde agosto, enquanto o painel dizia
+                        outubro — dois números para a mesma pergunta, e o de
+                        baixo contradizendo o de cima.
+                      */}
+                      <Link href={`/estoque/produto/${i.id}?mes=${mes.chave}${casaId ? `&unidadeId=${casaId}` : ""}`}>
                         {i.nome}
                       </Link>
                       {i.unidadeMedida ? <span className="cat"> · {i.unidadeMedida}</span> : null}

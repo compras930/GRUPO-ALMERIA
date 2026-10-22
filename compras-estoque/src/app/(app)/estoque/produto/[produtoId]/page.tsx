@@ -4,6 +4,7 @@ import { idDaUnidadeFisica } from "@/lib/unidade-fisica";
 import { requireSession } from "@/lib/session";
 import { unidadeVisivel } from "@/lib/permissions";
 import { fmtCurrency } from "@/lib/format";
+import { mesDaChave } from "@/lib/mes";
 
 /**
  * O que a casa comprou deste produto, nota a nota.
@@ -30,7 +31,7 @@ export default async function ProdutoPage({
   searchParams,
 }: {
   params: { produtoId: string };
-  searchParams: { unidadeId?: string };
+  searchParams: { unidadeId?: string; mes?: string };
 }) {
   const user = await requireSession();
   const isAdmin = user.papel === "ADMIN";
@@ -44,6 +45,17 @@ export default async function ProdutoPage({
   // Compra e preço seguem a DESPENSA — ver src/lib/unidade-fisica.ts.
   const despensaId = await idDaUnidadeFisica(escolhida);
 
+  // O MÊS VEM DO PAINEL, e sem ele esta tela mostrava a compra inteira desde
+  // agosto enquanto o painel dizia outubro: a mesma pergunta respondida com
+  // dois números, e o de baixo desmentindo o de cima. Quem clica num item da
+  // curva de outubro quer ver outubro.
+  //
+  // `?mes=tudo` abre o histórico completo — útil para ver a variação de preço
+  // ao longo dos meses, que é outra pergunta e merece ser pedida.
+  const verTudo = searchParams.mes === "tudo";
+  const mes = verTudo ? null : mesDaChave(searchParams.mes);
+  const periodo = mes ? { dataCompra: { gte: mes.inicio, lt: mes.fim } } : {};
+
   const produto = await prisma.produto.findUnique({
     where: { id: params.produtoId },
     select: { id: true, nome: true, unidadeMedida: true, categoria: true, ativo: true, codigoTeknisa: true },
@@ -52,7 +64,7 @@ export default async function ProdutoPage({
 
   const [linhas, preco, saldo, parametro] = await Promise.all([
     prisma.itemNotaCompra.findMany({
-      where: { produtoId: produto.id, notaCompra: { unidadeId: despensaId } },
+      where: { produtoId: produto.id, notaCompra: { unidadeId: despensaId }, ...periodo },
       orderBy: { dataCompra: "desc" },
       select: {
         id: true,
@@ -94,6 +106,14 @@ export default async function ProdutoPage({
           <Link href="/dashboard">← Painel</Link>
         </p>
         <h1>{produto.nome}</h1>
+        <p className="hint">
+          {mes ? `Compras de ${mes.rotulo}.` : "Todas as compras desta casa."}{" "}
+          {mes ? (
+            <Link href={`/estoque/produto/${produto.id}?mes=tudo&unidadeId=${escolhida}`}>
+              Ver o histórico completo
+            </Link>
+          ) : null}
+        </p>
       </div>
 
       <div className="cards">
@@ -103,6 +123,7 @@ export default async function ProdutoPage({
           <p className="hint">
             {linhas.length} {linhas.length === 1 ? "linha de nota" : "linhas de nota"} ·{" "}
             {qtd(quantidadeTotal)} {produto.unidadeMedida}
+            {mes ? ` · ${mes.rotulo}` : ""}
           </p>
         </div>
         <div className="card">
@@ -135,8 +156,10 @@ export default async function ProdutoPage({
 
       {linhas.length === 0 ? (
         <div className="empty">
-          Nenhuma compra deste produto nesta casa. Se ele aparece em ficha técnica, o custo dele vem
-          de um preço que nunca teve nota por trás.
+          Nenhuma compra deste produto nesta casa{mes ? ` em ${mes.rotulo}` : ""}.
+          {mes
+            ? " Pode ter sido comprado em outro mês — veja o histórico completo acima."
+            : " Se ele aparece em ficha técnica, o custo dele vem de um preço que nunca teve nota por trás."}
         </div>
       ) : (
         <>
