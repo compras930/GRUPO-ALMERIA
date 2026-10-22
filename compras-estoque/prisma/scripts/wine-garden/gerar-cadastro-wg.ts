@@ -70,7 +70,31 @@ type Novo = {
   codigo: string | null; grupo: string; categoria: string; valor: number; linhas: number;
 };
 
+/**
+ * Nomes que NÃO viram produto novo, porque o produto já existe com outro nome.
+ *
+ * O reprocessamento os devolveu como CONFLITO_DE_CODIGO: a linha casou por
+ * NOME com um produto do catálogo (a regra do sufixo redundante faz
+ * "ALECRIM KG" em KG encontrar "ALECRIM"), mas o código da linha é diferente
+ * do gravado no produto — porque o Teknisa tem um código por embalagem e por
+ * cadastro.
+ *
+ * CADASTRÁ-LOS SERIA FABRICAR O FANTASMA. "ALECRIM KG" nasceria ao lado de
+ * "ALECRIM", e aí a ficha consumiria de um enquanto a nota abastece o outro —
+ * o mesmo defeito que custou uma semana no Beira Lago, só que criado por mim,
+ * de propósito, com a lista na mão.
+ *
+ * O certo para eles é o oposto: o código da linha vira um código ADICIONAL do
+ * produto que já existe, em CodigoCompraProduto. Ver 5-codigos-alternativos.sql.
+ */
+const JA_EXISTEM_COM_OUTRO_NOME = new Set([
+  "ABACAXI KG", "ALCATRA BOVINO KG", "ALECRIM KG", "BACON FATIADO KG",
+  "CEBOLETE KG", "CEBOLINHA KG", "CHOPP BRAHMA 50LT", "OVOS GRANDE BRANCO UND",
+  "QUEIJO BRIE KG", "RUCULA HIDROPONICA KG", "SALSA KG",
+]);
+
 const semOrigem: Novo[] = [];
+const jaExistem: Novo[] = [];
 const novos: Novo[] = [];
 for (const f of lerCsv(readFileSync(faltandoCsv, "utf-8"))) {
   const nome = f.nome.replace(/\s+/g, " ").trim();
@@ -87,7 +111,8 @@ for (const f of lerCsv(readFileSync(faltandoCsv, "utf-8"))) {
     valor: Number(f.valor_total || 0),
     linhas: Number(f.linhas || 0),
   };
-  (t ? novos : semOrigem).push(item);
+  if (JA_EXISTEM_COM_OUTRO_NOME.has(nome.toUpperCase())) jaExistem.push(item);
+  else (t ? novos : semOrigem).push(item);
 }
 
 // Por CÓDIGO, um produto por código: fica o nome que mais vendeu, porque é o
@@ -155,7 +180,13 @@ writeFileSync(
 -- GERADO por prisma/scripts/wine-garden/gerar-cadastro-wg.ts --por=${porCodigo ? "codigo" : "nome"}.
 --
 -- ${finais.length} produtos, R$ ${brl(total)} de compra.
-${semOrigem.length ? `--
+${jaExistem.length ? `--
+-- ${jaExistem.length} nomes ficaram de FORA porque o produto JÁ EXISTE com outro nome
+-- (o reprocessamento os devolveu como CONFLITO_DE_CODIGO). Cadastrá-los criaria
+-- um segundo produto para a mesma coisa. O código deles vira código adicional
+-- do produto existente — ver 5-codigos-alternativos.sql:
+${jaExistem.sort((a, b) => b.valor - a.valor).map((n) => `--   R$ ${brl(n.valor).padStart(10)}  ${n.nome} [${n.unidadeBruta}] cod ${n.codigo ?? "?"}`).join("\n")}
+` : ""}${semOrigem.length ? `--
 -- ${semOrigem.length} produtos ficaram de FORA (R$ ${brl(semOrigem.reduce((s, n) => s + n.valor, 0))}): o nome
 -- está no banco mas não no export do Teknisa do período, então não há código
 -- nem grupo para eles. Quase todos são compra anterior a 01/08. Ficam para uma

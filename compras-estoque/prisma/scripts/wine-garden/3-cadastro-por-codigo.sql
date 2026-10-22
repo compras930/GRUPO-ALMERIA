@@ -1,7 +1,23 @@
 -- Cadastro dos produtos do Wine Garden que não casaram.
 -- GERADO por prisma/scripts/wine-garden/gerar-cadastro-wg.ts --por=codigo.
 --
--- 285 produtos, R$ 140.087,47 de compra.
+-- 274 produtos, R$ 133.496,67 de compra.
+--
+-- 11 nomes ficaram de FORA porque o produto JÁ EXISTE com outro nome
+-- (o reprocessamento os devolveu como CONFLITO_DE_CODIGO). Cadastrá-los criaria
+-- um segundo produto para a mesma coisa. O código deles vira código adicional
+-- do produto existente — ver 5-codigos-alternativos.sql:
+--   R$   2.325,28  CHOPP BRAHMA 50LT [BBL] cod 900107000103
+--   R$   1.979,53  QUEIJO BRIE KG [KG] cod 320000000041
+--   R$     874,71  BACON FATIADO KG [KG] cod 320000000002
+--   R$     390,00  CEBOLETE KG [KG] cod 110015009106
+--   R$     340,00  OVOS GRANDE BRANCO UND [UN] cod 110030000602
+--   R$     316,00  RUCULA HIDROPONICA KG [KG] cod 110010013645
+--   R$     196,00  ALECRIM KG [KG] cod 110015009101
+--   R$      77,78  ALCATRA BOVINO KG [KG] cod 100000017103
+--   R$      62,50  SALSA KG [KG] cod 110015009118
+--   R$      24,00  ABACAXI KG [KG] cod 110000020602
+--   R$       5,00  CEBOLINHA KG [KG] cod 110015009107
 --
 -- 12 produtos ficaram de FORA (R$ 2.205,94): o nome
 -- está no banco mas não no export do Teknisa do período, então não há código
@@ -34,13 +50,13 @@
 -- semanal. Comente o bloco que não quiser cadastrar agora.
 --
 -- Por categoria:
---   BEBIDAS ALCOOLICAS              46  R$    30.357,64
 --   MERCEARIA                       79  R$    29.432,93
---   PROTEINAS                       23  R$    16.196,39
+--   BEBIDAS ALCOOLICAS              45  R$    28.032,36
+--   PROTEINAS                       22  R$    16.118,61
 --   DESCARTAVEIS                    15  R$    13.954,99
 --   BEBIDAS ALCOOLICAS - INSUMOS    21  R$    13.071,83
---   SAFO                             5  R$     8.119,50
---   HORTIFRUTIGRANJEIRO             55  R$     7.709,32
+--   HORTIFRUTIGRANJEIRO             48  R$     6.375,82
+--   SAFO                             3  R$     5.265,26
 --   BEBIDAS NAO ALCOOLICAS - INSUMOS  10  R$     4.556,27
 --   UTILIDADE PUBLICA                1  R$     3.495,45
 --   ATIVO IMOBILIZADO                3  R$     3.169,79
@@ -56,53 +72,6 @@ BEGIN;
 INSERT INTO "Produto" (id, nome, "unidadeMedida", categoria, "codigoTeknisa", ativo, "criadoEm")
 SELECT gen_random_uuid()::text, v.nome, v.unidade, v.categoria, v.codigo, true, now()
 FROM (VALUES
-  -- BEBIDAS ALCOOLICAS: 46 produtos, R$ 30.357,64
-  ('CHOPP BRAHMA 30 LT', 'UND', 'BEBIDAS ALCOOLICAS', '900107000106'),  -- R$ 2.442,53 · nota em UN
-  ('CHOPP BRAHMA 50LT', 'UND', 'BEBIDAS ALCOOLICAS', '900107000103'),  -- R$ 2.325,28 · nota em BBL
-  ('CORONA EXTRA N LONG NECK 24X330ML (COMPRA)', 'CX', 'BEBIDAS ALCOOLICAS', '900107000016'),  -- R$ 2.055,65
-  ('WG MONSARAZ ALENTEJO DOC TINTO', 'UND', 'BEBIDAS ALCOOLICAS', '900001000678'),  -- R$ 1.453,48 · nota em UN
-  ('WG MONSARAZ DOC BRANCO', 'UND', 'BEBIDAS ALCOOLICAS', '900001000061'),  -- R$ 1.266,60 · nota em UN
-  ('BAROLO PRUNOTTO WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000733'),  -- R$ 1.259,94 · nota em UN
-  ('LE PETIT RONAN BY CLIENET AOC BORDEAUX WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000640'),  -- R$ 1.232,82 · nota em UN
-  ('CERVEJA STELLA GOLD LONG NECK 24X330ML (COMPRA)', 'CX', 'BEBIDAS ALCOOLICAS', '900107000019'),  -- R$ 1.184,70
-  ('HERDADE PESO SOSSEGO BRANCO WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000150'),  -- R$ 1.122,48 · nota em GF
-  ('OR ANGE JAU BRANCO', 'UND', 'BEBIDAS ALCOOLICAS', '900001001527'),  -- R$ 1.039,26 · nota em UN
-  ('FINCA SAN MARTIN CRIANZA WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000617'),  -- R$ 914,36 · nota em UN
-  ('CERVEJA STELLA ARTOIS LONG NECK 24X330ML (COMPRA)', 'CX', 'BEBIDAS ALCOOLICAS', '900107000017'),  -- R$ 853,05
-  ('ABBOTS E DELAUNY LANGUEDOC ROUGE TINTO WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000886'),  -- R$ 813,17 · nota em GF
-  ('POGGIO MARU PRIMITIVO DI MANDURIA WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000727'),  -- R$ 730,40 · nota em UN
-  ('WG MONSARAZ DOC ROSE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000217'),  -- R$ 726,74 · nota em UN
-  ('CALABUIG ROSADO', 'UND', 'BEBIDAS ALCOOLICAS', '900001000233'),  -- R$ 726,74 · nota em GF
-  ('VINHO TINTO MESSIAS DOURO 750ML', 'UND', 'BEBIDAS ALCOOLICAS', '900001001320'),  -- R$ 712,80 · nota em UN
-  ('HERDADE DO GAMITO WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000628'),  -- R$ 642,42 · nota em UN
-  ('THERA ROSE WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000229'),  -- R$ 590,28 · nota em UN
-  ('VERMUTE CARPANO CLASSICO ROSSO 950ML - UNIDADE', 'UND', 'BEBIDAS ALCOOLICAS', '900108000803'),  -- R$ 584,65 · nota em UN
-  ('VINHO DO CERRADO TRILHA MALBEC SYRAH', 'UND', 'BEBIDAS ALCOOLICAS', '900001001318'),  -- R$ 570,00 · nota em GF
-  ('GIN BEEFEATER PINK 750ML', 'UND', 'BEBIDAS ALCOOLICAS', '900108000002'),  -- R$ 564,46 · nota em UN
-  ('CONDE DE VALDEMAR TEMPRANILLO TINTO WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000882'),  -- R$ 547,80 · nota em GF
-  ('CHATEAU TANUNDA MATTHEWS R. CHARDONNAY BRANCO WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000114'),  -- R$ 488,81 · nota em GF
-  ('REGUENGOS RESERVA DOS SOCIOS DOC WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000742'),  -- R$ 483,93 · nota em UN
-  ('FOPPA & AMBROSI WINEMAKERS COLLECTION MARSELAN WIN', 'UND', 'BEBIDAS ALCOOLICAS', '900001001317'),  -- R$ 479,40 · nota em GF
-  ('TORDO ALVARINHO VINHO VERDE WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000198'),  -- R$ 478,02 · nota em GF
-  ('BIZANTIUM ROSSO WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001001316'),  -- R$ 450,00 · nota em GF
-  ('MESSIAS EXTRA BRUT ESPUMANTE WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000361'),  -- R$ 386,00 · nota em GF
-  ('CERVEJA SPATEN LONG NECK 24X330ML (COMPRA)', 'CX', 'BEBIDAS ALCOOLICAS', '900107000001'),  -- R$ 360,95 · nota em FD
-  ('CASTELO DE BORBA RESERVA WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000559'),  -- R$ 336,15 · nota em UN
-  ('OVEJA BLACK BONARDA WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001001319'),  -- R$ 323,40 · nota em GF
-  ('VIDIGUEIRA PREMIUM ANTAO VAZ ALENTEJO DOC 2024WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000126'),  -- R$ 309,36 · nota em UN
-  ('GIN AMAZZONI TRADICIONAL', 'UND', 'BEBIDAS ALCOOLICAS', '900108000011'),  -- R$ 284,70 · nota em UN
-  ('LICOR COINTREAU LARANJA 700ML', 'UND', 'BEBIDAS ALCOOLICAS', '900108000303'),  -- R$ 219,65 · nota em UN
-  ('QUINTA DAS TECEDEIRAS PORTO TAWNY RESERVA', 'UND', 'BEBIDAS ALCOOLICAS', '900001001313'),  -- R$ 215,80 · nota em UN
-  ('NEDERBURG NOBLE LATE HARVEST WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000416'),  -- R$ 170,39 · nota em UN
-  ('WG POUCA ROUPA TINTO', 'UND', 'BEBIDAS ALCOOLICAS', '900001000729'),  -- R$ 167,12 · nota em UN
-  ('MARQUES DE BORBA TINTO', 'UND', 'BEBIDAS ALCOOLICAS', '900001000659'),  -- R$ 162,49 · nota em UN
-  ('DOSE WHISKEY JOHNNIE WALKER BLACK LABEL 12 ANOS', 'UND', 'BEBIDAS ALCOOLICAS', '900025004510'),  -- R$ 156,29 · nota em UN
-  ('DOSE LICOR 43', 'DS', 'BEBIDAS ALCOOLICAS', '900025001533'),  -- R$ 127,79
-  ('ESPUMANTE ROSE VOGA PINOT GRIGIO', 'UND', 'BEBIDAS ALCOOLICAS', '900001001535'),  -- R$ 116,92 · nota em GF
-  ('SKOL LT 350ML', 'CX', 'BEBIDAS ALCOOLICAS', '900107000022'),  -- R$ 103,24
-  ('SKOL LT 269ML', 'CX', 'BEBIDAS ALCOOLICAS', '900107000021'),  -- R$ 100,02
-  ('LICOR STOCK CREME DE CASSIS 720ML UN (COMPRA)', 'UND', 'BEBIDAS ALCOOLICAS', '900108000309'),  -- R$ 40,09 · nota em UN
-  ('CACHACA SALINAS TRADICIONAL 600ML', 'UND', 'BEBIDAS ALCOOLICAS', '900108000601'),  -- R$ 37,51 · nota em UN
   -- MERCEARIA: 79 produtos, R$ 29.432,93
   ('OLEO DE ALGODAO 14,5 LT (COMPRA)', 'CX', 'MERCEARIA', '105050007119'),  -- R$ 4.908,39 · nota em BD
   ('ARROZ ARBORIO PAGANINI 1KG', 'UND', 'MERCEARIA', '105015009102'),  -- R$ 2.050,87 · nota em UN
@@ -183,7 +152,53 @@ FROM (VALUES
   ('FECULA DE BATATAS KG', 'KG', 'MERCEARIA', '105045027157'),  -- R$ 11,50
   ('LENTILHA KG', 'KG', 'MERCEARIA', '105015009118'),  -- R$ 9,49
   ('SEMENTE DE CHIA KG', 'KG', 'MERCEARIA', '105000052630'),  -- R$ 7,49
-  -- PROTEINAS: 23 produtos, R$ 16.196,39
+  -- BEBIDAS ALCOOLICAS: 45 produtos, R$ 28.032,36
+  ('CHOPP BRAHMA 30 LT', 'UND', 'BEBIDAS ALCOOLICAS', '900107000106'),  -- R$ 2.442,53 · nota em UN
+  ('CORONA EXTRA N LONG NECK 24X330ML (COMPRA)', 'CX', 'BEBIDAS ALCOOLICAS', '900107000016'),  -- R$ 2.055,65
+  ('WG MONSARAZ ALENTEJO DOC TINTO', 'UND', 'BEBIDAS ALCOOLICAS', '900001000678'),  -- R$ 1.453,48 · nota em UN
+  ('WG MONSARAZ DOC BRANCO', 'UND', 'BEBIDAS ALCOOLICAS', '900001000061'),  -- R$ 1.266,60 · nota em UN
+  ('BAROLO PRUNOTTO WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000733'),  -- R$ 1.259,94 · nota em UN
+  ('LE PETIT RONAN BY CLIENET AOC BORDEAUX WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000640'),  -- R$ 1.232,82 · nota em UN
+  ('CERVEJA STELLA GOLD LONG NECK 24X330ML (COMPRA)', 'CX', 'BEBIDAS ALCOOLICAS', '900107000019'),  -- R$ 1.184,70
+  ('HERDADE PESO SOSSEGO BRANCO WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000150'),  -- R$ 1.122,48 · nota em GF
+  ('OR ANGE JAU BRANCO', 'UND', 'BEBIDAS ALCOOLICAS', '900001001527'),  -- R$ 1.039,26 · nota em UN
+  ('FINCA SAN MARTIN CRIANZA WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000617'),  -- R$ 914,36 · nota em UN
+  ('CERVEJA STELLA ARTOIS LONG NECK 24X330ML (COMPRA)', 'CX', 'BEBIDAS ALCOOLICAS', '900107000017'),  -- R$ 853,05
+  ('ABBOTS E DELAUNY LANGUEDOC ROUGE TINTO WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000886'),  -- R$ 813,17 · nota em GF
+  ('POGGIO MARU PRIMITIVO DI MANDURIA WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000727'),  -- R$ 730,40 · nota em UN
+  ('WG MONSARAZ DOC ROSE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000217'),  -- R$ 726,74 · nota em UN
+  ('CALABUIG ROSADO', 'UND', 'BEBIDAS ALCOOLICAS', '900001000233'),  -- R$ 726,74 · nota em GF
+  ('VINHO TINTO MESSIAS DOURO 750ML', 'UND', 'BEBIDAS ALCOOLICAS', '900001001320'),  -- R$ 712,80 · nota em UN
+  ('HERDADE DO GAMITO WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000628'),  -- R$ 642,42 · nota em UN
+  ('THERA ROSE WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000229'),  -- R$ 590,28 · nota em UN
+  ('VERMUTE CARPANO CLASSICO ROSSO 950ML - UNIDADE', 'UND', 'BEBIDAS ALCOOLICAS', '900108000803'),  -- R$ 584,65 · nota em UN
+  ('VINHO DO CERRADO TRILHA MALBEC SYRAH', 'UND', 'BEBIDAS ALCOOLICAS', '900001001318'),  -- R$ 570,00 · nota em GF
+  ('GIN BEEFEATER PINK 750ML', 'UND', 'BEBIDAS ALCOOLICAS', '900108000002'),  -- R$ 564,46 · nota em UN
+  ('CONDE DE VALDEMAR TEMPRANILLO TINTO WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000882'),  -- R$ 547,80 · nota em GF
+  ('CHATEAU TANUNDA MATTHEWS R. CHARDONNAY BRANCO WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000114'),  -- R$ 488,81 · nota em GF
+  ('REGUENGOS RESERVA DOS SOCIOS DOC WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000742'),  -- R$ 483,93 · nota em UN
+  ('FOPPA & AMBROSI WINEMAKERS COLLECTION MARSELAN WIN', 'UND', 'BEBIDAS ALCOOLICAS', '900001001317'),  -- R$ 479,40 · nota em GF
+  ('TORDO ALVARINHO VINHO VERDE WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000198'),  -- R$ 478,02 · nota em GF
+  ('BIZANTIUM ROSSO WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001001316'),  -- R$ 450,00 · nota em GF
+  ('MESSIAS EXTRA BRUT ESPUMANTE WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000361'),  -- R$ 386,00 · nota em GF
+  ('CERVEJA SPATEN LONG NECK 24X330ML (COMPRA)', 'CX', 'BEBIDAS ALCOOLICAS', '900107000001'),  -- R$ 360,95 · nota em FD
+  ('CASTELO DE BORBA RESERVA WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000559'),  -- R$ 336,15 · nota em UN
+  ('OVEJA BLACK BONARDA WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001001319'),  -- R$ 323,40 · nota em GF
+  ('VIDIGUEIRA PREMIUM ANTAO VAZ ALENTEJO DOC 2024WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000126'),  -- R$ 309,36 · nota em UN
+  ('GIN AMAZZONI TRADICIONAL', 'UND', 'BEBIDAS ALCOOLICAS', '900108000011'),  -- R$ 284,70 · nota em UN
+  ('LICOR COINTREAU LARANJA 700ML', 'UND', 'BEBIDAS ALCOOLICAS', '900108000303'),  -- R$ 219,65 · nota em UN
+  ('QUINTA DAS TECEDEIRAS PORTO TAWNY RESERVA', 'UND', 'BEBIDAS ALCOOLICAS', '900001001313'),  -- R$ 215,80 · nota em UN
+  ('NEDERBURG NOBLE LATE HARVEST WINE', 'UND', 'BEBIDAS ALCOOLICAS', '900001000416'),  -- R$ 170,39 · nota em UN
+  ('WG POUCA ROUPA TINTO', 'UND', 'BEBIDAS ALCOOLICAS', '900001000729'),  -- R$ 167,12 · nota em UN
+  ('MARQUES DE BORBA TINTO', 'UND', 'BEBIDAS ALCOOLICAS', '900001000659'),  -- R$ 162,49 · nota em UN
+  ('DOSE WHISKEY JOHNNIE WALKER BLACK LABEL 12 ANOS', 'UND', 'BEBIDAS ALCOOLICAS', '900025004510'),  -- R$ 156,29 · nota em UN
+  ('DOSE LICOR 43', 'DS', 'BEBIDAS ALCOOLICAS', '900025001533'),  -- R$ 127,79
+  ('ESPUMANTE ROSE VOGA PINOT GRIGIO', 'UND', 'BEBIDAS ALCOOLICAS', '900001001535'),  -- R$ 116,92 · nota em GF
+  ('SKOL LT 350ML', 'CX', 'BEBIDAS ALCOOLICAS', '900107000022'),  -- R$ 103,24
+  ('SKOL LT 269ML', 'CX', 'BEBIDAS ALCOOLICAS', '900107000021'),  -- R$ 100,02
+  ('LICOR STOCK CREME DE CASSIS 720ML UN (COMPRA)', 'UND', 'BEBIDAS ALCOOLICAS', '900108000309'),  -- R$ 40,09 · nota em UN
+  ('CACHACA SALINAS TRADICIONAL 600ML', 'UND', 'BEBIDAS ALCOOLICAS', '900108000601'),  -- R$ 37,51 · nota em UN
+  -- PROTEINAS: 22 produtos, R$ 16.118,61
   ('CAMARAO INTEIRO E LIMPO - 16/20 ROSA KG', 'KG', 'PROTEINAS', '100015013105'),  -- R$ 3.537,30
   ('CAMARAO DESC. E EVISC. IQF 51\60', 'KG', 'PROTEINAS', '100015013128'),  -- R$ 1.458,00
   ('CAMARAO 51/60 LIMPO S/ COLINHA', 'KG', 'PROTEINAS', '100015013130'),  -- R$ 1.445,40
@@ -206,7 +221,6 @@ FROM (VALUES
   ('FRALDINHA KG', 'KG', 'PROTEINAS', '100000017121'),  -- R$ 142,68
   ('FILE MIGNON SUINO KG', 'KG', 'PROTEINAS', '100005019137'),  -- R$ 111,94
   ('PATINHO BOVINO KG', 'KG', 'PROTEINAS', '100000017139'),  -- R$ 95,98
-  ('ALCATRA BOVINO KG', 'KG', 'PROTEINAS', '100000017103'),  -- R$ 77,78
   -- DESCARTAVEIS: 15 produtos, R$ 13.954,99
   ('GUARDANAPO 40X23 WINE CX 2000 (COMPRA)', 'CX', 'DESCARTAVEIS', '120000006158'),  -- R$ 5.453,40
   ('COPO DESCARTAVEL CP-500ML C/450UND', 'CX', 'DESCARTAVEIS', '120000006108'),  -- R$ 2.137,60
@@ -245,26 +259,16 @@ FROM (VALUES
   ('CONHAQUE DOMUS LT', 'UND', 'BEBIDAS ALCOOLICAS - INSUMOS', '130005000504'),  -- R$ 48,06 · nota em UN
   ('CACHACA VELHO BARREIRO 910ML (COMPRA)', 'UND', 'BEBIDAS ALCOOLICAS - INSUMOS', '130005000225'),  -- R$ 31,48 · nota em UN
   ('CACHACA SAGATIBA PURA CRISTALINA', 'UND', 'BEBIDAS ALCOOLICAS - INSUMOS', '130005000207'),  -- R$ 27,04 · nota em UN
-  -- SAFO: 5 produtos, R$ 8.119,50
-  ('BURRATA UN', 'UND', 'SAFO', '320000000001'),  -- R$ 2.500,00 · nota em UN
-  ('SALAME ITALIANO DEFUMADO KG', 'KG', 'SAFO', '320000000036'),  -- R$ 2.211,77
-  ('QUEIJO BRIE KG', 'KG', 'SAFO', '320000000041'),  -- R$ 1.979,53
-  ('BACON FATIADO KG', 'KG', 'SAFO', '320000000002'),  -- R$ 874,71
-  ('QUEIJO PECORINO FRACIONADO 200GR - KG (COMPRA)', 'KG', 'SAFO', '320000000073'),  -- R$ 553,49
-  -- HORTIFRUTIGRANJEIRO: 55 produtos, R$ 7.709,32
+  -- HORTIFRUTIGRANJEIRO: 48 produtos, R$ 6.375,82
   ('COGUMELO PORTO BELO KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110020004109'),  -- R$ 994,60
   ('COGUMELO SHIMEJI PRETO KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110020004106'),  -- R$ 926,10
   ('MICROVERDES DE RABANETE (40G)', 'GR', 'HORTIFRUTIGRANJEIRO', '110010013636'),  -- R$ 512,00
   ('BATATA BAROA KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110005019609'),  -- R$ 497,67
-  ('CEBOLETE KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110015009106'),  -- R$ 390,00
-  ('OVOS GRANDE BRANCO UND', 'UND', 'HORTIFRUTIGRANJEIRO', '110030000602'),  -- R$ 340,00 · nota em UN
-  ('RUCULA HIDROPONICA KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110010013645'),  -- R$ 316,00
   ('ACELGA CHINESA', 'UND', 'HORTIFRUTIGRANJEIRO', '110005019651'),  -- R$ 261,00 · nota em UN
   ('FLORES COMESTIVEIS KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110010013601'),  -- R$ 208,00
   ('MICROVERDES DE RUCULA (40G)', 'UND', 'HORTIFRUTIGRANJEIRO', '110010013639'),  -- R$ 204,00 · nota em UN
   ('TOMATE CEREJA AMARELO KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110005019639'),  -- R$ 201,60
   ('ACELGA KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110010013605'),  -- R$ 198,00
-  ('ALECRIM KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110015009101'),  -- R$ 196,00
   ('BROCOLIS KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110010013630'),  -- R$ 184,00
   ('COGUMELO SHITAKE 200G UN (COMPRA)', 'UND', 'HORTIFRUTIGRANJEIRO', '110020004115'),  -- R$ 184,00 · nota em UN
   ('MANJERICAO UN', 'UND', 'HORTIFRUTIGRANJEIRO', '110015009126'),  -- R$ 182,50 · nota em UN
@@ -278,7 +282,6 @@ FROM (VALUES
   ('SHIMEJI PRETO 200G UN (COMPRA)', 'UND', 'HORTIFRUTIGRANJEIRO', '110020004116'),  -- R$ 91,36 · nota em UN
   ('HORTELA KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110015009112'),  -- R$ 87,50
   ('UVA VITORIA KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110000020654'),  -- R$ 63,00
-  ('SALSA KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110015009118'),  -- R$ 62,50
   ('TOMILHO UN', 'UND', 'HORTIFRUTIGRANJEIRO', '110010013642'),  -- R$ 59,50 · nota em UN
   ('SHIMEJI BRANCO 200G (BDJ) KZ (COMPRA)', 'UND', 'HORTIFRUTIGRANJEIRO', '110020004117'),  -- R$ 52,00 · nota em UN
   ('FLOR COMESTIVEL', 'UND', 'HORTIFRUTIGRANJEIRO', '110010013644'),  -- R$ 48,00 · nota em UN
@@ -290,7 +293,6 @@ FROM (VALUES
   ('POLPA GOIABA KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110025008615'),  -- R$ 30,00
   ('MIX DE MICROVERDES 40G', 'UND', 'HORTIFRUTIGRANJEIRO', '110010013633'),  -- R$ 30,00 · nota em UN
   ('LIMAO GALEGO KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110000020624'),  -- R$ 24,60
-  ('ABACAXI KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110000020602'),  -- R$ 24,00
   ('AMEIXA FRESCA KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110000020603'),  -- R$ 21,60
   ('BATATA BOLINHA KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110005019610'),  -- R$ 19,76
   ('SALSAO UN', 'UND', 'HORTIFRUTIGRANJEIRO', '110015009130'),  -- R$ 18,00 · nota em UN
@@ -301,12 +303,15 @@ FROM (VALUES
   ('BROTO FEIJÃO', 'UND', 'HORTIFRUTIGRANJEIRO', '110005019653'),  -- R$ 9,00 · nota em UN
   ('RABANETE UN', 'UND', 'HORTIFRUTIGRANJEIRO', '110005019654'),  -- R$ 6,00 · nota em UN
   ('RABANETE KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110005019637'),  -- R$ 6,00
-  ('CEBOLINHA KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110015009107'),  -- R$ 5,00
   ('TANGERINA KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110000020640'),  -- R$ 4,95
   ('QUIABO KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110005019636'),  -- R$ 4,00
   ('MAXIXE KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110005019626'),  -- R$ 3,92
   ('ALFACE ROXO UN', 'UND', 'HORTIFRUTIGRANJEIRO', '110010013643'),  -- R$ 3,60 · nota em UN
   ('ABOBORA ITALIANA KG', 'KG', 'HORTIFRUTIGRANJEIRO', '110010013650'),  -- R$ 2,70
+  -- SAFO: 3 produtos, R$ 5.265,26
+  ('BURRATA UN', 'UND', 'SAFO', '320000000001'),  -- R$ 2.500,00 · nota em UN
+  ('SALAME ITALIANO DEFUMADO KG', 'KG', 'SAFO', '320000000036'),  -- R$ 2.211,77
+  ('QUEIJO PECORINO FRACIONADO 200GR - KG (COMPRA)', 'KG', 'SAFO', '320000000073'),  -- R$ 553,49
   -- BEBIDAS NAO ALCOOLICAS - INSUMOS: 10 produtos, R$ 4.556,27
   ('XAROPE MONIN MAÇA VERDE (COMPRA)', 'UND', 'BEBIDAS NAO ALCOOLICAS - INSUMOS', '135000000052'),  -- R$ 794,10 · nota em UN
   ('XAROPE MONIN CRANBERRY 700ML UN (COMPRA)', 'UND', 'BEBIDAS NAO ALCOOLICAS - INSUMOS', '135000000051'),  -- R$ 687,42 · nota em UN
@@ -370,9 +375,9 @@ WHERE NOT EXISTS (
 
 COMMIT;
 
--- CONFERÊNCIA: 285 produtos novos, por categoria.
+-- CONFERÊNCIA: 274 produtos novos, por categoria.
 SELECT p.categoria, count(*) AS produtos, count(p."codigoTeknisa") AS com_codigo
 FROM "Produto" p
-WHERE lower(btrim(p.nome)) IN ('guardanapo 40x23 wine cx 2000 (compra)', 'oleo de algodao 14,5 lt (compra)', 'camarao inteiro e limpo - 16/20 rosa kg', 'glp em cilindro granel', 'aperol gf 750ml un (compra)', 'burrata un', 'chopp brahma 30 lt', 'chopp brahma 50lt', 'salame italiano defumado kg', 'whiskey jack daniel tradicional 1lt gr', 'copo descartavel cp-500ml c/450und', 'corona extra n long neck 24x330ml (compra)', 'queijo brie kg', 'leite integral 12x1l (compra)', 'papel toalha bobina 6x200 cx (compra)', 'bon vivant gin', 'evento chateau beauregard ducasse', 'arroz arborio paganini 1kg', 'travessa oval porc 24x14cm', 'camarao desc. e evisc. iqf 51\60', 'oleo de algodao 14,5 lt', 'wg monsaraz alentejo doc tinto', 'camarao 51/60 limpo s/ colinha', 'coppa italiana', 'corona cero long neck 24x330ml (compra)', 'wg monsaraz doc branco', 'embalagens sacos a vacuo 25x35 0,12 micra', 'barolo prunotto wine', 'le petit ronan by clienet aoc bordeaux wine', 'rabo bovino - rabada kg', 'manteiga s/sal 5kg un (compra)', 'frango a passarinho kg', 'cerveja stella gold long neck 24x330ml (compra)', 'herdade peso sossego branco wine', 'chocolate sicao selecao gotas 70% kg', 'soppressata mattos', 'arroz branco 6x5kg (compra)', 'papel toalha bobina', 'or ange jau branco', 'aromatizador ekkoa fragrancia dreams bamboo', 'cogumelo porto belo kg', 'polvo nac 1,5/2,0 kg', 'cogumelo shimeji preto kg', 'finca san martin crianza wine', 'queijo mussarela nodini/nozinho', 'linha rustico pilotto 3 00 larg', 'nestle nestilly uht npro 12x1l', 'desinfetante azulim lavanda 5 litros start', 'bacon fatiado kg', 'copa defumada cerati kg', 'cerveja stella artois long neck 24x330ml (compra)', 'licor angostura bitter aromatic 200ml', 'abbots e delauny languedoc rouge tinto wine', 'copo l drink amer duplo 2910 nadir 450ml', 'xarope monin maça verde (compra)', 'azeitona preta em conserva sem caroco kg', 'poggio maru primitivo di manduria wine', 'queijo gouda kg', 'wg monsaraz doc rose', 'calabuig rosado', 'oleo de soja 900ml un (compra)', 'capsula tres espresso descafeinado 10x8g', 'vinho tinto messias douro 750ml', 'whiskey old par 12 anos 750ml', 'xarope monin cranberry 700ml un (compra)', 'creme de leite 1,030 lt un (compra)', 'cachaça cristal de goias 600ml un (compra)', 'papel higienico interfolhado cliente 250 fls', 'gin ing beefeater pink 700ml', 'herdade do gamito wine', 'xarope monin rosa', 'xarope monin toranja', 'concentrado gengibre', 'aperol gf 750ml', 'acem bovino kg', 'bon vivante fin 750ml (compra)', 'thera rose wine', 'vermute carpano classico rosso 950ml - unidade', 'vinho do cerrado trilha malbec syrah', 'gin beefeater pink 750ml', 'queijo pecorino fracionado 200gr - kg (compra)', 'azeitona verde s caroco bld 15kg (compra)', 'conde de valdemar tempranillo tinto wine', 'plastico filme pvc em bobina 38x8x1000m', 'creme de leite 15% piracanjuba', 'microverdes de rabanete (40g)', 'costelinha premium', 'arroz branco un 5kg (compra)', 'batata baroa kg', 'linguica suina churrasco kg', 'chateau tanunda matthews r. chardonnay branco wine', 'reguengos reserva dos socios doc wine', 'file de sassami - funcionário', 'foppa & ambrosi winemakers collection marselan win', 'tordo alvarinho vinho verde wine', 'azeitona verde em conserva sem caroco kg', 'bizantium rosso wine', 'sobrepaleta suina sem osso/copa lombo kg', 'molho de pimenta tabasco 60l un (compra)', 'queijo emmental kg', 'cebolete kg', 'messias extra brut espumante wine', 'xarope monin rose', 'macarrao divella 70 rosmarino kg', 'cafe tor moi 3 coracoes fort stand 10x500g (compra', 'cerveja spaten long neck 24x330ml (compra)', 'xarope monin maracuja', 'ovos grande branco und', 'massa rolinho primavera', 'castelo de borba reserva wine', 'cachaça cristal de goias 600ml', 'papel higienico fd 48x250 fls', 'angostura bitter 200ml un (compra)', 'pepsi black lata 350ml', 'oveja black bonarda wine', 'aperol gf 750ml (compra)', 'agua min c/gas 24x500 san pelegrino (compra)', 'rucula hidroponica kg', 'queijo bufala tipo burrata 200g (compra)', 'prime rib suino kg', 'vidigueira premium antao vaz alentejo doc 2024wine', 'licor de pessego peachetree 700ml', 'whiskey johnnie walker black label 12 anos 1lt', 'gin amazzoni tradicional', 'osso serrado bovino p/ molho kg', 'filet de anchova em conserva kg', 'alcaparrones la pastina 180g (compra)', 'soppressta mattos', 'queijo canastra - triangulo mineiro kg', 'massa fillo cong 750 gr arosa', 'acelga chinesa', 'acem bovino moido kg', 'xarope monin caramelo 700ml un (compra)', 'gema de ovo lt', 'tomate pelati 2,5kg (compra)', 'energetico red bull tropical', 'massa de pastel kg', 'queijo maturado 60d', 'alcaparrones em conserva kg', 'luva latex ranhurada amar c. longo m 1pa vabene', 'licor cointreau laranja 700ml', 'vinagre de maca lt', 'quinta das tecedeiras porto tawny reserva', 'guarana antarctica 1l', 'mel abelha bisnaga (compra)', 'arroz oriental longo 5kg', 'flores comestiveis kg', 'microverdes de rucula (40g)', 'macarrao grano duro - fettuccine nº12 0,500gr', 'macarrao grano duro - espaguete divella nº8 - 500g', 'tomate cereja amarelo kg', 'vinho branco saint germain 750ml', 'vela de aniversario', 'acelga kg', 'alecrim kg', 'pernil sem osso kg', 'chocolate sicao barra/gotas branco kg', 'pimenta do reino verde kg', 'brocolis kg', 'cogumelo shitake 200g un (compra)', 'manjericao un', 'couve flor kg', 'azeitona preta em conserva sem caroco', 'salame cerrado mattos', 'nederburg noble late harvest wine', 'wg pouca roupa tinto', 'papel aluminio 45cm65m vabene', 'marques de borba tinto', 'microverdes de rabanete (40g) (compra)', 'vermouth carpano punt mes 750ml', 'toranja kg', 'dose whiskey johnnie walker black label 12 anos', 'conhaque domecq 1lt', 'cogumelo shimeji branco kg', 'ricota coronata', 'açucar refinado 10x1kg', 'capsula cafe cappuccino 3coracoes cx10 (compra)', 'pimenta do reino preta em graos kg', 'limpador multiuso veja', 'fraldinha kg', 'couscus marroquino kg', 'vinagre de arroz lt', 'microverdes de rucula (40g) (compra)', 'molho de tomate sache 1,7kg (compra)', 'farinha de mandioca kg', 'farinha de trigo anaconda premium 5x5kg (compra)', 'molho de tomate sache kg', 'alface frize kg', 'dose licor 43', 'licor 43 gf 700ml', 'milho torrado mostarda e mel', 'salsicha hotdog kg', 'molho shoyu 1010 ml trad. cepera (compra)', 'feijao carioca funcionario 10x1kg (compra)', 'espumante rose voga pinot grigio', 'etiqueta de manipulacao - rt-183 60x30 c/ 500unid', 'file mignon suino kg', 'skol lt 350ml', 'aceto balsamico 500ml', 'macarrao espaguete 0,500g', 'folhas nori roxumurasaki talaokaya', 'skol lt 269ml', 'pepsi zero lata 12x350 (compra)', 'patinho bovino kg', 'capsulas de gas n20 fpro p/ chantilly 8gr', 'alface frize', 'shimeji preto 200g un (compra)', 'hortela kg', 'whiskey jameson 750ml', 'feijao preto un 1kg', 'açucar 6x5kg (compra)', 'alcatra bovino kg', 'untaforma/demoldante', 'azeitona preta kg 1,8 (compra)', 'folha papel a4', 'colher descartavel resistente branca c/50un', 'vinagre castelo de alcool 12x750ml (compra)', 'uva vitoria kg', 'salsa kg', 'macarrao bifum oriental', 'pepsi lata 350ml', 'tomilho un', 'shimeji branco 200g (bdj) kz (compra)', 'soda caustica 1kg', 'copo descartavel 200ml 1x100un', 'pote redondo trp 500ml c/tampa 24un', 'conhaque domus lt', 'flor comestivel', 'coentro em graos kg', 'maionese bag kg', 'lemon pepper kg', 'melaco de roma diluido', 'licor stock creme de cassis 720ml un (compra)', 'queijo cabra tipo feta', 'macarrao parafuso 0,500gr', 'cachaca salinas tradicional 600ml', 'palmito in conserva kg', 'broto feijao kg', 'polenta instantanea paganini 500gr', 'batata inglesa kg', 'microverdes de rucula (40g)', 'uva thompson verde kg', 'cachaca velho barreiro 910ml (compra)', 'salsao kg', 'pepsi cola lata 12x350 (compra)', 'polpa goiaba kg', 'molho de pimenta sriracha cepera lt', 'mix de microverdes 40g', 'energetico red bull sugar free', 'extrato de tomate sache kg', 'sal grosso fardo c/10x1kg (compra)', 'pote redondo pp trp kit c/tampa 250ml 24un', 'cachaca sagatiba pura cristalina', 'limpa aluminio alumil limao 500ml', 'atum em lata kg', 'limao galego kg', 'abacaxi kg', 'chimichurri com pimenta kg', 'gergelim branco kg', 'aceto/vinagre balsamico lt', 'mascara tripla com elastico', 'ameixa fresca kg', 'batata bolinha kg', 'zaatar kg', 'salsao un', 'figo in natura kg', 'chuchu kg', 'trigo para kibe kg', 'pera kg', 'grao de bico pct 500g (compra)', 'grape fruit', 'fecula de batatas kg', 'lentilha kg', 'broto feijão', 'semente de chia kg', 'guarana chp antartica pet 1l pack c/ 2 (compra)', 'rabanete un', 'rabanete kg', 'cebolinha kg', 'tangerina kg', 'escova multiuso', 'quiabo kg', 'maxixe kg', 'alface roxo un', 'abobora italiana kg')
+WHERE lower(btrim(p.nome)) IN ('guardanapo 40x23 wine cx 2000 (compra)', 'oleo de algodao 14,5 lt (compra)', 'camarao inteiro e limpo - 16/20 rosa kg', 'glp em cilindro granel', 'aperol gf 750ml un (compra)', 'burrata un', 'chopp brahma 30 lt', 'salame italiano defumado kg', 'whiskey jack daniel tradicional 1lt gr', 'copo descartavel cp-500ml c/450und', 'corona extra n long neck 24x330ml (compra)', 'leite integral 12x1l (compra)', 'papel toalha bobina 6x200 cx (compra)', 'bon vivant gin', 'evento chateau beauregard ducasse', 'arroz arborio paganini 1kg', 'travessa oval porc 24x14cm', 'camarao desc. e evisc. iqf 51\60', 'oleo de algodao 14,5 lt', 'wg monsaraz alentejo doc tinto', 'camarao 51/60 limpo s/ colinha', 'coppa italiana', 'corona cero long neck 24x330ml (compra)', 'wg monsaraz doc branco', 'embalagens sacos a vacuo 25x35 0,12 micra', 'barolo prunotto wine', 'le petit ronan by clienet aoc bordeaux wine', 'rabo bovino - rabada kg', 'manteiga s/sal 5kg un (compra)', 'frango a passarinho kg', 'cerveja stella gold long neck 24x330ml (compra)', 'herdade peso sossego branco wine', 'chocolate sicao selecao gotas 70% kg', 'soppressata mattos', 'arroz branco 6x5kg (compra)', 'papel toalha bobina', 'or ange jau branco', 'aromatizador ekkoa fragrancia dreams bamboo', 'cogumelo porto belo kg', 'polvo nac 1,5/2,0 kg', 'cogumelo shimeji preto kg', 'finca san martin crianza wine', 'queijo mussarela nodini/nozinho', 'linha rustico pilotto 3 00 larg', 'nestle nestilly uht npro 12x1l', 'desinfetante azulim lavanda 5 litros start', 'copa defumada cerati kg', 'cerveja stella artois long neck 24x330ml (compra)', 'licor angostura bitter aromatic 200ml', 'abbots e delauny languedoc rouge tinto wine', 'copo l drink amer duplo 2910 nadir 450ml', 'xarope monin maça verde (compra)', 'azeitona preta em conserva sem caroco kg', 'poggio maru primitivo di manduria wine', 'queijo gouda kg', 'wg monsaraz doc rose', 'calabuig rosado', 'oleo de soja 900ml un (compra)', 'capsula tres espresso descafeinado 10x8g', 'vinho tinto messias douro 750ml', 'whiskey old par 12 anos 750ml', 'xarope monin cranberry 700ml un (compra)', 'creme de leite 1,030 lt un (compra)', 'cachaça cristal de goias 600ml un (compra)', 'papel higienico interfolhado cliente 250 fls', 'gin ing beefeater pink 700ml', 'herdade do gamito wine', 'xarope monin rosa', 'xarope monin toranja', 'concentrado gengibre', 'aperol gf 750ml', 'acem bovino kg', 'bon vivante fin 750ml (compra)', 'thera rose wine', 'vermute carpano classico rosso 950ml - unidade', 'vinho do cerrado trilha malbec syrah', 'gin beefeater pink 750ml', 'queijo pecorino fracionado 200gr - kg (compra)', 'azeitona verde s caroco bld 15kg (compra)', 'conde de valdemar tempranillo tinto wine', 'plastico filme pvc em bobina 38x8x1000m', 'creme de leite 15% piracanjuba', 'microverdes de rabanete (40g)', 'costelinha premium', 'arroz branco un 5kg (compra)', 'batata baroa kg', 'linguica suina churrasco kg', 'chateau tanunda matthews r. chardonnay branco wine', 'reguengos reserva dos socios doc wine', 'file de sassami - funcionário', 'foppa & ambrosi winemakers collection marselan win', 'tordo alvarinho vinho verde wine', 'azeitona verde em conserva sem caroco kg', 'bizantium rosso wine', 'sobrepaleta suina sem osso/copa lombo kg', 'molho de pimenta tabasco 60l un (compra)', 'queijo emmental kg', 'messias extra brut espumante wine', 'xarope monin rose', 'macarrao divella 70 rosmarino kg', 'cafe tor moi 3 coracoes fort stand 10x500g (compra', 'cerveja spaten long neck 24x330ml (compra)', 'xarope monin maracuja', 'massa rolinho primavera', 'castelo de borba reserva wine', 'cachaça cristal de goias 600ml', 'papel higienico fd 48x250 fls', 'angostura bitter 200ml un (compra)', 'pepsi black lata 350ml', 'oveja black bonarda wine', 'aperol gf 750ml (compra)', 'agua min c/gas 24x500 san pelegrino (compra)', 'queijo bufala tipo burrata 200g (compra)', 'prime rib suino kg', 'vidigueira premium antao vaz alentejo doc 2024wine', 'licor de pessego peachetree 700ml', 'whiskey johnnie walker black label 12 anos 1lt', 'gin amazzoni tradicional', 'osso serrado bovino p/ molho kg', 'filet de anchova em conserva kg', 'alcaparrones la pastina 180g (compra)', 'soppressta mattos', 'queijo canastra - triangulo mineiro kg', 'massa fillo cong 750 gr arosa', 'acelga chinesa', 'acem bovino moido kg', 'xarope monin caramelo 700ml un (compra)', 'gema de ovo lt', 'tomate pelati 2,5kg (compra)', 'energetico red bull tropical', 'massa de pastel kg', 'queijo maturado 60d', 'alcaparrones em conserva kg', 'luva latex ranhurada amar c. longo m 1pa vabene', 'licor cointreau laranja 700ml', 'vinagre de maca lt', 'quinta das tecedeiras porto tawny reserva', 'guarana antarctica 1l', 'mel abelha bisnaga (compra)', 'arroz oriental longo 5kg', 'flores comestiveis kg', 'microverdes de rucula (40g)', 'macarrao grano duro - fettuccine nº12 0,500gr', 'macarrao grano duro - espaguete divella nº8 - 500g', 'tomate cereja amarelo kg', 'vinho branco saint germain 750ml', 'vela de aniversario', 'acelga kg', 'pernil sem osso kg', 'chocolate sicao barra/gotas branco kg', 'pimenta do reino verde kg', 'brocolis kg', 'cogumelo shitake 200g un (compra)', 'manjericao un', 'couve flor kg', 'azeitona preta em conserva sem caroco', 'salame cerrado mattos', 'nederburg noble late harvest wine', 'wg pouca roupa tinto', 'papel aluminio 45cm65m vabene', 'marques de borba tinto', 'microverdes de rabanete (40g) (compra)', 'vermouth carpano punt mes 750ml', 'toranja kg', 'dose whiskey johnnie walker black label 12 anos', 'conhaque domecq 1lt', 'cogumelo shimeji branco kg', 'ricota coronata', 'açucar refinado 10x1kg', 'capsula cafe cappuccino 3coracoes cx10 (compra)', 'pimenta do reino preta em graos kg', 'limpador multiuso veja', 'fraldinha kg', 'couscus marroquino kg', 'vinagre de arroz lt', 'microverdes de rucula (40g) (compra)', 'molho de tomate sache 1,7kg (compra)', 'farinha de mandioca kg', 'farinha de trigo anaconda premium 5x5kg (compra)', 'molho de tomate sache kg', 'alface frize kg', 'dose licor 43', 'licor 43 gf 700ml', 'milho torrado mostarda e mel', 'salsicha hotdog kg', 'molho shoyu 1010 ml trad. cepera (compra)', 'feijao carioca funcionario 10x1kg (compra)', 'espumante rose voga pinot grigio', 'etiqueta de manipulacao - rt-183 60x30 c/ 500unid', 'file mignon suino kg', 'skol lt 350ml', 'aceto balsamico 500ml', 'macarrao espaguete 0,500g', 'folhas nori roxumurasaki talaokaya', 'skol lt 269ml', 'pepsi zero lata 12x350 (compra)', 'patinho bovino kg', 'capsulas de gas n20 fpro p/ chantilly 8gr', 'alface frize', 'shimeji preto 200g un (compra)', 'hortela kg', 'whiskey jameson 750ml', 'feijao preto un 1kg', 'açucar 6x5kg (compra)', 'untaforma/demoldante', 'azeitona preta kg 1,8 (compra)', 'folha papel a4', 'colher descartavel resistente branca c/50un', 'vinagre castelo de alcool 12x750ml (compra)', 'uva vitoria kg', 'macarrao bifum oriental', 'pepsi lata 350ml', 'tomilho un', 'shimeji branco 200g (bdj) kz (compra)', 'soda caustica 1kg', 'copo descartavel 200ml 1x100un', 'pote redondo trp 500ml c/tampa 24un', 'conhaque domus lt', 'flor comestivel', 'coentro em graos kg', 'maionese bag kg', 'lemon pepper kg', 'melaco de roma diluido', 'licor stock creme de cassis 720ml un (compra)', 'queijo cabra tipo feta', 'macarrao parafuso 0,500gr', 'cachaca salinas tradicional 600ml', 'palmito in conserva kg', 'broto feijao kg', 'polenta instantanea paganini 500gr', 'batata inglesa kg', 'microverdes de rucula (40g)', 'uva thompson verde kg', 'cachaca velho barreiro 910ml (compra)', 'salsao kg', 'pepsi cola lata 12x350 (compra)', 'polpa goiaba kg', 'molho de pimenta sriracha cepera lt', 'mix de microverdes 40g', 'energetico red bull sugar free', 'extrato de tomate sache kg', 'sal grosso fardo c/10x1kg (compra)', 'pote redondo pp trp kit c/tampa 250ml 24un', 'cachaca sagatiba pura cristalina', 'limpa aluminio alumil limao 500ml', 'atum em lata kg', 'limao galego kg', 'chimichurri com pimenta kg', 'gergelim branco kg', 'aceto/vinagre balsamico lt', 'mascara tripla com elastico', 'ameixa fresca kg', 'batata bolinha kg', 'zaatar kg', 'salsao un', 'figo in natura kg', 'chuchu kg', 'trigo para kibe kg', 'pera kg', 'grao de bico pct 500g (compra)', 'grape fruit', 'fecula de batatas kg', 'lentilha kg', 'broto feijão', 'semente de chia kg', 'guarana chp antartica pet 1l pack c/ 2 (compra)', 'rabanete un', 'rabanete kg', 'tangerina kg', 'escova multiuso', 'quiabo kg', 'maxixe kg', 'alface roxo un', 'abobora italiana kg')
 GROUP BY p.categoria
 ORDER BY produtos DESC;
