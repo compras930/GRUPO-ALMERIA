@@ -1,4 +1,4 @@
-import { revalidatePath } from "next/cache";
+import { revalidarTelasDaCarga } from "@/lib/revalidar";
 import { prisma } from "@/lib/prisma";
 import { verificarTokenN8n, respostaNaoAutorizada } from "@/lib/n8n-auth";
 import { N8N_SERVICE_USER_EMAIL } from "@/lib/constants";
@@ -69,9 +69,7 @@ export async function POST(request: Request) {
       servico.id,
       aprenderCodigos === true
     );
-    revalidatePath("/cmv");
-    revalidatePath("/receitas");
-    revalidatePath("/produtos");
+    revalidarTelasDaCarga();
     return Response.json(resultado);
   } catch (e: any) {
     return Response.json({ erro: e?.message || "Erro ao processar." }, { status: 400 });

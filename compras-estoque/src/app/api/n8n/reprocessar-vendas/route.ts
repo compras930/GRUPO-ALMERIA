@@ -1,4 +1,4 @@
-import { revalidatePath } from "next/cache";
+import { revalidarTelasDaCarga } from "@/lib/revalidar";
 import { verificarTokenN8n, respostaNaoAutorizada } from "@/lib/n8n-auth";
 import { reprocessarVendasNaoReconhecidas } from "@/lib/reprocessar-vendas";
 
@@ -27,9 +27,7 @@ export async function POST(request: Request) {
 
   try {
     const resultado = await reprocessarVendasNaoReconhecidas(unidade, vendaSemanalId);
-    revalidatePath("/dashboard");
-    revalidatePath("/cmv");
-    revalidatePath("/estoque");
+    revalidarTelasDaCarga();
     return Response.json(resultado);
   } catch (e: any) {
     return Response.json({ erro: e?.message || "Erro ao reprocessar vendas." }, { status: 400 });
