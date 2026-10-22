@@ -72,7 +72,7 @@ function BarrasPorCategoria({ dados }: { dados: { categoria: string; valor: numb
 export default async function DashboardPage({
   searchParams,
 }: {
-  searchParams: { mes?: string; unidadeId?: string };
+  searchParams: { mes?: string; unidadeId?: string; abc?: string };
 }) {
   const user = await requireSession();
   const isAdmin = user.papel === "ADMIN";
@@ -185,7 +185,11 @@ export default async function DashboardPage({
   }
   const abc = curvaAbcPura([...porItem.values()]);
   const resumoAbc = resumoAbcPura(abc);
-  const top = abc.slice(0, TOP);
+  // A lista inteira só quando pedida. O padrão continua sendo o top 15 porque
+  // a curva A do Beira Lago tem 112 itens e a do 104 Sul 55: aberta, ela empurra
+  // o resto do painel para fora da tela e ninguém lê nenhum dos dois.
+  const verTodosAbc = searchParams.abc === "todos";
+  const top = verTodosAbc ? abc : abc.slice(0, TOP);
 
   // CMV TEÓRICO: custo de ficha × quantidade vendida, dividido pelo
   // faturamento. Só existe com venda carregada E ficha cadastrada; o número de
@@ -551,7 +555,9 @@ export default async function DashboardPage({
       </div>
 
       <div className="card" style={{ marginTop: 18 }}>
-        <h2 style={{ fontSize: 15, marginBottom: 4 }}>Curva ABC da compra — top {TOP}</h2>
+        <h2 style={{ fontSize: 15, marginBottom: 4 }}>
+            Curva ABC da compra{verTodosAbc ? "" : ` — top ${TOP}`}
+          </h2>
         <p className="sub-explica" style={{ marginBottom: 16 }}>
           Classe A são os itens que respondem pelos primeiros {CORTE_A}% do dinheiro. São eles que
           mudam o CMV quando o preço se mexe, e são eles que a contagem semanal cobre.
@@ -589,7 +595,14 @@ export default async function DashboardPage({
                   <tr key={i.id}>
                     <td className="num">{i.posicao}</td>
                     <td>
-                      {i.nome}
+                      {/*
+                        Clicável desde a contagem: olhando a curva, a pergunta
+                        seguinte é sempre "de onde veio esse número". A tela do
+                        produto mostra nota a nota.
+                      */}
+                      <Link href={`/estoque/produto/${i.id}${casaId ? `?unidadeId=${casaId}` : ""}`}>
+                        {i.nome}
+                      </Link>
                       {i.unidadeMedida ? <span className="cat"> · {i.unidadeMedida}</span> : null}
                     </td>
                     <td className="cat">{i.categoria ?? "—"}</td>
@@ -605,8 +618,18 @@ export default async function DashboardPage({
             </table>
             {abc.length > TOP && (
               <p className="sub-explica" style={{ marginTop: 14 }}>
-                Mais {abc.length - TOP} itens fora do top {TOP}, somando{" "}
-                {fmtCurrency(abc.slice(TOP).reduce((s, i) => s + i.valor, 0))}.
+                {verTodosAbc ? (
+                  <>
+                    Mostrando os {abc.length} itens.{" "}
+                    <Link href={qs({ abc: undefined })}>Voltar ao top {TOP}</Link>.
+                  </>
+                ) : (
+                  <>
+                    Mais {abc.length - TOP} itens fora do top {TOP}, somando{" "}
+                    {fmtCurrency(abc.slice(TOP).reduce((s, i) => s + i.valor, 0))}.{" "}
+                    <Link href={qs({ abc: "todos" })}>Ver todos os {abc.length}</Link>.
+                  </>
+                )}
               </p>
             )}
           </>
