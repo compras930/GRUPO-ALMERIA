@@ -61,6 +61,7 @@ export const TIPO_PERDA = [
   "PERDA_PRODUCAO",
   "PERDA_CORTESIA",
   "PERDA_CONSUMO_INTERNO",
+  "PERDA_DEVOLUCAO",
 ] as const;
 export type TipoPerda = (typeof TIPO_PERDA)[number];
 
@@ -71,6 +72,10 @@ export const TIPO_PERDA_LABEL: Record<TipoPerda, string> = {
   PERDA_PRODUCAO: "Erro de produção (queimou, refez)",
   PERDA_CORTESIA: "Cortesia a cliente",
   PERDA_CONSUMO_INTERNO: "Consumo da equipe",
+  // Prato ou drink que voltou do salão. É baixa de ITEM VENDIDO, não de
+  // insumo: quem lança escolhe "Caprese", e a ficha diz o que saiu da
+  // despensa. Ver registrarPerdaDeItemVendido em src/actions/estoque.ts.
+  PERDA_DEVOLUCAO: "Devolvido pelo cliente",
 };
 
 export const TIPO_MOVIMENTO = [

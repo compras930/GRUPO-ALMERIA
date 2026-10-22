@@ -5,6 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { idDaUnidadeFisica } from "@/lib/unidade-fisica";
 import { requireSession } from "@/lib/session";
 import { unidadeVisivel } from "@/lib/permissions";
+import { carregarIndiceReceitas, explodirReceitaPura, CicloReceitaError } from "@/lib/receita";
+import { emOrdemDeBloqueio } from "@/lib/ordem-de-bloqueio";
+import { comRetentativaDeConflito } from "@/lib/transacao";
 import { TIPO_PERDA } from "@/lib/constants";
 
 /**
@@ -207,4 +210,110 @@ export async function registrarPerda(formData: FormData) {
   revalidatePath("/estoque/perdas");
   revalidatePath("/estoque");
   revalidatePath("/estoque/consumo");
+}
+
+/**
+ * Baixa de um ITEM VENDIDO — o prato que voltou do salão, o drink refeito.
+ *
+ * POR QUE NÃO SERVE O `registrarPerda` NORMAL. Ele pede um PRODUTO, e quem
+ * está no salão com um prato devolvido na mão não sabe — nem deveria saber —
+ * que aquilo são 180 g de atum, 20 g de cebolete e 5 ml de azeite trufado.
+ * Obrigá-lo a traduzir é garantir que a baixa não seja lançada, e baixa não
+ * lançada vira "sumiço" na Conferência da contagem, apontando para a pessoa
+ * errada.
+ *
+ * A FICHA FAZ A TRADUÇÃO. Escolhe-se "Caprese", e a receita explodida diz o
+ * que saiu da despensa. É exatamente o mesmo caminho da venda
+ * (venda-semanal.ts), com um tipo de movimento diferente.
+ *
+ * SEM FICHA, RECUSA. Seria possível baixar o preço de venda como se fosse
+ * custo, ou não baixar nada e gravar só um registro. As duas mentem: a
+ * primeira inventa um consumo que não existe nos insumos, a segunda deixa o
+ * estoque alto sabendo que está errado. Recusar com o motivo explícito manda a
+ * pessoa escrever a ficha, que é o que resolve.
+ *
+ * O CONSUMO DA VENDA CONTINUA LÁ, e isso é certo, não duplicação. O prato foi
+ * produzido duas vezes: uma que o cliente recusou e outra que ele comeu. A
+ * venda registra uma; esta baixa registra a outra. Se o pedido foi cancelado
+ * no PDV, ele não entra na carga de venda, e aí esta é a única baixa — também
+ * certo.
+ */
+export async function registrarPerdaDeItemVendido(formData: FormData) {
+  const user = await requireSession();
+  const unidadeId = String(formData.get("unidadeId") || "");
+  const itemVendaId = String(formData.get("itemVendaId") || "");
+  const tipo = String(formData.get("tipo") || "");
+  const observacao = String(formData.get("observacao") || "").trim() || null;
+  const quantidade = Number(String(formData.get("quantidade") || "").trim().replace(",", "."));
+
+  if (!unidadeVisivel(user.papel, user.unidadeId, unidadeId)) {
+    throw new Error("Você não tem acesso a essa unidade.");
+  }
+  if (!itemVendaId) throw new Error("Escolha o prato ou o drink.");
+  if (!(TIPO_PERDA as readonly string[]).includes(tipo)) throw new Error("Escolha o motivo da baixa.");
+  if (!Number.isFinite(quantidade) || quantidade <= 0) {
+    throw new Error("Informe uma quantidade maior que zero.");
+  }
+
+  const item = await prisma.itemVenda.findFirst({
+    where: { id: itemVendaId, unidadeId },
+    select: { id: true, nome: true, receitaId: true },
+  });
+  if (!item) throw new Error("Item de venda não encontrado nesta casa.");
+  if (!item.receitaId) {
+    throw new Error(
+      `"${item.nome}" ainda não tem ficha técnica, então não dá para saber o que sai da despensa. Cadastre a ficha e lance de novo.`
+    );
+  }
+
+  // A venda é da CASA; o consumo que ela gera é da DESPENSA.
+  const unidadeFisicaId = await idDaUnidadeFisica(unidadeId);
+  const indice = await carregarIndiceReceitas(unidadeId);
+  let insumos: Map<string, number>;
+  try {
+    insumos = explodirReceitaPura(item.receitaId, quantidade, indice);
+  } catch (e) {
+    if (e instanceof CicloReceitaError) {
+      throw new Error(
+        `A ficha de "${item.nome}" tem uma sub-receita que chama a si mesma. Corrija em Fichas técnicas e lance de novo.`
+      );
+    }
+    throw e;
+  }
+  if (insumos.size === 0) {
+    throw new Error(`A ficha de "${item.nome}" está vazia — não há insumo para dar baixa.`);
+  }
+
+  const nota = `${quantidade} × ${item.nome}${observacao ? ` — ${observacao}` : ""}`;
+
+  await comRetentativaDeConflito(() =>
+    prisma.$transaction(async (tx) => {
+      // Ordem estável de id — ver src/lib/ordem-de-bloqueio.ts.
+      for (const [produtoId, qtd] of emOrdemDeBloqueio(insumos)) {
+        if (qtd <= 0) continue;
+        await tx.movimentoEstoque.create({
+          data: {
+            unidadeId: unidadeFisicaId,
+            produtoId,
+            tipo,
+            quantidade: -qtd,
+            referencia: user.id,
+            // A observação diz o PRATO, não o insumo: sem isso, o relatório de
+            // perdas mostraria "0,18 kg de atum" sem dizer que aquilo foi um
+            // tartare devolvido, e ninguém conseguiria juntar as peças depois.
+            observacao: nota,
+          },
+        });
+        await tx.estoqueSaldo.upsert({
+          where: { unidadeId_produtoId: { unidadeId: unidadeFisicaId, produtoId } },
+          update: { quantidade: { decrement: qtd } },
+          create: { unidadeId: unidadeFisicaId, produtoId, quantidade: -qtd },
+        });
+      }
+    })
+  );
+
+  revalidatePath("/estoque/perdas");
+  revalidatePath("/estoque");
+  return { insumos: insumos.size, item: item.nome };
 }

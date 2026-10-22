@@ -6,6 +6,7 @@ import { unidadeVisivel } from "@/lib/permissions";
 import { fmtCurrency } from "@/lib/format";
 import { TIPO_PERDA, TIPO_PERDA_LABEL, type TipoPerda } from "@/lib/constants";
 import PerdaForm from "@/components/PerdaForm";
+import PerdaItemVendidoForm from "@/components/PerdaItemVendidoForm";
 
 /**
  * Baixa declarada: o que saiu da despensa e não virou venda.
@@ -41,13 +42,23 @@ export default async function PerdasPage({
   const unidadeFisicaId = await idDaUnidadeFisica(unidadeId);
   const desde = new Date(Date.now() - DIAS_NA_TELA * 24 * 60 * 60 * 1000);
 
-  const [unidade, produtos, lancamentos, precos] = await Promise.all([
+  const [unidade, produtos, itensComFicha, totalDeItens, lancamentos, precos] = await Promise.all([
     prisma.unidade.findUnique({ where: { id: unidadeFisicaId }, select: { nome: true } }),
     prisma.produto.findMany({
       where: { ativo: true },
       orderBy: { nome: "asc" },
       select: { id: true, nome: true, unidadeMedida: true },
     }),
+    // Só item COM ficha: sem ela a ação recusa, e oferecer na lista para depois
+    // dizer "não dá" é fazer a pessoa digitar duas vezes para ouvir não.
+    //
+    // A venda é da CASA (`unidadeId`), não da despensa — ver unidade-fisica.ts.
+    prisma.itemVenda.findMany({
+      where: { unidadeId, ativo: true, receitaId: { not: null } },
+      orderBy: { nome: "asc" },
+      select: { id: true, nome: true, categoria: true },
+    }),
+    prisma.itemVenda.count({ where: { unidadeId, ativo: true } }),
     prisma.movimentoEstoque.findMany({
       where: {
         unidadeId: unidadeFisicaId,
@@ -98,8 +109,38 @@ export default async function PerdasPage({
       </div>
 
       <div className="card">
-        <h2 style={{ fontSize: 15, marginBottom: 14 }}>Nova baixa</h2>
+        <h2 style={{ fontSize: 15, marginBottom: 4 }}>Baixa de insumo</h2>
+        <p className="hint" style={{ marginBottom: 14 }}>
+          O que saiu da despensa e não virou prato: venceu, quebrou, foi aparado.
+        </p>
         <PerdaForm unidadeId={unidadeId} produtos={produtos} />
+      </div>
+
+      <div className="card">
+        <h2 style={{ fontSize: 15, marginBottom: 4 }}>Baixa de prato ou drink</h2>
+        <p className="hint" style={{ marginBottom: 14 }}>
+          O que voltou do salão. Escolha o PRATO — a ficha técnica diz o que saiu da despensa, então
+          ninguém precisa saber de cabeça quantos gramas de cada insumo ele leva.
+          {itensComFicha.length < totalDeItens && (
+            <>
+              {" "}
+              <strong>
+                {totalDeItens - itensComFicha.length} de {totalDeItens} itens ainda não aparecem aqui
+              </strong>{" "}
+              porque não têm ficha.
+            </>
+          )}
+        </p>
+        <PerdaItemVendidoForm
+          unidadeId={unidadeId}
+          itens={itensComFicha.map((i) => ({
+            id: i.id,
+            nome: i.nome,
+            // O seletor mostra este campo ao lado do nome; a categoria ajuda a
+            // separar dois "Caprese" (a salada e a pizza) na hora de escolher.
+            unidadeMedida: i.categoria ?? "item",
+          }))}
+        />
       </div>
 
       <div className="kpis" style={{ marginBottom: 24 }}>
