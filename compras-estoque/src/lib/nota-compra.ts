@@ -6,6 +6,7 @@
 // HistoricoPrecoProduto respeitando "só sobrescreve se a data for mais
 // recente", e reporta quais ItemVenda foram impactados (em cascata, via
 // sub-receita) comparando o custo antes/depois da atualização.
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { normalizarNome } from "@/lib/nome-normalizado";
 import { idDaUnidadeFisica, casasDaUnidadeFisica } from "@/lib/unidade-fisica";
@@ -168,6 +169,43 @@ function custoComPrecos(receitaId: string, indice: IndiceReceitas, precos: Map<s
   }
 }
 
+/**
+ * Os códigos de compra, se a tabela já existir no banco.
+ *
+ * POR QUE ISTO TOLERA A TABELA NÃO EXISTIR, que normalmente seria esconder um
+ * erro: o deploy deste projeto roda `prisma generate` e NUNCA
+ * `prisma migrate deploy` — as migrações são aplicadas à mão no console do
+ * Neon. Então existe uma janela real, de minutos ou de dias, entre o código
+ * subir e o banco mudar, e ela já custou caro aqui.
+ *
+ * Sem esta tolerância a ordem vira obrigatória: migração primeiro, deploy
+ * depois, e inverter derruba TODA carga de compra com "relation does not
+ * exist" — uma falha total para ganhar um recurso opcional.
+ *
+ * O que é tolerado é só isto: a tabela não existir (P2021). Qualquer outro
+ * erro sobe, porque qualquer outro erro é erro de verdade. E o aviso vai para
+ * o log em vez de silêncio, porque uma tabela faltando semanas depois do
+ * deploy é um problema que alguém precisa ver.
+ *
+ * `CodigoCompraProduto` existe porque um produto tem VÁRIOS códigos: o Aperol
+ * é 130005000605 no Wine Garden e 130005000617 no Matri, e o Licor 43 é
+ * ...747 e ...748. Cadastrar por código sem isto criaria dois produtos para o
+ * mesmo item, com o estoque dividido entre eles.
+ */
+async function carregarCodigosCompra() {
+  try {
+    return await prisma.codigoCompraProduto.findMany({
+      select: { origem: true, codigo: true, produtoId: true, unidadeCompra: true, fator: true },
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2021") {
+      console.warn("CodigoCompraProduto ainda não existe no banco; casamento segue por codigoTeknisa e nome.");
+      return [];
+    }
+    throw e;
+  }
+}
+
 export async function processarNotaCompra(
   unidadeNome: string,
   arquivoNome: string | null,
@@ -199,11 +237,12 @@ export async function processarNotaCompra(
   // ...e o custo que ela mexe é o das fichas de TODAS as casas dessa despensa.
   const casas = await casasDaUnidadeFisica(unidadeFisicaId);
 
-  const [produtos, conversoes] = await Promise.all([
+  const [produtos, conversoes, codigosCompra] = await Promise.all([
     prisma.produto.findMany({ select: { id: true, nome: true, unidadeMedida: true, codigoTeknisa: true } }),
     prisma.conversaoUnidadeCompra.findMany({ select: { produtoId: true, unidadeCompra: true, fator: true } }),
+    carregarCodigosCompra(),
   ]);
-  const indiceProdutos = montarIndiceProdutos(produtos, conversoes);
+  const indiceProdutos = montarIndiceProdutos(produtos, conversoes, codigosCompra);
 
   // Snapshot do índice/preços ANTES de qualquer escrita, pra poder comparar
   // custo antes/depois sem precisar de uma segunda ida ao banco no final.
