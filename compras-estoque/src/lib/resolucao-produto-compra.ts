@@ -189,7 +189,20 @@ export function montarIndiceProdutos(
   const porNomeUnidade = new Map<string, ProdutoResumo>();
   const porNomeQualquerUnidade = new Map<string, ProdutoResumo[]>();
   for (const p of produtos) {
-    porNomeUnidade.set(`${chaveComparacao(p.nome)}|||${p.unidadeMedida}`, p);
+    // A unidade do PRODUTO também passa pelo sinônimo, não só a da nota.
+    //
+    // Sem isto, produto gravado com unidade crua — "GA", "BOB", "UN", "FD" —
+    // fica indexado sob a grafia crua, enquanto a busca pergunta pela
+    // canônica ("CX", "UND"). Nunca se encontram, e o motivo que volta é
+    // "não encontrado", que é a mesma resposta de produto que não existe.
+    //
+    // Apareceu no Wine Garden: DESINFETANTE em GA e PLASTICO FILME em BOB
+    // voltaram como UNIDADE_DIVERGENTE com a MESMA unidade dos dois lados —
+    // "GA x GA" —, porque um lado tinha sido normalizado e o outro não.
+    //
+    // `normalizarUnidade` é identidade sobre as canônicas (KG, LT, UND, CX),
+    // então isto não muda nada para o catálogo que já está correto.
+    porNomeUnidade.set(`${chaveComparacao(p.nome)}|||${normalizarUnidade(p.unidadeMedida)}`, p);
     const chave = chaveComparacao(p.nome);
     porNomeQualquerUnidade.set(chave, [...(porNomeQualquerUnidade.get(chave) ?? []), p]);
   }
@@ -312,7 +325,8 @@ export function resolverLinhaCompraPura(linha: LinhaCompraBruta, indice: IndiceP
       // KG gravaria o preço da caixa como preço do quilo. Enquanto o
       // casamento era só por nome+unidade isso era impossível por
       // construção; por código, precisa de checagem explícita.
-      if (p.unidadeMedida !== unidade) {
+      // Os DOIS lados normalizados — ver o comentário em porNomeUnidade.
+      if (normalizarUnidade(p.unidadeMedida) !== unidade) {
         // ...a menos que alguém já tenha dito quanto vale a embalagem. Aí não é
         // divergência, é conversão conhecida: 1 bandeja = 40 g.
         const fator = indice.conversoes.get(`${p.id}|||${unidade}`);

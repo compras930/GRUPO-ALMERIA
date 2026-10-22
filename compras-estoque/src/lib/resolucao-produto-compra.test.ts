@@ -403,3 +403,58 @@ describe("conversão no casamento por NOME (o caminho do XMenu, que não manda c
     expect(r.fatorConversao).toBe(1);
   });
 });
+
+describe("unidade crua no cadastro do produto", () => {
+  // Apareceu no Wine Garden: 15 linhas voltaram UNIDADE_DIVERGENTE com a MESMA
+  // unidade escrita dos dois lados — "GA x GA", "BOB x BOB". A tabela de
+  // sinônimos mapeia GA->CX e BOB->UND, e o casamento normalizava só o lado da
+  // NOTA. O produto gravado com a grafia crua ficava indexado sob ela e a busca
+  // perguntava pela canônica: nunca se encontravam.
+  const produto = (nome: string, unidadeMedida: string, codigoTeknisa: string | null = null) => ({
+    id: nome,
+    nome,
+    unidadeMedida,
+    codigoTeknisa,
+  });
+
+  it("casa por NOME quando o produto está em GA e a nota em GA", () => {
+    const indice = montarIndiceProdutos([produto("DESINFETANTE AZULIM 5L", "GA")]);
+    const r = resolverLinhaCompraPura(
+      { nome: "DESINFETANTE AZULIM 5L", unidadeMedida: "GA", codigo: null },
+      indice
+    );
+    expect(r.produto?.id).toBe("DESINFETANTE AZULIM 5L");
+    expect(r.motivo).toBe(null);
+  });
+
+  it("casa por CÓDIGO quando o produto está em BOB e a nota em BOB", () => {
+    const indice = montarIndiceProdutos([produto("PLASTICO FILME PVC", "BOB", "120000006104")]);
+    const r = resolverLinhaCompraPura(
+      { nome: "qualquer outro nome", unidadeMedida: "BOB", codigo: "120000006104" },
+      indice
+    );
+    expect(r.produto?.id).toBe("PLASTICO FILME PVC");
+    expect(r.via).toBe("CODIGO");
+  });
+
+  it("continua RECUSANDO quando a unidade diverge de verdade", () => {
+    // O GLP veio em KG/M³ contra um produto em KG: isso é divergência real, e
+    // preço de metro cúbico não pode virar preço de quilo.
+    const indice = montarIndiceProdutos([produto("GLP EM CILINDRO", "KG", "125000000000")]);
+    const r = resolverLinhaCompraPura(
+      { nome: "GLP EM CILINDRO", unidadeMedida: "KG/M³", codigo: "125000000000" },
+      indice
+    );
+    expect(r.motivo).toBe("UNIDADE_DIVERGENTE");
+  });
+
+  it("não muda nada para catálogo já canônico", () => {
+    const indice = montarIndiceProdutos([produto("ARROZ", "CX", "1")]);
+    expect(
+      resolverLinhaCompraPura({ nome: "ARROZ", unidadeMedida: "CX", codigo: "1" }, indice).produto?.id
+    ).toBe("ARROZ");
+    expect(
+      resolverLinhaCompraPura({ nome: "ARROZ", unidadeMedida: "KG", codigo: "1" }, indice).motivo
+    ).toBe("UNIDADE_DIVERGENTE");
+  });
+});
