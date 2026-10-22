@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mesDe, mesDaChave, mesDaData, ultimosMeses, rotuloCurto } from "@/lib/mes";
+import { mesDe, mesDaChave, mesDaData, ultimosMeses, rotuloCurto, mesesDisponiveis } from "@/lib/mes";
 
 describe("mesDe", () => {
   it("vai da meia-noite UTC do dia 1 à meia-noite UTC do 1º do mês seguinte", () => {
@@ -55,5 +55,32 @@ describe("ultimosMeses", () => {
   it("rótulo curto cabe num chip", () => {
     expect(rotuloCurto(mesDe(2026, 8))).toBe("ago/26");
     expect(rotuloCurto(mesDe(2026, 3))).toBe("mar/26");
+  });
+});
+
+describe("mesesDisponiveis", () => {
+  it("corta o que vem antes do primeiro mês com dado", () => {
+    // Em outubro, seis meses para trás alcançariam maio — e maio mostraria
+    // tudo zerado com cara de mês ruim, não de mês sem dado.
+    const meses = mesesDisponiveis(new Date("2026-10-22T12:00:00Z"), 6);
+    expect(meses.map((m) => m.chave)).toEqual(["2026-10", "2026-09", "2026-08"]);
+  });
+
+  it("não corta nada quando todos estão dentro", () => {
+    const meses = mesesDisponiveis(new Date("2026-12-10T12:00:00Z"), 3);
+    expect(meses.map((m) => m.chave)).toEqual(["2026-12", "2026-11", "2026-10"]);
+  });
+
+  it("devolve ao menos um mês quando a referência é anterior ao corte", () => {
+    // Seletor vazio travaria a tela inteira; um mês fora da faixa só mostra
+    // zeros, que é um estrago bem menor.
+    const meses = mesesDisponiveis(new Date("2026-03-10T12:00:00Z"), 6);
+    expect(meses).toHaveLength(1);
+    expect(meses[0].chave).toBe("2026-03");
+  });
+
+  it("aceita outro corte, para quando outra casa começar noutro mês", () => {
+    const meses = mesesDisponiveis(new Date("2026-10-22T12:00:00Z"), 6, "2026-09");
+    expect(meses.map((m) => m.chave)).toEqual(["2026-10", "2026-09"]);
   });
 });

@@ -12,7 +12,7 @@ import { faturamentoDaLinhaPura, linhasEstimadasPura } from "@/lib/faturamento";
 import { carregarIndiceReceitas, carregarPrecoAtualPorProduto, explodirReceitaPura, CicloReceitaError } from "@/lib/receita";
 import { TIPOS_DE_ENTRADA } from "@/lib/consumo";
 import { calcularConsumoDoMesPuro } from "@/lib/consumo-mensal";
-import { mesDaChave, mesDaData, ultimosMeses, rotuloCurto } from "@/lib/mes";
+import { mesDaChave, mesDaData, mesesDisponiveis, rotuloCurto } from "@/lib/mes";
 
 /**
  * O painel: o que a casa VENDEU, o que COMPROU e os DOIS CMV, com a compra
@@ -78,8 +78,14 @@ export default async function DashboardPage({
   const isAdmin = user.papel === "ADMIN";
 
   const agora = new Date();
-  const meses = ultimosMeses(agora, MESES_NO_SELETOR);
-  const mes = mesDaChave(searchParams.mes) ?? mesDaData(agora);
+  // Cortado em agosto/26, quando a carga começou — ver PRIMEIRO_MES_COM_DADO.
+  const meses = mesesDisponiveis(agora, MESES_NO_SELETOR);
+  // Mês pedido fora da faixa cai no mais recente disponível, em vez de abrir
+  // uma tela de zeros que parece mês ruim e não mês sem dado. Vale para link
+  // velho guardado e para URL digitada à mão.
+  const pedido = mesDaChave(searchParams.mes);
+  const dentroDaFaixa = pedido && meses.some((m) => m.chave === pedido.chave);
+  const mes = dentroDaFaixa ? pedido : meses[0] ?? mesDaData(agora);
 
   const casas = await prisma.unidade.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true } });
 
