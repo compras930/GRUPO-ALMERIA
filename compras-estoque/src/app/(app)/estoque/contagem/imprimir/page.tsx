@@ -4,6 +4,8 @@ import { idDaUnidadeFisica } from "@/lib/unidade-fisica";
 import { requireSession } from "@/lib/session";
 import { unidadeVisivel } from "@/lib/permissions";
 import { agruparPorCategoriaPura } from "@/lib/agrupar-contagem";
+import { carregarPesagens } from "@/lib/pesagem-db";
+import { avisoDePesagemPura } from "@/lib/pesagem";
 import {
   semanaDoMes,
   gruposDaSemana,
@@ -78,7 +80,10 @@ export default async function ImprimirContagemPage({
   // linha digitada vira uma busca, e a chance de lançar a quantidade de um
   // produto na linha do vizinho deixa de ser remota. Duas ordens seria pior
   // que a ordem alfabética que havia antes.
-  const gruposDeCategoria = agruparPorCategoriaPura(itens);
+  const pesagens = await carregarPesagens(itens.map((i) => i.id));
+  const gruposDeCategoria = agruparPorCategoriaPura(
+    itens.map((i) => ({ ...i, aviso: avisoDePesagemPura(pesagens.get(i.id), i.unidadeMedida) }))
+  );
 
   // Casa que conta a curva inteira toda semana (grupoContagem = 0) não tem
   // "grupo da semana" — dizer "curva A grupo 2" na folha dela seria mentira
@@ -130,7 +135,10 @@ export default async function ImprimirContagemPage({
               {g.itens.map((i, n) => (
                 <tr key={i.id}>
                   <td>{g.primeiroNumero + n}</td>
-                  <td>{i.nome}</td>
+                  <td>
+                    {i.nome}
+                    {i.aviso && <div className="folha-aviso">{i.aviso}</div>}
+                  </td>
                   <td>{i.unidadeMedida}</td>
                   <td />
                 </tr>

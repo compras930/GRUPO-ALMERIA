@@ -14,6 +14,8 @@ import {
 import ContagemForm from "@/components/ContagemForm";
 import ContagemLoteForm from "@/components/ContagemLoteForm";
 import { agruparPorCategoriaPura } from "@/lib/agrupar-contagem";
+import { carregarPesagens } from "@/lib/pesagem-db";
+import { avisoDePesagemPura } from "@/lib/pesagem";
 
 export default async function ContagemPage({
   searchParams,
@@ -75,7 +77,14 @@ export default async function ContagemPage({
   // src/lib/agrupar-contagem.ts. A ordem alfabética pura punha o vinho entre a
   // carne e a mercearia, e quem conta anda pela despensa por corredor, não por
   // letra.
-  const gruposDeCategoria = agruparPorCategoriaPura(itensDaSemana);
+  // O aviso de pesar, para garrafa vendida em dose — ver src/lib/pesagem.ts.
+  const pesagens = await carregarPesagens(itensDaSemana.map((i) => i.id));
+  const gruposDeCategoria = agruparPorCategoriaPura(
+    itensDaSemana.map((i) => ({
+      ...i,
+      aviso: avisoDePesagemPura(pesagens.get(i.id), i.unidadeMedida),
+    }))
+  );
 
   const produtos = await prisma.produto.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } });
   const saldos = await prisma.estoqueSaldo.findMany({ where: { unidadeId: unidadeFisicaId } });

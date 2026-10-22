@@ -27,6 +27,11 @@ export type ItemContagem = {
   unidadeMedida: string;
   classeAbc: string | null;
   categoria: string | null;
+  /**
+   * Aviso de como contar este item, quando contar não é olhar — a garrafa de
+   * whisky que se pesa. Ver src/lib/pesagem.ts.
+   */
+  aviso?: string | null;
 };
 
 export type GrupoContagem = {

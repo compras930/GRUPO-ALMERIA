@@ -82,6 +82,11 @@ export default function ContagemLoteForm({
                   <td style={{ opacity: 0.5 }}>{g.primeiroNumero + i}</td>
                   <td>
                     {p.nome} {p.classeAbc && <span className="tag">{p.classeAbc}</span>}
+                    {p.aviso && (
+                      <div className="cat" style={{ marginTop: 2 }}>
+                        {p.aviso}
+                      </div>
+                    )}
                   </td>
                   <td style={{ opacity: 0.75 }}>{p.unidadeMedida}</td>
                   <td>

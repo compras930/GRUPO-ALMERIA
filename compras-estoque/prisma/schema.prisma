@@ -104,6 +104,22 @@ model Produto {
   // EM SUBSTITUIÇÃO por CodigoCompraProduto, que aceita mais de um código por
   // produto. Fica aqui até uma carga semanal inteira rodar limpa pela tabela
   // nova; enquanto isso os dois existem e o casamento tenta a tabela primeiro.
+  // PESAGEM — para contar garrafa que se vende em DOSE.
+  //
+  // Whisky, gin e licor ficam meses abertos e quase nunca estão cheios nem
+  // vazios; "mais ou menos meia" numa garrafa de R$ 290 erra mais dinheiro que
+  // o mês inteiro de hortifrúti. A balança já existe na cozinha, mas entrega
+  // GRAMA e o estoque está em garrafa — ver src/lib/pesagem.ts.
+  //
+  // `pesoLiquidoCheioG` NÃO é o volume nominal: 700 ml de whisky pesam ~660 g,
+  // porque álcool é mais leve que água, e 6% num estoque de bar é dinheiro.
+  // `pesoTaraG` é a garrafa vazia COM tampa e rótulo, porque é assim que ela
+  // vai para a balança.
+  //
+  // Os dois são do PRODUTO e não da casa: a garrafa pesa o mesmo em todas.
+  pesoTaraG         Float?
+  pesoLiquidoCheioG Float?
+
   codigoTeknisa String? @unique
 
   itensPedido   ItemPedido[]

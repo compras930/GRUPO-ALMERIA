@@ -569,6 +569,14 @@ td {
   primeiro item do grupo — um "VINHOS" sozinho no pé da página manda a pessoa
   procurar vinho na prateleira errada ao virar a folha.
 */
+/* O aviso de pesar, embaixo do nome na folha impressa. Menor que o nome e sem
+   negrito: é instrução de como medir, não o que medir — quem procura o item na
+   prateleira procura pelo nome. */
+.folha-aviso {
+  font-size: 10px;
+  font-style: italic;
+  opacity: 0.8;
+}
 .folha-categoria {
   background: var(--ink);
   color: var(--paper);
