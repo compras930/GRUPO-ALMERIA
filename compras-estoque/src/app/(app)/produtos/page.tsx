@@ -5,7 +5,12 @@ import ProdutoForm from "@/components/ProdutoForm";
 
 export default async function ProdutosPage() {
   await requireAdmin();
-  const produtos = await prisma.produto.findMany({ orderBy: { nome: "asc" } });
+  // Select explícito: ver o comentário em estoque/contagem/page.tsx. Sem ele,
+  // uma coluna que existe no schema e ainda não no banco derruba a tela.
+  const produtos = await prisma.produto.findMany({
+    orderBy: { nome: "asc" },
+    select: { id: true, nome: true, categoria: true, unidadeMedida: true, ativo: true },
+  });
 
   return (
     <div>

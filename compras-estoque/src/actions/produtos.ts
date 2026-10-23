@@ -19,6 +19,8 @@ export async function criarProduto(formData: FormData) {
   // Postgres nesta tela.
   const existente = await prisma.produto.findFirst({
     where: { unidadeMedida, nome: { equals: nome, mode: "insensitive" } },
+    // Select explícito: ver o comentário em estoque/contagem/page.tsx.
+    select: { id: true, nome: true, unidadeMedida: true },
   });
   if (existente) {
     throw new Error(
@@ -32,13 +34,16 @@ export async function criarProduto(formData: FormData) {
       unidadeMedida,
       categoria: normalizarNome(String(formData.get("categoria") || "")) || null,
     },
+    // Select explícito mesmo sem usar o retorno: sem ele o Prisma devolve a
+    // linha inteira, e uma coluna que o banco ainda não tem derruba a ação.
+    select: { id: true },
   });
   revalidatePath("/produtos");
 }
 
 export async function alternarProduto(id: string, ativo: boolean) {
   await requireAdmin();
-  await prisma.produto.update({ where: { id }, data: { ativo } });
+  await prisma.produto.update({ where: { id }, data: { ativo }, select: { id: true } });
   revalidatePath("/produtos");
 }
 
@@ -77,6 +82,8 @@ export async function criarProdutoInline(nomeBruto: string, unidadeMedida: strin
 
   const existente = await prisma.produto.findFirst({
     where: { unidadeMedida, nome: { equals: nome, mode: "insensitive" } },
+    // Select explícito: ver o comentário em estoque/contagem/page.tsx.
+    select: { id: true, nome: true, unidadeMedida: true },
   });
   if (existente) {
     return {
@@ -87,7 +94,10 @@ export async function criarProdutoInline(nomeBruto: string, unidadeMedida: strin
     };
   }
 
-  const criado = await prisma.produto.create({ data: { nome, unidadeMedida } });
+  const criado = await prisma.produto.create({
+    data: { nome, unidadeMedida },
+    select: { id: true, nome: true, unidadeMedida: true },
+  });
   revalidatePath("/produtos");
   return { id: criado.id, nome: criado.nome, unidadeMedida: criado.unidadeMedida, jaExistia: false as const };
 }

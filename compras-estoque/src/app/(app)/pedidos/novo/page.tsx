@@ -13,7 +13,12 @@ export default async function NovoPedidoPage() {
   const [unidades, fornecedores, produtos] = await Promise.all([
     unidadesComEstoqueProprio(),
     prisma.fornecedor.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } }),
-    prisma.produto.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } }),
+    // Select explícito: ver o comentário em estoque/contagem/page.tsx.
+    prisma.produto.findMany({
+      where: { ativo: true },
+      orderBy: { nome: "asc" },
+      select: { id: true, nome: true, unidadeMedida: true },
+    }),
   ]);
 
   return (

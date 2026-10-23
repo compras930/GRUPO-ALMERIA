@@ -86,7 +86,23 @@ export default async function ContagemPage({
     }))
   );
 
-  const produtos = await prisma.produto.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } });
+  // SELECT EXPLÍCITO, e não é frescura de performance.
+  //
+  // Sem `select`, o Prisma pede TODAS as colunas que o schema conhece. O
+  // deploy roda só `prisma generate`; as migrações são aplicadas à mão, no
+  // console. Então existe sempre uma janela em que o código já sabe de uma
+  // coluna que o banco ainda não tem — e nessa janela a consulta estoura com
+  // P2022 e a TELA INTEIRA cai.
+  //
+  // Foi o que aconteceu em 23/10, véspera da primeira contagem: a migração de
+  // `pesoTaraG` não tinha sido aplicada e esta linha derrubou a folha de
+  // contagem. Pedindo só as três colunas que esta tela usa, qualquer coluna
+  // nova no schema é irrelevante para ela.
+  const produtos = await prisma.produto.findMany({
+    where: { ativo: true },
+    orderBy: { nome: "asc" },
+    select: { id: true, nome: true, unidadeMedida: true },
+  });
   const saldos = await prisma.estoqueSaldo.findMany({ where: { unidadeId: unidadeFisicaId } });
   const saldoPorProduto = new Map(saldos.map((s) => [s.produtoId, s.quantidade]));
 
