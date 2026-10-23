@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { normalizarNome } from "@/lib/nome-normalizado";
+import { categoriaCanonicaPura } from "@/lib/categoria-venda";
 import { casasDaCozinha } from "@/lib/unidade-fisica";
 import { TIPO_ITEM_VENDA, type TipoItemVenda } from "@/lib/constants";
 import { carregarIndiceReceitas, explodirReceitaPura, CicloReceitaError } from "@/lib/receita";
@@ -42,8 +43,16 @@ export async function salvarFicha(itemVendaId: string, formData: FormData) {
   const item = await prisma.itemVenda.findUnique({ where: { id: itemVendaId } });
   if (!item) throw new Error("Item de venda não encontrado.");
 
-  const novoNome = normalizarNome(String(formData.get("nome") || "")) || item.nome;
-  const novaCategoria = normalizarNome(String(formData.get("categoria") || "")) || null;
+  // MAIÚSCULA E CATEGORIA CANÔNICA NA ENTRADA, não só no banco.
+  //
+  // O painel lista prato e categoria lado a lado; caixa mista no meio de uma
+  // lista maiúscula lê como erro de cadastro, e é. Mais importante: a
+  // categoria digitada à mão é por onde a bagunça volta — "Saladas",
+  // "SALADA", "antipasti" nasceram todas assim, e levaram dias para serem
+  // desfeitas. `categoriaCanonicaPura` aplica as mesmas regras do conserto
+  // (agrupamento, plural, maiúscula), então o que entra já entra arrumado.
+  const novoNome = normalizarNome(String(formData.get("nome") || "")).toUpperCase() || item.nome;
+  const novaCategoria = categoriaCanonicaPura(String(formData.get("categoria") || ""));
   const novoPrecoVenda = Number(formData.get("precoVenda")) || 0;
   // Vazio grava null (e não ""), senão dois itens "sem código" colidiriam no
   // índice único (unidadeId, codigoPdv) — NULL é distinto, "" não é.
@@ -178,8 +187,9 @@ export async function criarItemVenda(formData: FormData) {
 
   const unidadeId = String(formData.get("unidadeId") || "");
   const tipo = String(formData.get("tipo") || "");
-  const nome = normalizarNome(String(formData.get("nome") || ""));
-  const categoria = normalizarNome(String(formData.get("categoria") || "")) || null;
+  // Maiúscula e categoria canônica — ver o comentário em salvarFichaTecnica.
+  const nome = normalizarNome(String(formData.get("nome") || "")).toUpperCase();
+  const categoria = categoriaCanonicaPura(String(formData.get("categoria") || ""));
   const codigoPdv = normalizarNome(String(formData.get("codigoPdv") || "")) || null;
   // A planilha e o teclado brasileiro mandam vírgula; Number("28,90") é NaN.
   const precoVenda = Number(String(formData.get("precoVenda") || "").trim().replace(",", "."));
