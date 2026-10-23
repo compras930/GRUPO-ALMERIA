@@ -11,3 +11,7 @@ prisma/dev.db-journal
 
 # Cache incremental do TypeScript — regenerado a cada build.
 *.tsbuildinfo
+
+# Bytecode do Python — os scripts de leitura de planilha (ler-fichas.py) geram
+# isto ao serem importados.
+__pycache__/
