@@ -338,6 +338,16 @@ model ItemVenda {
   receitaId String? // null = ainda sem ficha técnica (equivalente ao "Criar Ficha" do dashboard)
   receita   Receita? @relation(fields: [receitaId], references: [id])
 
+  // Nasceu da carga de venda, não de alguém cadastrando — ver
+  // src/lib/itens-automaticos.ts.
+  //
+  // Existe para não trocar um silêncio por outro. Antes, linha de venda sem
+  // item cadastrado voltava na lista de "não reconhecidos", e essa lista era
+  // o aviso de que entrou prato novo no cardápio. Criando o item sozinho, a
+  // lista esvazia e o aviso some. Esta coluna é o que permite a carga dizer
+  // "criei N itens" e uma tela listá-los.
+  criadoAutomaticamente Boolean @default(false)
+
   // Snapshot só de referência histórica da migração — nunca é fonte de verdade depois de importado.
   custoImportado Float?
   cmvImportado   Float?

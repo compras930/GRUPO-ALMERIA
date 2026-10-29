@@ -9,6 +9,8 @@ import { normalizarNome } from "@/lib/nome-normalizado";
 import { carregarIndiceReceitas, carregarPrecoAtualPorProduto, explodirReceitaPura } from "@/lib/receita";
 import { idDaUnidadeFisica } from "@/lib/unidade-fisica";
 import { resolverItensVendaPura, EXPLICACAO_MOTIVO } from "@/lib/resolucao-item-venda";
+import { itensAutomaticosPuros } from "@/lib/itens-automaticos";
+import { criarItensAutomaticos } from "@/lib/itens-automaticos-db";
 import { emOrdemDeBloqueio } from "@/lib/ordem-de-bloqueio";
 import { comRetentativaDeConflito } from "@/lib/transacao";
 
@@ -39,6 +41,17 @@ export type ResultadoVendaSemanal = {
    * Vem na resposta pra alguém confirmar (prisma/scripts/backfill-codigo-pdv.ts).
    */
   codigosASugerir: { itemVendaId: string; nome: string; codigo: string }[];
+  /**
+   * Itens de venda que ESTA carga cadastrou sozinha, por trazerem código do
+   * PDV sem item correspondente — ver src/lib/itens-automaticos.ts.
+   *
+   * É o alarme que substitui a lista de não reconhecidos. Antes, prato novo no
+   * cardápio aparecia ali e alguém ia cadastrar; agora ele é cadastrado na
+   * hora, e sem este campo ninguém ficaria sabendo que o cardápio mudou.
+   */
+  itensCriadosAutomaticamente: { id: string; nome: string; codigo: string }[];
+  /** Código que não virou item, com o motivo (quase sempre nome já existente). */
+  itensNaoCriados: { codigo: string; nome: string; motivo: string }[];
   itensListaCompra: { produto: string; unidadeMedida: string; quantidadeSugerida: number; precoUnitEsperado: number }[];
 };
 
@@ -98,7 +111,28 @@ export async function processarVendaSemanal(
 
   // Casa por código quando a origem manda um, por nome quando não — toda a
   // decisão está em src/lib/resolucao-item-venda.ts, que é puro e testado.
-  const resolucoes = resolverItensVendaPura(itens, itensVenda);
+  let resolucoes = resolverItensVendaPura(itens, itensVenda);
+
+  // CADASTRA O QUE NÃO CASOU E TEM CÓDIGO, e resolve de novo.
+  //
+  // Resolver DE NOVO, em vez de encaixar os itens novos na mão, é o que mantém
+  // uma regra de casamento só: a mesma função decide tudo, e o item recém
+  // criado passa pelo mesmo caminho de qualquer outro. Encaixar à mão seria
+  // uma segunda regra de casamento, escondida aqui dentro.
+  const plano = itensAutomaticosPuros(
+    resolucoes.filter((r) => !r.itemVendaId).map((r) => r.linha as ItemVendaSemanalInput)
+  );
+  const criacao = await criarItensAutomaticos(unidade.id, plano.criar);
+  if (criacao.criados.length > 0) {
+    const novos = await prisma.itemVenda.findMany({
+      where: { id: { in: criacao.criados.map((c) => c.id) } },
+    });
+    for (const n of novos) {
+      itensVenda.push(n);
+      itemVendaPorId.set(n.id, n);
+    }
+    resolucoes = resolverItensVendaPura(itens, itensVenda);
+  }
 
   for (const r of resolucoes) {
     const item = r.linha as ItemVendaSemanalInput;
@@ -233,6 +267,16 @@ export async function processarVendaSemanal(
     casadosPorCodigo,
     casadosPorNome,
     naoReconhecidos,
+    itensCriadosAutomaticamente: criacao.criados.map((c) => ({
+      id: c.id,
+      nome: c.nome,
+      codigo: c.codigoPdv,
+    })),
+    itensNaoCriados: criacao.recusados.map((r) => ({
+      codigo: r.codigoPdv,
+      nome: r.nome,
+      motivo: r.motivo,
+    })),
     codigosASugerir,
     itensListaCompra,
   };

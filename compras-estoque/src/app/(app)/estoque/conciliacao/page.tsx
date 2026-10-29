@@ -1,11 +1,15 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { unidadesComEstoqueProprio, idDaUnidadeFisica } from "@/lib/unidade-fisica";
+import { unidadesComEstoqueProprio, idDaUnidadeFisica, casasDaUnidadeFisica } from "@/lib/unidade-fisica";
 import { requireAdmin } from "@/lib/session";
 import { TIPOS_DE_ENTRADA } from "@/lib/consumo";
 import { TIPO_PERDA } from "@/lib/constants";
 import { conciliarPuro, totalizarPuro, type ParcelasProduto } from "@/lib/conciliacao";
 import { fmtCurrency } from "@/lib/format";
+import { calcularCmvTeorico } from "@/lib/cmv-teorico";
+import { faturamentoDaLinhaPura } from "@/lib/faturamento";
+import { ehCategoriaDeEventoPura } from "@/lib/categoria-venda";
+import { quebrarFaltaPura, filaDeFichasPura, type VendaSemFichaResumo } from "@/lib/consumo-sem-ficha";
 
 /**
  * A conferência da contagem — ver src/lib/conciliacao.ts para a conta.
@@ -98,6 +102,86 @@ export default async function ConciliacaoPage({
   const linhas = conciliarPuro(parcelas);
   const totais = totalizarPuro(linhas);
 
+  // ===================================================================
+  // DE ONDE VEM A FALTA — ver src/lib/consumo-sem-ficha.ts.
+  //
+  // A JANELA É A DA CASA, não a de cada produto. Acima, cada produto fecha
+  // período quando é contado; aqui precisa de uma janela só, porque a venda
+  // vem por SEMANA e não dá para recortar uma semana de venda no instante em
+  // que um produto foi contado. Então: do dia da contagem anterior ao dia da
+  // última, e entram as semanas de venda que FECHAM dentro disso.
+  //
+  // Isso é grosso, e de propósito grosso: uma semana que fecha dentro da
+  // janela entra inteira. Com contagem semanal as duas quase coincidem; com
+  // contagem fora de cadência, a estimativa fica larga — e é por isso que a
+  // tela diz qual janela usou, em vez de só mostrar o número.
+  const instantes = [...new Set(contagens.map((c) => c.criadoEm.toISOString().slice(0, 10)))].sort();
+  const diaAnterior = instantes[instantes.length - 2] ?? null;
+  const diaAtual = instantes[instantes.length - 1] ?? null;
+  const janelaDaCasa =
+    diaAnterior && diaAtual
+      ? {
+          de: new Date(`${diaAnterior}T00:00:00.000Z`),
+          ate: new Date(`${diaAtual}T23:59:59.999Z`),
+        }
+      : null;
+
+  const casas = await casasDaUnidadeFisica(unidadeId);
+  const vendasDaJanela = janelaDaCasa
+    ? await prisma.itemVendaSemanal.findMany({
+        where: {
+          vendaSemanal: {
+            unidadeId: { in: casas },
+            periodoFim: { gt: janelaDaCasa.de, lte: janelaDaCasa.ate },
+          },
+        },
+        select: {
+          quantidadeVendida: true,
+          valorVendido: true,
+          itemVenda: {
+            select: { id: true, nome: true, categoria: true, precoVenda: true, receitaId: true },
+          },
+        },
+      })
+    : [];
+
+  // O CMV teórico sai das MESMAS linhas da janela, não do mês: é a proporção
+  // daquele período que vai ser aplicada à falta daquele período.
+  const cmv = await calcularCmvTeorico(casas[0] ?? unidadeId, vendasDaJanela);
+
+  // Agrupa por item: o mesmo prato aparece em várias semanas da janela.
+  const porItem = new Map<string, VendaSemFichaResumo>();
+  for (const v of vendasDaJanela) {
+    const item = v.itemVenda;
+    if (!item || item.receitaId) continue; // só o que NÃO tem ficha
+    const faturamento = faturamentoDaLinhaPura({
+      quantidadeVendida: v.quantidadeVendida,
+      valorVendido: v.valorVendido,
+      precoVenda: item.precoVenda,
+    });
+    const atual = porItem.get(item.id);
+    if (atual) {
+      atual.quantidadeVendida += v.quantidadeVendida;
+      atual.faturamento += faturamento;
+    } else {
+      porItem.set(item.id, {
+        itemVendaId: item.id,
+        nome: item.nome,
+        categoria: item.categoria,
+        quantidadeVendida: v.quantidadeVendida,
+        faturamento,
+        ehEvento: ehCategoriaDeEventoPura(item.categoria),
+      });
+    }
+  }
+  const vendasSemFicha = [...porItem.values()];
+  // A falta inteira: a dos produtos com ficha e a dos que nenhuma receita
+  // menciona. As duas são mercadoria que a prateleira não tem e a conta
+  // esperava, e as duas podem ter virado prato sem ficha.
+  const faltaTotal = totais.faltaEmReais + totais.faltaSemFichaEmReais;
+  const quebra = quebrarFaltaPura(faltaTotal, vendasSemFicha, cmv.pct);
+  const fila = filaDeFichasPura(vendasSemFicha);
+
   return (
     <div>
       <div className="page-header">
@@ -168,6 +252,103 @@ export default async function ConciliacaoPage({
               <p className="hint">{totais.semFicha} ainda sem ficha técnica.</p>
             </div>
           </div>
+
+          <div className="card" style={{ marginTop: 18 }}>
+            <h2 style={{ fontSize: 15, marginBottom: 4 }}>De onde vem a falta</h2>
+            {janelaDaCasa ? (
+              <p className="hint" style={{ marginBottom: 14 }}>
+                Janela da casa: {data(janelaDaCasa.de)} a {data(janelaDaCasa.ate)} — entram as semanas
+                de venda que fecham dentro dela.{" "}
+                {quebra.cmvUsadoPct == null ? (
+                  <strong>
+                    Sem CMV teórico no período, não dá para estimar: a falta inteira aparece como
+                    perda. Cadastre ficha em pelo menos um prato vendido e este número passa a existir.
+                  </strong>
+                ) : (
+                  <>
+                    <strong>É estimativa</strong>, e a premissa é esta: o prato sem ficha consome na
+                    mesma proporção dos que têm — {quebra.cmvUsadoPct.toFixed(1)}% do que fatura.
+                    Não há no sistema nada que ligue um prato sem ficha a um insumo, então esta
+                    quebra vale para o TOTAL e não para as linhas por produto lá embaixo.
+                  </>
+                )}
+              </p>
+            ) : (
+              <p className="hint" style={{ marginBottom: 14 }}>
+                Só com duas contagens dá para delimitar uma janela de venda.
+              </p>
+            )}
+            <div className="cards">
+              <div className="card">
+                <p className="eyebrow">Consumo de pratos sem ficha</p>
+                <p className="big">{fmtCurrency(quebra.pratosSemFichaEmReais)}</p>
+                <p className="hint">
+                  {fila.length} {fila.length === 1 ? "prato vendido" : "pratos vendidos"} sem ficha na
+                  janela. Isto não é perda: é mercadoria que virou prato e o app não soube descontar.
+                </p>
+              </div>
+              <div className="card">
+                <p className="eyebrow">Eventos</p>
+                <p className="big">{fmtCurrency(quebra.eventosEmReais)}</p>
+                <p className="hint">
+                  Pacote fechado, que o PDV não detalha prato a prato. Nunca vai ter ficha, por
+                  construção — separado para não entupir a fila abaixo com tarefa que não existe.
+                </p>
+              </div>
+              <div className="card">
+                <p className="eyebrow">Perda</p>
+                <p className="big bad">{fmtCurrency(quebra.perdaEmReais)}</p>
+                <p className="hint">
+                  O que sobra depois das duas: quebra, erro de contagem, ficha com rendimento errado
+                  ou mercadoria sumida. <strong>É este número que vale conversar.</strong>
+                </p>
+              </div>
+            </div>
+            {quebra.cortadaNoTeto && (
+              <p className="sub-explica" style={{ marginTop: 12 }}>
+                <strong>A estimativa passou da falta e foi cortada nela</strong>, por isso a perda
+                ficou zerada. Quer dizer que a premissa não está valendo nesta janela: ou a venda sem
+                ficha pega um período maior que o da contagem, ou esses pratos consomem bem menos que
+                a média das fichas existentes.
+              </p>
+            )}
+          </div>
+
+          {fila.length > 0 && (
+            <div className="card">
+              <h2 style={{ fontSize: 15, marginBottom: 4 }}>Fichas a escrever, por ordem de tamanho</h2>
+              <p className="hint" style={{ marginBottom: 14 }}>
+                Ordenado por faturamento, não por quantidade: a pergunta é qual ficha compra mais
+                exatidão por hora de trabalho. Evento fica de fora — não há ficha a escrever nele.
+              </p>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Prato</th>
+                    <th>Categoria</th>
+                    <th className="num">Vendidos</th>
+                    <th className="num">Faturou</th>
+                    <th className="num">Consumo estimado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fila.map((v) => (
+                    <tr key={v.itemVendaId}>
+                      <td>{v.nome}</td>
+                      <td className="cat">{v.categoria ?? "—"}</td>
+                      <td className="num">{qtd(v.quantidadeVendida)}</td>
+                      <td className="num">{fmtCurrency(v.faturamento)}</td>
+                      <td className="num">
+                        {quebra.cmvUsadoPct == null
+                          ? "—"
+                          : fmtCurrency((v.faturamento * quebra.cmvUsadoPct) / 100)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           <table>
             <thead>
