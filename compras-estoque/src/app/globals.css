@@ -8,19 +8,31 @@
    Mono nos rótulos. A referência não tem serifa em lugar nenhum e usa um
    grotesco só, em pesos diferentes — então ficou uma família só: menos fonte
    pra carregar e menos decisão pra errar. */
+/* CONTRASTE: o fundo da página é mais ESCURO que o cartão, sempre.
+   Até 04/11/2026 os dois eram quase o mesmo creme (#f3ead9 e #fffdf7) — 3% de
+   diferença de luminosidade. O olho não separava um do outro, e uma tela com
+   seis cartões lia como um bloco só. Agora o cartão é branco de verdade e o
+   fundo é um cinza quente; a borda deixou de ser a única coisa a dizer onde
+   um começa e o outro acaba.
+
+   O VINHO NÃO MUDOU. Ele é a identidade do Grupo Almeria, não decoração —
+   e trocá-lo para parecer com outro app seria o pior tipo de cópia. O que
+   mudou é só o que estava atrapalhando a leitura. */
 :root {
-  --ink: #2b191d; /* quase-preto quente, com fundo de vinho */
-  --muted: #7a6a62; /* texto secundário, rótulo */
-  --paper: #f3ead9; /* fundo da página */
-  --paper-2: #e9dcc3; /* preenchimento apagado — barra "a vir" na referência */
-  --line: #e0d2b8;
+  --ink: #241a1c; /* quase-preto quente, com fundo de vinho */
+  --muted: #6b5c56; /* texto secundário, rótulo — escurecido para ler em branco */
+  --paper: #f1ece4; /* fundo da página: cinza quente, mais escuro que o cartão */
+  --paper-2: #e6ded2; /* preenchimento apagado — barra "a vir" na referência */
+  --line: #e2dace;
   --wine-deep: #6f1027; /* faixa do topo, menu lateral */
   --wine: #9a1c3c; /* faixas, item ativo, barra do gráfico */
   --wine-light: #a63854; /* hover */
   --ok: #2e7d4f;
   --warn: #b5801b;
   --bad: #c0392b;
-  --white: #fffdf7; /* cartão */
+  --white: #ffffff; /* cartão */
+  /* Sombra curta e fraca: separa o cartão do fundo sem o fazer flutuar. */
+  --sombra: 0 1px 2px rgba(36, 26, 28, 0.04), 0 2px 8px rgba(36, 26, 28, 0.05);
 }
 
 * {
@@ -136,7 +148,8 @@ h3 {
 .card {
   background: var(--white);
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 8px;
+  box-shadow: var(--sombra);
   padding: 20px 22px;
   margin-bottom: 20px;
 }
@@ -146,7 +159,78 @@ table {
   border-collapse: collapse;
   background: var(--white);
   border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--sombra);
+  /* Sem isto o cabeçalho vinho vaza para fora do canto arredondado. */
+  overflow: hidden;
 }
+
+/* FILA DE CARTÕES, e as classes que moram dentro deles.
+   .cards, .big, .hint e .cat eram usadas desde a tela de conferência da
+   contagem e NUNCA existiram neste arquivo: os cartões empilhavam um por
+   linha, ocupando a tela inteira, e o número grande saía do tamanho do texto
+   comum. Ninguém reportou como defeito — a tela só parecia desajeitada, que é
+   como falha de CSS se apresenta. */
+.cards {
+  display: grid;
+  /* auto-fit em vez de número fixo de colunas: três cartões ocupam a largura,
+     cinco quebram sozinhos, e no celular viram uma coluna sem media query. */
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+/* Dentro da fila o espaçamento é do grid, não do cartão. */
+.cards .card {
+  margin-bottom: 0;
+}
+
+/* O número que o cartão existe para mostrar. */
+.big {
+  font-family: "Inter", sans-serif;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  /* Dígitos de mesma largura: sem isto uma coluna de valores dança a cada
+     recarga, e dinheiro que dança parece dinheiro errado. */
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  margin: 0 0 6px;
+}
+.big.bad {
+  color: var(--bad);
+}
+.big.ok {
+  color: var(--ok);
+}
+
+/* A linha abaixo do número: de onde ele vem, ou do que depende. É a diferença
+   entre um número e um número confiável. */
+.hint {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Texto secundário no meio de uma linha: categoria, código, unidade. */
+.cat {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+/* Alinhamento numérico fora de tabela. */
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.btn-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 
 thead th {
   font-family: "Inter", sans-serif;
@@ -172,7 +256,7 @@ tbody tr {
 }
 
 tbody tr:hover {
-  background: #faf4e8;
+  background: #f7f4ef;
 }
 
 td {
@@ -299,7 +383,8 @@ td {
   gap: 0;
   margin-bottom: 28px;
   border: 1px solid var(--line);
-  border-radius: 3px;
+  border-radius: 8px;
+  box-shadow: var(--sombra);
   overflow: hidden;
   background: var(--white);
 }
