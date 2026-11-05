@@ -440,23 +440,39 @@ export default async function DashboardPage({
           Um valor baixo aqui pode ser casa caprichada ou lançamento que não
           está acontecendo, e as duas leituras são opostas.
         */}
-        <div className="kpi">
-          <p className="lbl">Perda declarada</p>
-          <div className={`val${perdasEmReais > 0 ? " bad" : ""}`}>
-            {perdasDoMes.length === 0 ? "—" : fmtCurrency(perdasEmReais)}
-          </div>
-          <p className="sub">
-            {perdasDoMes.length === 0 ? (
-              "nenhuma baixa lançada no mês"
-            ) : (
-              <>
-                {perdasDoMes.length} {perdasDoMes.length === 1 ? "lançamento" : "lançamentos"}
-                {totalVenda > 0 ? ` · ${((100 * perdasEmReais) / totalVenda).toFixed(2)}% da venda` : ""}
-                {perdasSemPreco > 0 ? ` · ${perdasSemPreco} sem preço` : ""}
-              </>
-            )}
-          </p>
-        </div>
+        {/* CLICÁVEL quando há casa escolhida: quem olha um número de perda
+            quer ver O QUE foi perdido e por quê. A tela do outro lado usa a
+            MESMA janela — o mês do menu —, senão o card diria um número e a
+            lista outro. */}
+        {(() => {
+          const corpo = (
+            <>
+              <p className="lbl">Perda declarada</p>
+              <div className={`val${perdasEmReais > 0 ? " bad" : ""}`}>
+                {perdasDoMes.length === 0 ? "—" : fmtCurrency(perdasEmReais)}
+              </div>
+              <p className="sub">
+                {perdasDoMes.length === 0 ? (
+                  "nenhuma baixa lançada no mês"
+                ) : (
+                  <>
+                    {perdasDoMes.length} {perdasDoMes.length === 1 ? "lançamento" : "lançamentos"}
+                    {totalVenda > 0 ? ` · ${((100 * perdasEmReais) / totalVenda).toFixed(2)}% da venda` : ""}
+                    {perdasSemPreco > 0 ? ` · ${perdasSemPreco} sem preço` : ""}
+                    {" · ver lançamentos"}
+                  </>
+                )}
+              </p>
+            </>
+          );
+          return casaId ? (
+            <Link className="kpi clicavel" href={`/estoque/perdas?unidadeId=${casaId}&mes=${mes.chave}`}>
+              {corpo}
+            </Link>
+          ) : (
+            <div className="kpi">{corpo}</div>
+          );
+        })()}
       </div>
       <p className="sub-explica" style={{ marginTop: -14, marginBottom: 24 }}>
         <strong>Perda declarada é o que alguém lançou</strong>, não o que a casa perdeu. O que não

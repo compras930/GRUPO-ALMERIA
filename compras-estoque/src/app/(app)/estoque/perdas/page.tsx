@@ -8,6 +8,7 @@ import { TIPO_PERDA, TIPO_PERDA_LABEL, type TipoPerda } from "@/lib/constants";
 import PerdaForm from "@/components/PerdaForm";
 import PerdaItemVendidoForm from "@/components/PerdaItemVendidoForm";
 import { carregarContexto } from "@/lib/selecao-db";
+import { mesDaChave, mesDaData } from "@/lib/mes";
 
 /**
  * Baixa declarada: o que saiu da despensa e não virou venda.
@@ -21,7 +22,15 @@ import { carregarContexto } from "@/lib/selecao-db";
  * contagem final). O que ela faz é PARTIR o consumo em duas causas. Ver
  * perdasPorProdutoPura em src/lib/consumo.ts.
  */
-const DIAS_NA_TELA = 30;
+/*
+ * A JANELA É O MÊS DO MENU, e não mais "os últimos 30 dias".
+ *
+ * O Painel mostra a perda declarada do mês e leva para cá. Com janelas
+ * diferentes, o card dizia um número e a tela outro — e quem clica num número
+ * espera encontrá-lo do outro lado, com os lançamentos que o formam. Duas
+ * janelas para a mesma pergunta é a forma mais barata de perder confiança numa
+ * tela.
+ */
 
 export default async function PerdasPage({
   searchParams,
@@ -47,7 +56,7 @@ export default async function PerdasPage({
 
   // A baixa é da DESPENSA, igual à contagem — ver src/lib/unidade-fisica.ts.
   const unidadeFisicaId = await idDaUnidadeFisica(unidadeId);
-  const desde = new Date(Date.now() - DIAS_NA_TELA * 24 * 60 * 60 * 1000);
+  const mes = mesDaChave(ctx.mes) ?? mesDaData(new Date());
 
   const [unidade, produtos, itensComFicha, totalDeItens, lancamentos, precos] = await Promise.all([
     prisma.unidade.findUnique({ where: { id: unidadeFisicaId }, select: { nome: true } }),
@@ -70,7 +79,7 @@ export default async function PerdasPage({
       where: {
         unidadeId: unidadeFisicaId,
         tipo: { in: [...TIPO_PERDA] },
-        criadoEm: { gte: desde },
+        criadoEm: { gte: mes.inicio, lt: mes.fim },
       },
       orderBy: { criadoEm: "desc" },
       include: { produto: { select: { nome: true, unidadeMedida: true } } },
@@ -109,6 +118,7 @@ export default async function PerdasPage({
           <Link href={`/estoque?unidadeId=${unidadeId}`}>← Estoque</Link>
         </p>
         <h1>Perdas e baixas — {unidade?.nome}</h1>
+        <p className="eyebrow" style={{ marginTop: 6 }}>{mes.rotulo}</p>
         <p className="sub-explica">
           O que saiu da despensa e não virou venda. Lance no dia, não no fim da semana — perda
           lembrada depois é estimativa, e estimativa dentro do CMV tem cara de medição.
@@ -152,7 +162,7 @@ export default async function PerdasPage({
 
       <div className="kpis" style={{ marginBottom: 24 }}>
         <div className="kpi">
-          <p className="lbl">Baixas em {DIAS_NA_TELA} dias</p>
+          <p className="lbl">Baixas em {mes.rotulo}</p>
           <div className="val">{fmtCurrency(total)}</div>
           <p className="sub">{comValor.length} lançamentos</p>
         </div>
@@ -170,7 +180,7 @@ export default async function PerdasPage({
 
       {comValor.length === 0 ? (
         <div className="empty">
-          Nenhuma baixa lançada nos últimos {DIAS_NA_TELA} dias.
+          Nenhuma baixa lançada em {mes.rotulo}. Troque o mês no menu para ver outro período.
         </div>
       ) : (
         <table>

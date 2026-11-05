@@ -1262,3 +1262,21 @@ td.num,
   overflow: hidden;
   white-space: nowrap;
 }
+
+/* Tile que leva a algum lugar. O sublinhado aparece no hover e não antes:
+   um tile inteiro sublinhado parece erro de estilo, mas sem nenhuma reação
+   ao mouse ninguém descobre que dá para clicar. */
+.kpi.clicavel {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.12s ease;
+}
+
+.kpi.clicavel:hover {
+  background: var(--paper);
+}
+
+.kpi.clicavel:hover .lbl {
+  text-decoration: underline;
+}
