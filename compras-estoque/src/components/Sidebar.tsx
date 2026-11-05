@@ -41,6 +41,7 @@ const NAV: GrupoNav[] = [
       { href: "/estoque/consumo", label: "Consumo" },
       { href: "/estoque/conciliacao", label: "Conferência da contagem", papeis: ["ADMIN"] },
       { href: "/estoque", label: "Saldos" },
+      { href: "/estoque/compras", label: "Compras por período" },
       { href: "/cmv", label: "Fichas técnicas", papeis: ["ADMIN"] },
       { href: "/receitas", label: "Sub-receitas", papeis: ["ADMIN"] },
       // Derivado do helper, não repetido à mão: a regra de quem vê pedido mora

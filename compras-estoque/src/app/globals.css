@@ -1186,3 +1186,79 @@ td.num,
   color: var(--ink);
   background: var(--white);
 }
+
+/* GRÁFICO DE COLUNAS — compra por dia.
+   Uma série só, então sem legenda: o título diz o que é. Grade e eixo
+   recessivos; só o maior dia ganha rótulo, porque número em cima de toda
+   barra apaga a forma da série, que é o que se veio ver. */
+.grafico-colunas {
+  display: flex;
+  align-items: flex-end;
+  /* 2px de respiro entre barras vizinhas: encostadas, duas compras parecem
+     uma só mais larga. */
+  gap: 2px;
+  height: 230px;
+  padding-top: 26px; /* espaço do rótulo do pico, que fica acima da barra */
+}
+
+.grafico-colunas .coluna {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+/* A área da barra é a altura inteira: assim a barra cresce do chão para cima
+   e as alturas são comparáveis entre si. */
+.grafico-colunas .barra-area {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  /* A linha de base é o eixo — sem ela, barras curtas pairam no nada. */
+  border-bottom: 1px solid var(--line);
+}
+
+.grafico-colunas .barra {
+  width: 100%;
+  background: var(--wine);
+  /* Ponta arredondada só em cima: embaixo ela encosta na linha de base. */
+  border-radius: 4px 4px 0 0;
+  min-height: 0;
+}
+
+/* Fim de semana em tom mais claro: ajuda a ler o ritmo da semana sem precisar
+   de uma segunda série nem de legenda. */
+.grafico-colunas .fds .barra {
+  background: var(--wine-light);
+  opacity: 0.55;
+}
+
+.grafico-colunas .coluna:hover .barra {
+  background: var(--wine-deep);
+}
+
+.grafico-colunas .rotulo-pico {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+
+.grafico-colunas .eixo {
+  text-align: center;
+  font-size: 9.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  padding-top: 5px;
+  overflow: hidden;
+  white-space: nowrap;
+}
