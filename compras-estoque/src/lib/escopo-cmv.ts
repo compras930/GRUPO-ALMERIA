@@ -19,7 +19,36 @@
 // do grupo do XMenu em uns produtos, de cadastro antigo em outros, e um
 // "Matéria Prima" digitado à mão não pode cair fora do CMV por causa do acento.
 
-const CATEGORIAS_ENXUTO = ["MATERIA PRIMA", "BEBIDAS", "VINHOS"];
+// DOIS VOCABULÁRIOS NA MESMA LISTA, e é por isso que ela parece redundante.
+//
+// O Beira Lago compra pelo XMenu, que agrupa em "MATERIA PRIMA" e "BEBIDAS".
+// As outras casas compram pelo Teknisa, que detalha: MERCEARIA, PROTEINAS,
+// HORTIFRUTIGRANJEIRO, BEBIDAS ALCOOLICAS, BEBIDAS NAO ALCOOLICAS. São nomes
+// diferentes para a mesma coisa — comida e bebida que vira prato vendido.
+//
+// Até 05/11/2026 só os do XMenu estavam aqui, e o Wine Garden apareceu no
+// painel com CMV enxuto de 1,0%: de R$ 251 mil comprados, a régua reconheceu
+// R$ 6,5 mil. Não era carga errada — era a régua não conhecendo a casa. O
+// sintoma é traiçoeiro justamente por não parecer defeito: 1% é um número,
+// aparece na tela, e só não quer dizer nada.
+//
+// O QUE FICA DE FORA, de propósito: LIMPEZA, DESCARTAVEIS, EMBALAGENS,
+// UTILIDADE PUBLICA (gás, energia), GRAOS FUNCIONARIO (refeição de
+// funcionário) e ATIVO IMOBILIZADO. São compra de verdade e entram no cheio;
+// o que não fazem é virar prato vendido.
+const CATEGORIAS_ENXUTO = [
+  // XMenu — Beira Lago
+  "MATERIA PRIMA",
+  "BEBIDAS",
+  // Teknisa — 104 Sul, Noroeste, Wine Garden, CPD
+  "MERCEARIA",
+  "PROTEINAS",
+  "HORTIFRUTIGRANJEIRO",
+  "BEBIDAS ALCOOLICAS",
+  "BEBIDAS NAO ALCOOLICAS",
+  // comum aos dois
+  "VINHOS",
+];
 
 const chave = (s: string) =>
   s

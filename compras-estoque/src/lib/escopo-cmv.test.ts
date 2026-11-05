@@ -6,8 +6,37 @@ describe("ehEnxuto", () => {
     for (const c of ["MATERIA PRIMA", "BEBIDAS", "VINHOS"]) expect(ehEnxuto(c)).toBe(true);
   });
 
+  it("os grupos do Teknisa também entram — é o mesmo insumo com outro nome", () => {
+    // O Beira Lago compra pelo XMenu e as outras casas pelo Teknisa. Sem
+    // estes, o Wine Garden apareceu no painel com CMV enxuto de 1,0%.
+    for (const c of [
+      "MERCEARIA",
+      "PROTEINAS",
+      "HORTIFRUTIGRANJEIRO",
+      "BEBIDAS ALCOOLICAS",
+      "BEBIDAS NAO ALCOOLICAS",
+    ]) {
+      expect(ehEnxuto(c)).toBe(true);
+    }
+  });
+
   it("o resto fica de fora", () => {
     for (const c of ["HIGIENE E LIMPEZA", "DESCARTÁVEIS E EMBALAGENS", "ALIMENTAÇÃO FUNCIONÁRIO", "EVENTOS"]) {
+      expect(ehEnxuto(c)).toBe(false);
+    }
+  });
+
+  it("o que o Teknisa compra e não vira prato também fica de fora", () => {
+    // Gás, detergente e refeição de funcionário são compra de verdade: entram
+    // no cheio. O que não fazem é virar prato vendido.
+    for (const c of [
+      "LIMPEZA",
+      "DESCARTAVEIS",
+      "EMBALAGENS",
+      "UTILIDADE PUBLICA",
+      "GRAOS FUNCIONARIO",
+      "ATIVO IMOBILIZADO",
+    ]) {
       expect(ehEnxuto(c)).toBe(false);
     }
   });
