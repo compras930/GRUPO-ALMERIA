@@ -4,7 +4,7 @@ import { unidadesComEstoqueProprio, idDaUnidadeFisica } from "@/lib/unidade-fisi
 import { requireSession } from "@/lib/session";
 import { fmtCurrency } from "@/lib/format";
 import { TIPOS_DE_ENTRADA } from "@/lib/consumo";
-import { valorizarEstoquePura } from "@/lib/valor-estoque";
+import { valorizarEstoquePura, separarPorConferenciaPura } from "@/lib/valor-estoque";
 
 export default async function EstoquePage({
   searchParams,
@@ -83,6 +83,19 @@ export default async function EstoquePage({
         select: { produtoId: true, quantidade: true },
       })
     : [];
+  // CONFERIDO x NUNCA CONFERIDO. Ver separarPorConferenciaPura.
+  const jaContados = unidadeId
+    ? await prisma.contagemEstoque.findMany({
+        where: { unidadeId },
+        select: { produtoId: true },
+        distinct: ["produtoId"],
+      })
+    : [];
+  const conferencia = separarPorConferenciaPura(
+    valor.maisCaros,
+    new Set(jaContados.map((c) => c.produtoId))
+  );
+
   const valorDepoisDaContagem = entradasDepoisDaContagem.reduce(
     (s, m) => s + Math.max(0, m.quantidade) * (precoPorProduto.get(m.produtoId) ?? 0),
     0
@@ -149,7 +162,7 @@ export default async function EstoquePage({
               <p className="big">{fmtCurrency(valor.total)}</p>
               <p className="hint">
                 {valor.itensValorizados} {valor.itensValorizados === 1 ? "produto" : "produtos"} com
-                saldo e preço
+                saldo e preço — conferidos e não conferidos somados
                 {valor.semPreco.length > 0 && (
                   <>
                     {" "}
@@ -160,7 +173,23 @@ export default async function EstoquePage({
                 .
               </p>
             </div>
-            {valor.porCategoria.slice(0, 3).map((c) => (
+            <div className="card">
+              <p className="eyebrow">Conferido na contagem</p>
+              <p className="big">{fmtCurrency(conferencia.conferido)}</p>
+              <p className="hint">
+                Produto que já foi contado alguma vez. Este número saiu da prateleira.
+              </p>
+            </div>
+            <div className="card">
+              <p className="eyebrow">Nunca conferido</p>
+              <p className="big bad">{fmtCurrency(conferencia.nuncaConferido)}</p>
+              <p className="hint">
+                {conferencia.itensNuncaConferidos} produtos que ninguém nunca contou. O saldo deles é
+                só conta: tudo que entrou por nota menos o que a ficha disse que saiu — e produto sem
+                ficha nunca sai. <strong>Trate como estimativa alta.</strong>
+              </p>
+            </div>
+            {valor.porCategoria.slice(0, 2).map((c) => (
               <div className="card" key={c.categoria ?? "sem"}>
                 <p className="eyebrow">{c.categoria ?? "Sem categoria"}</p>
                 <p className="big">{fmtCurrency(c.valor)}</p>

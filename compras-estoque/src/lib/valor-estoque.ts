@@ -59,6 +59,41 @@ export type ValorEstoque = {
 
 const SEM_CATEGORIA = null;
 
+/**
+ * Separa o que foi CONFERIDO contra a prateleira do que nunca foi.
+ *
+ * POR QUE ISTO EXISTE. O saldo de um produto nunca contado é aritmética pura:
+ * tudo que entrou por nota, menos o que a ficha técnica disse que saiu. Num
+ * app com ficha em 27% do cardápio, para a maioria dos produtos isso quer
+ * dizer "entrou e nunca saiu" — o saldo cresce sozinho e vira estoque que não
+ * está na prateleira.
+ *
+ * No Beira Lago em 05/11/2026 o valor total deu R$ 606 mil, mais do que a casa
+ * compra num mês. A contagem cobre os 112 itens da curva A; os outros 438
+ * nunca foram olhados. Somar os dois num número só apresenta como medição algo
+ * que é metade medição e metade acúmulo.
+ *
+ * `contados` é quem tem contagem em ALGUMA data — não só na última. Produto
+ * contado há três semanas tem âncora: o saldo dele partiu de um número real.
+ */
+export function separarPorConferenciaPura(
+  itens: (ItemDeEstoque & { valor: number })[],
+  contados: Set<string>
+): { conferido: number; nuncaConferido: number; itensNuncaConferidos: number } {
+  let conferido = 0;
+  let nuncaConferido = 0;
+  let itensNuncaConferidos = 0;
+  for (const i of itens) {
+    if (contados.has(i.produtoId)) {
+      conferido += i.valor;
+    } else {
+      nuncaConferido += i.valor;
+      itensNuncaConferidos++;
+    }
+  }
+  return { conferido, nuncaConferido, itensNuncaConferidos };
+}
+
 export function valorizarEstoquePura(saldos: SaldoParaValorizar[]): ValorEstoque {
   let total = 0;
   let itensValorizados = 0;

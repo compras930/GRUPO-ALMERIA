@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { valorizarEstoquePura, type SaldoParaValorizar } from "@/lib/valor-estoque";
+import {
+  valorizarEstoquePura,
+  separarPorConferenciaPura,
+  type SaldoParaValorizar,
+} from "@/lib/valor-estoque";
 
 const s = (
   nome: string,
@@ -80,5 +84,37 @@ describe("valorizarEstoquePura", () => {
     const r = valorizarEstoquePura([]);
     expect(r).toMatchObject({ total: 0, itensValorizados: 0 });
     expect(r.porCategoria).toHaveLength(0);
+  });
+});
+
+describe("separarPorConferenciaPura", () => {
+  const item = (produtoId: string, valor: number) => ({
+    produtoId,
+    nome: produtoId,
+    unidadeMedida: "KG",
+    quantidade: 1,
+    valor,
+  });
+
+  it("separa o que tem contagem do que nunca teve", () => {
+    const r = separarPorConferenciaPura(
+      [item("contado", 100), item("nunca", 900), item("outro", 50)],
+      new Set(["contado"])
+    );
+    expect(r.conferido).toBe(100);
+    expect(r.nuncaConferido).toBe(950);
+    expect(r.itensNuncaConferidos).toBe(2);
+  });
+
+  it("tudo contado: nada fica de fora", () => {
+    const r = separarPorConferenciaPura([item("a", 10)], new Set(["a"]));
+    expect(r.nuncaConferido).toBe(0);
+    expect(r.itensNuncaConferidos).toBe(0);
+  });
+
+  it("nenhuma contagem: o total inteiro é não conferido", () => {
+    const r = separarPorConferenciaPura([item("a", 10), item("b", 5)], new Set());
+    expect(r.conferido).toBe(0);
+    expect(r.nuncaConferido).toBe(15);
   });
 });
