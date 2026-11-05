@@ -84,7 +84,6 @@ export default function PerdaItemVendidoForm({
             opcoes={itens}
             selecionado={item}
             onSelecionar={setItem}
-            autoFocus
           />
         </div>
 

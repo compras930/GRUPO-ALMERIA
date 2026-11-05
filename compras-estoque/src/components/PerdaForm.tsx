@@ -70,7 +70,6 @@ export default function PerdaForm({
             opcoes={produtos}
             selecionado={produto}
             onSelecionar={setProduto}
-            autoFocus
           />
         </div>
 

@@ -20,9 +20,13 @@ import { podeVerPedidos } from "@/lib/permissions";
  * tiraria da vista os vizinhos, que é justamente o que um menu serve pra
  * mostrar.
  *
- * `papeis` ausente = todo mundo vê. `daUnidade` = só aparece pra quem tem uma
- * casa; contagem e perda dependem de uma unidade, e o ADMIN sem unidade entra
- * nelas pelo Estoque, escolhendo a casa antes.
+ * `papeis` ausente = todo mundo vê.
+ *
+ * `daUnidade` EXISTIA para esconder contagem e perda de quem não tinha casa —
+ * o ADMIN, que entrava nelas pelo Estoque escolhendo a casa antes. Desde que a
+ * casa passou a viver no seletor aqui do menu, sempre há uma escolhida, e a
+ * regra só servia para esconder do ADMIN duas telas que ele usa todo dia. A
+ * flag continua existindo para quem precisar dela.
  *
  * ISTO É MENU, NÃO SEGURANÇA. Quem decide o que pode é o servidor:
  * `requireAdmin` nas páginas de cadastro e `requireSession` + `unidadeVisivel`
@@ -36,8 +40,8 @@ const NAV: GrupoNav[] = [
   {
     titulo: "Estoque",
     itens: [
-      { href: "/estoque/contagem", label: "Contagem da semana", daUnidade: true },
-      { href: "/estoque/perdas", label: "Perdas e baixas", daUnidade: true },
+      { href: "/estoque/contagem", label: "Contagem da semana" },
+      { href: "/estoque/perdas", label: "Perdas e baixas" },
       { href: "/estoque/consumo", label: "Consumo" },
       { href: "/estoque/conciliacao", label: "Conferência da contagem", papeis: ["ADMIN"] },
       { href: "/estoque", label: "Saldos" },
