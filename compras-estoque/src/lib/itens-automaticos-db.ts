@@ -13,10 +13,10 @@
 // coluna, repete sem ela. O item nasce igual; só não fica marcado — e o
 // relatório da carga diz quantos criou de qualquer jeito.
 //
-// CRIA UM A UM, de propósito. `createMany` abortaria o lote inteiro no
-// primeiro conflito de unicidade, e conflito aqui é esperado: o mesmo nome
-// pode já existir com outra categoria, e duas casas podem repetir o código.
-// Um a um, o que colide é relatado e o resto entra.
+// (Até 04/11 este arquivo criava os itens UM A UM, com a justificativa de que
+// `createMany` abortaria o lote no primeiro conflito. A justificativa estava
+// errada: `skipDuplicates` pula o que colide sem derrubar o resto. O custo do
+// engano só apareceu quando chegou a primeira casa com centenas de itens.)
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { ItemAutomatico } from "@/lib/itens-automaticos";
