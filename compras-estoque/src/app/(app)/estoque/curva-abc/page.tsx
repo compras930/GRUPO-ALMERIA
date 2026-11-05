@@ -6,6 +6,7 @@ import { fmtCurrency } from "@/lib/format";
 import { carregarCurvaDaJanela, MESES_DA_JANELA } from "@/lib/curva-abc-db";
 import { planejarCurvaAbcPura } from "@/lib/curva-abc-aplicar";
 import AplicarCurvaForm from "@/components/AplicarCurvaForm";
+import { carregarContexto } from "@/lib/selecao-db";
 
 /**
  * Recalcular a curva ABC que a FOLHA DE CONTAGEM usa.
@@ -26,8 +27,11 @@ export default async function CurvaAbcPage({
   searchParams: { unidadeId?: string };
 }) {
   await requireAdmin();
+  // A casa vem do menu lateral; a URL ainda manda quando vem preenchida.
+  // Ver src/lib/selecao.ts.
   const unidades = await unidadesComEstoqueProprio();
-  const escolhida = searchParams.unidadeId || unidades[0]?.id;
+  const ctx = await carregarContexto({ papel: "ADMIN", unidadeId: null }, searchParams);
+  const escolhida = ctx.casaId || unidades[0]?.id;
   if (!escolhida) return <div className="empty">Nenhuma unidade com estoque próprio.</div>;
   const despensaId = await idDaUnidadeFisica(escolhida);
 
@@ -59,20 +63,6 @@ export default async function CurvaAbcPage({
         </p>
       </div>
 
-      {unidades.length > 1 && (
-        <div className="card btn-row">
-          <span className="eyebrow" style={{ margin: 0, alignSelf: "center" }}>Casa</span>
-          {unidades.map((u) => (
-            <Link
-              key={u.id}
-              href={`/estoque/curva-abc?unidadeId=${u.id}`}
-              className={`btn small${u.id === escolhida ? " primary" : ""}`}
-            >
-              {u.nome}
-            </Link>
-          ))}
-        </div>
-      )}
 
       <div className="cards">
         <div className="card">

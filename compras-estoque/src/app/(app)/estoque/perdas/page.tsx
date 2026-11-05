@@ -7,6 +7,7 @@ import { fmtCurrency } from "@/lib/format";
 import { TIPO_PERDA, TIPO_PERDA_LABEL, type TipoPerda } from "@/lib/constants";
 import PerdaForm from "@/components/PerdaForm";
 import PerdaItemVendidoForm from "@/components/PerdaItemVendidoForm";
+import { carregarContexto } from "@/lib/selecao-db";
 
 /**
  * Baixa declarada: o que saiu da despensa e não virou venda.
@@ -29,7 +30,13 @@ export default async function PerdasPage({
 }) {
   const user = await requireSession();
   const isAdmin = user.papel === "ADMIN";
-  const unidadeId = isAdmin ? searchParams.unidadeId : user.unidadeId;
+  // A casa vem do menu lateral; a URL ainda manda quando vem preenchida.
+  // Ver src/lib/selecao.ts.
+  const ctx = await carregarContexto(
+    { papel: user.papel, unidadeId: user.unidadeId ?? null },
+    searchParams
+  );
+  const unidadeId = isAdmin ? ctx.casaId ?? undefined : user.unidadeId;
 
   if (!unidadeId) {
     return <div className="empty">Nenhuma unidade selecionada. Volte para a tela de Estoque.</div>;

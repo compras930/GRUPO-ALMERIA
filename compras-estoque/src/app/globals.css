@@ -1135,3 +1135,54 @@ td.num,
   opacity: 0.55;
   margin: 0 0 6px 18px;
 }
+
+/* CASA E MÊS, no alto do menu.
+   Os dois ficam acima da navegação porque valem para tudo que vier depois —
+   lido de cima para baixo, o menu diz "nesta casa, neste mês, veja isto". */
+.seletor-contexto {
+  display: grid;
+  gap: 4px;
+  padding: 14px 18px 16px;
+  border-bottom: 1px solid rgba(243, 234, 217, 0.14);
+  margin-bottom: 10px;
+}
+
+.seletor-contexto label {
+  font-family: "Inter", sans-serif;
+  font-weight: 600;
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(243, 234, 217, 0.55);
+  margin-top: 6px;
+}
+
+.seletor-contexto select {
+  width: 100%;
+  font-family: "Inter", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--paper);
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(243, 234, 217, 0.18);
+  border-radius: 6px;
+  padding: 7px 9px;
+  cursor: pointer;
+}
+
+.seletor-contexto select:hover {
+  border-color: rgba(243, 234, 217, 0.4);
+}
+
+/* Enquanto o servidor responde, o menu diz que está trabalhando em vez de
+   parecer travado. */
+.seletor-contexto[aria-busy="true"] {
+  opacity: 0.55;
+}
+
+/* A lista aberta é do navegador e herdaria o fundo escuro do menu; sem isto,
+   texto claro sobre fundo claro no Chrome. */
+.seletor-contexto option {
+  color: var(--ink);
+  background: var(--white);
+}

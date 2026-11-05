@@ -10,6 +10,7 @@ import { calcularCmvTeorico } from "@/lib/cmv-teorico";
 import { faturamentoDaLinhaPura } from "@/lib/faturamento";
 import { ehCategoriaDeEventoPura } from "@/lib/categoria-venda";
 import { quebrarFaltaPura, filaDeFichasPura, type VendaSemFichaResumo } from "@/lib/consumo-sem-ficha";
+import { carregarContexto } from "@/lib/selecao-db";
 
 /**
  * A conferência da contagem — ver src/lib/conciliacao.ts para a conta.
@@ -30,8 +31,11 @@ export default async function ConciliacaoPage({
   searchParams: { unidadeId?: string };
 }) {
   await requireAdmin();
+  // A casa vem do menu lateral; a URL ainda manda quando vem preenchida.
+  // Ver src/lib/selecao.ts.
   const unidades = await unidadesComEstoqueProprio();
-  const escolhida = searchParams.unidadeId || unidades[0]?.id;
+  const ctx = await carregarContexto({ papel: "ADMIN", unidadeId: null }, searchParams);
+  const escolhida = ctx.casaId || unidades[0]?.id;
   const unidadeId = escolhida ? await idDaUnidadeFisica(escolhida) : null;
   if (!unidadeId) return <div className="empty">Nenhuma unidade com estoque próprio.</div>;
 
@@ -195,19 +199,6 @@ export default async function ConciliacaoPage({
         contado. O período é o de cada produto, entre as duas últimas contagens dele.
       </p>
 
-      {unidades.length > 1 && (
-        <div className="btn-row" style={{ marginBottom: 14 }}>
-          {unidades.map((u) => (
-            <Link
-              key={u.id}
-              href={`/estoque/conciliacao?unidadeId=${u.id}`}
-              className={`btn small${u.id === escolhida ? " primary" : ""}`}
-            >
-              {u.nome}
-            </Link>
-          ))}
-        </div>
-      )}
 
       {linhas.length === 0 ? (
         <div className="empty">

@@ -5,6 +5,7 @@ import { requireSession } from "@/lib/session";
 import { calcularConsumoPuro, perdasPorProdutoPura, TIPOS_DE_ENTRADA } from "@/lib/consumo";
 import { TIPO_PERDA } from "@/lib/constants";
 import { fmtCurrency } from "@/lib/format";
+import { carregarContexto } from "@/lib/selecao-db";
 
 const data = (d: Date) => d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 const qtd = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
@@ -13,7 +14,13 @@ export default async function ConsumoPage({ searchParams }: { searchParams: { un
   const user = await requireSession();
   const isAdmin = user.papel === "ADMIN";
   const unidades = isAdmin ? await unidadesComEstoqueProprio() : [];
-  const escolhida = isAdmin ? searchParams.unidadeId || unidades[0]?.id : user.unidadeId;
+  // A casa vem do menu lateral; a URL ainda manda quando vem preenchida.
+  // Ver src/lib/selecao.ts.
+  const ctx = await carregarContexto(
+    { papel: user.papel, unidadeId: user.unidadeId ?? null },
+    searchParams
+  );
+  const escolhida = isAdmin ? ctx.casaId || unidades[0]?.id : user.unidadeId;
   const unidadeId = escolhida ? await idDaUnidadeFisica(escolhida) : null;
 
   if (!unidadeId) {

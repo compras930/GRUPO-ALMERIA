@@ -16,6 +16,7 @@ import ContagemLoteForm from "@/components/ContagemLoteForm";
 import { agruparPorCategoriaPura } from "@/lib/agrupar-contagem";
 import { carregarPesagens } from "@/lib/pesagem-db";
 import { avisoDePesagemPura } from "@/lib/pesagem";
+import { carregarContexto } from "@/lib/selecao-db";
 
 export default async function ContagemPage({
   searchParams,
@@ -25,7 +26,13 @@ export default async function ContagemPage({
   const user = await requireSession();
   const isAdmin = user.papel === "ADMIN";
 
-  const unidadeId = isAdmin ? searchParams.unidadeId : user.unidadeId;
+  // A casa vem do menu lateral; a URL ainda manda quando vem preenchida.
+  // Ver src/lib/selecao.ts.
+  const ctx = await carregarContexto(
+    { papel: user.papel, unidadeId: user.unidadeId ?? null },
+    searchParams
+  );
+  const unidadeId = isAdmin ? ctx.casaId ?? undefined : user.unidadeId;
   if (!unidadeId) {
     return <div className="empty">Nenhuma unidade selecionada. Volte para a tela de Estoque.</div>;
   }

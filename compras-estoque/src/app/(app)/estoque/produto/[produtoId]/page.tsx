@@ -5,6 +5,7 @@ import { requireSession } from "@/lib/session";
 import { unidadeVisivel } from "@/lib/permissions";
 import { fmtCurrency } from "@/lib/format";
 import { mesDaChave } from "@/lib/mes";
+import { carregarContexto } from "@/lib/selecao-db";
 
 /**
  * O que a casa comprou deste produto, nota a nota.
@@ -35,7 +36,13 @@ export default async function ProdutoPage({
 }) {
   const user = await requireSession();
   const isAdmin = user.papel === "ADMIN";
-  const escolhida = isAdmin ? searchParams.unidadeId ?? user.unidadeId : user.unidadeId;
+  // A casa vem do menu lateral; a URL ainda manda quando vem preenchida.
+  // Ver src/lib/selecao.ts.
+  const ctx = await carregarContexto(
+    { papel: user.papel, unidadeId: user.unidadeId ?? null },
+    searchParams
+  );
+  const escolhida = isAdmin ? ctx.casaId ?? user.unidadeId : user.unidadeId;
   if (!escolhida) {
     return <div className="empty">Escolha uma casa pelo Painel para ver as compras deste produto.</div>;
   }

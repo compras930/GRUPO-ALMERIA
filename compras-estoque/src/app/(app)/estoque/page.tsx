@@ -5,6 +5,7 @@ import { requireSession } from "@/lib/session";
 import { fmtCurrency } from "@/lib/format";
 import { TIPOS_DE_ENTRADA } from "@/lib/consumo";
 import { valorizarEstoquePura, separarPorConferenciaPura } from "@/lib/valor-estoque";
+import { carregarContexto } from "@/lib/selecao-db";
 
 export default async function EstoquePage({
   searchParams,
@@ -18,7 +19,13 @@ export default async function EstoquePage({
     ? await unidadesComEstoqueProprio()
     : [];
 
-  const unidadeIdEscolhida = isAdmin ? searchParams.unidadeId || unidades[0]?.id : user.unidadeId;
+  // A casa vem do menu lateral; a URL ainda manda quando vem preenchida.
+  // Ver src/lib/selecao.ts.
+  const ctx = await carregarContexto(
+    { papel: user.papel, unidadeId: user.unidadeId ?? null },
+    searchParams
+  );
+  const unidadeIdEscolhida = isAdmin ? ctx.casaId || unidades[0]?.id : user.unidadeId;
   // Estoque é da despensa: um usuário lotado numa casa que não guarda estoque
   // (Matri) tem que ver a despensa de verdade, não uma tela vazia.
   const unidadeId = unidadeIdEscolhida ? await idDaUnidadeFisica(unidadeIdEscolhida) : unidadeIdEscolhida;
@@ -135,24 +142,6 @@ export default async function EstoquePage({
         </div>
       </div>
 
-      {isAdmin && (
-        <div className="card" style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <span className="eyebrow" style={{ margin: 0 }}>
-            Unidade
-          </span>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {unidades.map((u) => (
-              <Link
-                key={u.id}
-                href={`/estoque?unidadeId=${u.id}`}
-                className={`btn small${u.id === unidadeId ? " primary" : ""}`}
-              >
-                {u.nome}
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
 
       {saldos.length > 0 && (
         <>

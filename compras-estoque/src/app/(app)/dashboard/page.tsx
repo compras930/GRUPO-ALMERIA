@@ -13,7 +13,8 @@ import { faturamentoDaLinhaPura, linhasEstimadasPura } from "@/lib/faturamento";
 import { carregarIndiceReceitas, carregarPrecoAtualPorProduto, explodirReceitaPura, CicloReceitaError } from "@/lib/receita";
 import { TIPOS_DE_ENTRADA } from "@/lib/consumo";
 import { calcularConsumoDoMesPuro } from "@/lib/consumo-mensal";
-import { mesDaChave, mesDaData, mesesDisponiveis, rotuloCurto } from "@/lib/mes";
+import { mesDaChave, mesDaData } from "@/lib/mes";
+import { carregarContexto } from "@/lib/selecao-db";
 
 /**
  * O painel: o que a casa VENDEU, o que COMPROU e os DOIS CMV, com a compra
@@ -79,16 +80,6 @@ export default async function DashboardPage({
   const isAdmin = user.papel === "ADMIN";
 
   const agora = new Date();
-  // Cortado em agosto/26, quando a carga começou — ver PRIMEIRO_MES_COM_DADO.
-  const meses = mesesDisponiveis(agora, MESES_NO_SELETOR);
-  // Mês pedido fora da faixa cai no mais recente disponível, em vez de abrir
-  // uma tela de zeros que parece mês ruim e não mês sem dado. Vale para link
-  // velho guardado e para URL digitada à mão.
-  const pedido = mesDaChave(searchParams.mes);
-  const dentroDaFaixa = pedido && meses.some((m) => m.chave === pedido.chave);
-  const mes = dentroDaFaixa ? pedido : meses[0] ?? mesDaData(agora);
-
-  const casas = await prisma.unidade.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true } });
 
   // Quem não é ADMIN nunca escolhe: é sempre a própria casa, venha o que vier
   // na URL. O seletor é conveniência de quem vê tudo, não uma porta.
@@ -104,9 +95,16 @@ export default async function DashboardPage({
       </div>
     );
   }
-  const pedida = isAdmin ? searchParams.unidadeId : user.unidadeId ?? undefined;
-  const casaId = pedida && unidadeVisivel(user.papel, user.unidadeId, pedida) ? pedida : null;
-  const casa = casaId ? casas.find((c) => c.id === casaId) ?? null : null;
+  // A CASA E O MÊS VÊM DO MENU LATERAL, e não mais de um seletor nesta tela.
+  // A URL continua mandando quando vem preenchida, para link compartilhado
+  // abrir o que quem mandou estava vendo — ver src/lib/selecao.ts.
+  const ctx = await carregarContexto(
+    { papel: user.papel, unidadeId: user.unidadeId ?? null },
+    searchParams
+  );
+  const casaId = ctx.casaId;
+  const casa = casaId ? ctx.casas.find((c) => c.id === casaId) ?? null : null;
+  const mes = mesDaChave(ctx.mes) ?? mesDaData(agora);
 
   // Compra segue a DESPENSA e venda segue a CASA — ver src/lib/unidade-fisica.ts.
   const despensaId = casaId ? await idDaUnidadeFisica(casaId) : null;
@@ -412,37 +410,6 @@ export default async function DashboardPage({
           casa, e a compra entra pela data da NOTA — não pela data da carga.
         </p>
 
-        <div className="filtros">
-          {isAdmin && (
-            <div className="filtro">
-              <span className="filtro-rotulo">Casa</span>
-              <div className="tabbar discreta">
-              <Link href={qs({ unidadeId: undefined })} className={`chip${!casaId ? " ativo" : ""}`}>
-                Todas
-              </Link>
-              {casas.map((c) => (
-                <Link key={c.id} href={qs({ unidadeId: c.id })} className={`chip${casaId === c.id ? " ativo" : ""}`}>
-                  {c.nome}
-                </Link>
-                ))}
-              </div>
-            </div>
-          )}
-          <div className="filtro">
-            <span className="filtro-rotulo">Mês</span>
-            <div className="tabbar discreta">
-              {meses.map((m) => (
-                <Link
-                  key={m.chave}
-                  href={qs({ mes: m.chave })}
-                  className={`chip${mes.chave === m.chave ? " ativo" : ""}`}
-                >
-                  {rotuloCurto(m)}
-                </Link>
-              ))}
-            </div>
-          </div>
-        </div>
       </div>
 
       <div className="kpis">

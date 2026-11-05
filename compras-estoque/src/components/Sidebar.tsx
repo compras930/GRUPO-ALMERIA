@@ -73,10 +73,13 @@ export default function Sidebar({
   papel,
   unidadeNome,
   userName,
+  seletor,
 }: {
   papel: Papel;
   unidadeNome: string | null;
   userName: string | null;
+  /** Casa e mês — montados no layout, porque dependem do banco. */
+  seletor?: React.ReactNode;
 }) {
   const pathname = usePathname();
   // Só guarda o que a pessoa ABRIU ou FECHOU com o clique. O estado inicial de
@@ -106,9 +109,18 @@ export default function Sidebar({
         width={170}
         height={69}
       />
+      {/* QUEM A PESSOA É, não o que ela está olhando.
+          Enquanto não havia seletor, "Todas as unidades" aqui queria dizer
+          "você enxerga todas". Com a Casa logo abaixo, a mesma frase passou a
+          ler como "estou vendo todas" — contradizendo o seletor ao lado. Para
+          o ADMIN, que não tem casa, sobra só o papel. */}
       <div className="unit">
-        {unidadeNome ?? "Todas as unidades"} · {PAPEL_LABEL[papel]}
+        {unidadeNome ? `${unidadeNome} · ${PAPEL_LABEL[papel]}` : PAPEL_LABEL[papel]}
       </div>
+      {/* A casa e o mês ficam ACIMA do menu: eles valem para o que vier
+          depois, e ler de cima para baixo é "nesta casa, neste mês, veja
+          isto". Embaixo, pareceriam ajuste da última tela aberta. */}
+      {seletor}
       {NAV.map((grupo) => {
         const itens = grupo.itens.filter(
           (i) => (!i.papeis || i.papeis.includes(papel)) && (!i.daUnidade || unidadeNome !== null)
