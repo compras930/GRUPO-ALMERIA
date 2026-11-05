@@ -40,7 +40,7 @@ export async function criarItensAutomaticos(
   const base = itens.map((i) => ({
     unidadeId,
     tipo: "PRATO",
-    categoria: null,
+    categoria: i.categoria,
     nome: i.nome,
     precoVenda: i.precoVenda,
     codigoPdv: i.codigoPdv,

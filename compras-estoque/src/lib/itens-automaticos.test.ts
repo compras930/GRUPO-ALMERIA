@@ -6,8 +6,24 @@ describe("itensAutomaticosPuros", () => {
     const r = itensAutomaticosPuros([
       { nome: "Filetto di Manzo", codigo: "70039502030", quantidadeVendida: 4, valorTotal: 400 },
     ]);
-    expect(r.criar).toEqual([{ codigoPdv: "70039502030", nome: "FILETTO DI MANZO", precoVenda: 100 }]);
+    expect(r.criar).toEqual([
+      { codigoPdv: "70039502030", nome: "FILETTO DI MANZO", precoVenda: 100, categoria: null },
+    ]);
     expect(r.semCodigo).toBe(0);
+  });
+
+  it("o grupo da origem vira categoria, canonizada", () => {
+    const r = itensAutomaticosPuros([
+      { nome: "SACOLA DE PAPEL P", codigo: "121000000102", quantidadeVendida: 1, valorTotal: 0.5, grupo: "Embalagens" },
+    ]);
+    expect(r.criar[0].categoria).toBe("EMBALAGENS");
+  });
+
+  it("sem grupo, nasce sem categoria — não inventa", () => {
+    const r = itensAutomaticosPuros([
+      { nome: "X", codigo: "1", quantidadeVendida: 1, valorTotal: 10 },
+    ]);
+    expect(r.criar[0].categoria).toBeNull();
   });
 
   it("junta as linhas do mesmo código e tira o preço do total", () => {

@@ -10,6 +10,7 @@ import { carregarIndiceReceitas, carregarPrecoAtualPorProduto, explodirReceitaPu
 import { idDaUnidadeFisica } from "@/lib/unidade-fisica";
 import { resolverItensVendaPura, EXPLICACAO_MOTIVO } from "@/lib/resolucao-item-venda";
 import { itensAutomaticosPuros } from "@/lib/itens-automaticos";
+import { mensagemDeConflitoPura } from "@/lib/periodo-venda";
 import { criarItensAutomaticos } from "@/lib/itens-automaticos-db";
 import { emOrdemDeBloqueio } from "@/lib/ordem-de-bloqueio";
 import { comRetentativaDeConflito } from "@/lib/transacao";
@@ -25,6 +26,20 @@ export type ItemVendaSemanalInput = {
    * só quantidade, e aí o app estima pelo preço cadastrado.
    */
   valorTotal?: number | null;
+  /**
+   * Grupo do produto na origem — "Nv. de Produto Superior" no Teknisa:
+   * BOMBONIERE, PADARIA, MERCEARIA, BEBIDAS REFRIGERADOS, e por aí.
+   *
+   * Só é usado quando o item é CADASTRADO por esta carga: vira a categoria
+   * dele. Não sobrescreve categoria de item que já existe — cadastro feito por
+   * gente manda mais que grupo de relatório.
+   *
+   * Sem ele, o item nasce sem categoria e a venda fica em "Sem categoria" no
+   * painel; e, pior, não há como separar o que é comida do que é revenda de
+   * empório (sacola, bombonière, padaria), que é faturamento que nunca vai
+   * consumir a despensa.
+   */
+  grupo?: string | null;
 };
 
 export type ResultadoVendaSemanal = {
@@ -56,8 +71,8 @@ export type ResultadoVendaSemanal = {
 };
 
 export class VendaSemanalDuplicadaError extends Error {
-  constructor(unidadeNome: string, periodoInicio: string, periodoFim: string) {
-    super(`Já existe uma venda semanal registrada para "${unidadeNome}" no período ${periodoInicio} a ${periodoFim}.`);
+  constructor(mensagem: string) {
+    super(mensagem);
     this.name = "VendaSemanalDuplicadaError";
   }
 }
@@ -81,10 +96,27 @@ export async function processarVendaSemanal(
 
   // Idempotência: reenvio acidental da mesma semana não pode consumir
   // estoque 2x nem duplicar pedido de compra.
-  const jaExiste = await prisma.vendaSemanal.findFirst({
-    where: { unidadeId: unidade.id, periodoInicio, periodoFim },
+  //
+  // PEGA QUALQUER SOBREPOSIÇÃO, não só período idêntico. A carga semanal do
+  // Teknisa reenvia as últimas cinco semanas a cada rodada e conta com esta
+  // recusa; com a comparação exata que havia aqui antes, bastava a régua mudar
+  // um dia — um ajuste no corte da virada do mês, um fuso empurrando uma data
+  // — para o período virar "parecido mas não igual", passar pela trava e somar
+  // a mesma venda duas vezes, em silêncio. Ver src/lib/periodo-venda.ts.
+  const conflito = await prisma.vendaSemanal.findFirst({
+    where: {
+      unidadeId: unidade.id,
+      periodoInicio: { lte: periodoFim },
+      periodoFim: { gte: periodoInicio },
+    },
+    select: { periodoInicio: true, periodoFim: true },
+    orderBy: { periodoInicio: "asc" },
   });
-  if (jaExiste) throw new VendaSemanalDuplicadaError(unidadeNome, periodoInicioStr, periodoFimStr);
+  if (conflito) {
+    throw new VendaSemanalDuplicadaError(
+      mensagemDeConflitoPura(unidadeNome, periodoInicio, periodoFim, conflito.periodoInicio, conflito.periodoFim)
+    );
+  }
 
   const itensVenda = await prisma.itemVenda.findMany({ where: { unidadeId: unidade.id } });
   const itemVendaPorId = new Map(itensVenda.map((iv) => [iv.id, iv]));

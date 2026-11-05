@@ -25,12 +25,15 @@
 //
 // Núcleo puro: sem Prisma, sem I/O.
 import { normalizarNome } from "@/lib/nome-normalizado";
+import { categoriaCanonicaPura } from "@/lib/categoria-venda";
 
 export type LinhaNaoCasada = {
   nome: string;
   codigo?: string | null;
   quantidadeVendida: number;
   valorTotal?: number | null;
+  /** Grupo do produto na origem; vira a categoria do item cadastrado. */
+  grupo?: string | null;
 };
 
 export type ItemAutomatico = {
@@ -39,6 +42,12 @@ export type ItemAutomatico = {
   nome: string;
   /** Faturamento ÷ quantidade da própria carga. Zero quando não dá para saber. */
   precoVenda: number;
+  /**
+   * Categoria, vinda do grupo da origem e canonizada (maiúscula, plural
+   * arrumado) pelas mesmas regras do resto do app. Nula quando a origem não
+   * manda grupo — e aí o item nasce sem categoria, como antes.
+   */
+  categoria: string | null;
 };
 
 export type PlanoDeCriacao = {
@@ -48,7 +57,7 @@ export type PlanoDeCriacao = {
 };
 
 export function itensAutomaticosPuros(linhas: LinhaNaoCasada[]): PlanoDeCriacao {
-  const porCodigo = new Map<string, { nome: string; quantidade: number; valor: number }>();
+  const porCodigo = new Map<string, { nome: string; quantidade: number; valor: number; grupo: string | null }>();
   let semCodigo = 0;
 
   for (const l of linhas) {
@@ -65,7 +74,12 @@ export function itensAutomaticosPuros(linhas: LinhaNaoCasada[]): PlanoDeCriacao 
       atual.quantidade += l.quantidadeVendida;
       atual.valor += l.valorTotal ?? 0;
     } else {
-      porCodigo.set(codigo, { nome, quantidade: l.quantidadeVendida, valor: l.valorTotal ?? 0 });
+      porCodigo.set(codigo, {
+        nome,
+        quantidade: l.quantidadeVendida,
+        valor: l.valorTotal ?? 0,
+        grupo: l.grupo ?? null,
+      });
     }
   }
 
@@ -77,6 +91,7 @@ export function itensAutomaticosPuros(linhas: LinhaNaoCasada[]): PlanoDeCriacao 
       // vem do valor declarado de qualquer jeito (ver src/lib/faturamento.ts),
       // e inventar um preço de tabela aqui seria palpite gravado no cadastro.
       precoVenda: v.quantidade > 0 && v.valor > 0 ? v.valor / v.quantidade : 0,
+      categoria: categoriaCanonicaPura(v.grupo),
     }))
     // Ordem estável: a carga roda de novo e cria na mesma ordem.
     .sort((a, b) => a.codigoPdv.localeCompare(b.codigoPdv));
