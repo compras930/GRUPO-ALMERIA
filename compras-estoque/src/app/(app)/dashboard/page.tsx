@@ -4,6 +4,7 @@ import { requireSession } from "@/lib/session";
 import { unidadeVisivel } from "@/lib/permissions";
 import { idDaUnidadeFisica } from "@/lib/unidade-fisica";
 import { fmtCurrency } from "@/lib/format";
+import { TIPO_PERDA } from "@/lib/constants";
 import { totaisPorCategoriaPura, SEM_CATEGORIA } from "@/lib/painel-categoria";
 import { ehCategoriaDeEventoPura } from "@/lib/categoria-venda";
 import { curvaAbcPura, resumoAbcPura, CORTE_A } from "@/lib/curva-abc";
@@ -140,6 +141,38 @@ export default async function DashboardPage({
       },
     }),
   ]);
+
+  // PERDAS DO MÊS, para o card. A baixa é da DESPENSA, como a compra.
+  //
+  // VALE O PREÇO DE HOJE, não o do dia da perda: é o mesmo critério do resto
+  // do app (custo nunca é persistido, sempre recalculado). O que se perde ao
+  // não guardar o preço histórico é pequeno perto do que se ganharia em
+  // confusão guardando dois.
+  const perdasDoMes = despensaId
+    ? await prisma.movimentoEstoque.findMany({
+        where: {
+          unidadeId: despensaId,
+          tipo: { in: [...TIPO_PERDA] },
+          criadoEm: { gte: mes.inicio, lt: mes.fim },
+        },
+        select: { produtoId: true, quantidade: true },
+      })
+    : [];
+  const precoPorProdutoPerda = despensaId
+    ? new Map(
+        (
+          await prisma.precoAtualProduto.findMany({
+            where: { unidadeId: despensaId },
+            select: { produtoId: true, preco: true },
+          })
+        ).map((p) => [p.produtoId, p.preco])
+      )
+    : new Map<string, number>();
+  const perdasEmReais = perdasDoMes.reduce(
+    (s, m) => s + Math.abs(m.quantidade) * (precoPorProdutoPerda.get(m.produtoId) ?? 0),
+    0
+  );
+  const perdasSemPreco = perdasDoMes.filter((m) => !precoPorProdutoPerda.get(m.produtoId)).length;
 
   const valorDaLinha = (l: (typeof linhasCompra)[number]) =>
     l.valorTotal ?? (l.quantidade === null ? 0 : l.quantidade * l.precoUnitNovo);
@@ -431,7 +464,43 @@ export default async function DashboardPage({
             {fmtCurrency(compraEnxuta)} enxuto · {linhasCompra.length} linhas de nota
           </p>
         </div>
+        {/*
+          PERDA DECLARADA, e o rótulo diz "declarada" de propósito.
+
+          Este número não é o que a casa perdeu: é o que alguém lançou. Perda
+          não lançada não some — ela reaparece como falta na conferência da
+          contagem, onde vira acusação em cima de contabilidade incompleta.
+          Um valor baixo aqui pode ser casa caprichada ou lançamento que não
+          está acontecendo, e as duas leituras são opostas.
+        */}
+        <div className="kpi">
+          <p className="lbl">Perda declarada</p>
+          <div className={`val${perdasEmReais > 0 ? " bad" : ""}`}>
+            {perdasDoMes.length === 0 ? "—" : fmtCurrency(perdasEmReais)}
+          </div>
+          <p className="sub">
+            {perdasDoMes.length === 0 ? (
+              "nenhuma baixa lançada no mês"
+            ) : (
+              <>
+                {perdasDoMes.length} {perdasDoMes.length === 1 ? "lançamento" : "lançamentos"}
+                {totalVenda > 0 ? ` · ${((100 * perdasEmReais) / totalVenda).toFixed(2)}% da venda` : ""}
+                {perdasSemPreco > 0 ? ` · ${perdasSemPreco} sem preço` : ""}
+              </>
+            )}
+          </p>
+        </div>
       </div>
+      <p className="sub-explica" style={{ marginTop: -14, marginBottom: 24 }}>
+        <strong>Perda declarada é o que alguém lançou</strong>, não o que a casa perdeu. O que não
+        for lançado não desaparece: reaparece como falta na{" "}
+        {casaId ? (
+          <Link href={`/estoque/conciliacao?unidadeId=${casaId}`}>conferência da contagem</Link>
+        ) : (
+          "conferência da contagem"
+        )}
+        , onde vira acusação em cima de contabilidade incompleta.
+      </p>
 
       {/*
         OS TRÊS CMV, numa tabela e não em três tiles.

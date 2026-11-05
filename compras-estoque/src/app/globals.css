@@ -379,7 +379,10 @@ td {
 
 .kpis {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  /* auto-fit, não 4 fixas: a fila tem 2, 3 ou 4 tiles conforme a tela, e com
+     número fixo de colunas três tiles deixavam um buraco de um quarto da
+     largura. No celular, viram uma coluna sem media query. */
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 0;
   margin-bottom: 28px;
   border: 1px solid var(--line);
