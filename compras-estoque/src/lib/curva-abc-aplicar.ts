@@ -1,0 +1,132 @@
+// Trocar a classificação ABC gravada pela recalculada — e dizer o que muda
+// ANTES de mudar.
+//
+// POR QUE EXISTE. A curva do painel é recalculada na hora, sobre o mês que
+// está na tela. A da FOLHA DE CONTAGEM é outra coisa: fica gravada em
+// ParametroEstoqueProduto e decide o que a cozinha conta toda semana. A do
+// Beira Lago foi definida uma vez, em 20/10, sobre 01/08–17/10, e desde então
+// não se mexeu — então ela não conhece nada que entrou no cardápio depois.
+// Insumo caro novo simplesmente não é contado, e ninguém é avisado.
+//
+// A JANELA É DE 3 MESES, e a escolha tem razão:
+//
+//   - um mês só dança: um evento grande joga vinho para dentro da curva A e
+//     tira proteína, e a folha muda de cara toda semana. Lista que dança é
+//     lista em que a cozinha não confia, e desconfiança vira contagem
+//     apressada.
+//   - o acumulado desde sempre fica surdo: daqui a um ano, agosto ainda
+//     estaria pesando no que se conta amanhã.
+//
+// MOSTRA ANTES DE APLICAR. Trocar a folha de contagem muda o trabalho de
+// outra pessoa. Quem decide tem que ver o que entra e o que sai — e
+// principalmente o que SAI, porque item que deixa a curva some da folha sem
+// fazer barulho.
+//
+// Núcleo puro: sem Prisma, sem I/O.
+
+export type ClasseAbc = "A" | "B" | "C";
+
+/** O que está gravado hoje para um produto nesta casa. */
+export type ClassificacaoAtual = {
+  produtoId: string;
+  classeAbc: string | null;
+  grupoContagem: number | null;
+};
+
+/** O que a recalculada diz, para quem teve compra na janela. */
+export type ClassificacaoNova = { produtoId: string; classe: ClasseAbc; valor: number };
+
+export type LinhaDoPlano = {
+  produtoId: string;
+  de: string | null;
+  para: ClasseAbc | null;
+  grupoContagem: number | null;
+  valor: number;
+};
+
+export type PlanoAbc = {
+  /** Tudo que muda de classe. Vazio = a curva já está em dia. */
+  mudancas: LinhaDoPlano[];
+  /** Entra na curva A — passa a ser contado. */
+  entramNaA: LinhaDoPlano[];
+  /** Sai da curva A — deixa de ser contado toda semana. */
+  saemDaA: LinhaDoPlano[];
+  /** Classificado hoje, sem NENHUMA compra na janela. Vira C. */
+  semCompraNaJanela: LinhaDoPlano[];
+  /** Quantos ficam em cada classe depois de aplicar. */
+  resumo: { A: number; B: number; C: number };
+};
+
+/**
+ * Distribui os itens da curva A entre os grupos de rodízio.
+ *
+ * `grupoZero` é a casa que conta a curva A INTEIRA toda semana (o Beira Lago
+ * escolheu assim, para ter CMV semanal — ver src/lib/contagem-rotacao.ts).
+ * Nas outras, A alterna entre os grupos 1 e 2, e B entre 1 e 4.
+ *
+ * Alterna pela POSIÇÃO na ordem de valor, não aleatoriamente: assim os dois
+ * grupos ficam com metade do dinheiro cada, em vez de um grupo levar os dez
+ * itens mais caros e o outro o resto.
+ */
+function grupoDe(classe: ClasseAbc, posicaoNaClasse: number, grupoZero: boolean): number | null {
+  if (classe === "A") return grupoZero ? 0 : (posicaoNaClasse % 2) + 1;
+  if (classe === "B") return (posicaoNaClasse % 4) + 1;
+  return null; // curva C fica fora do rodízio, de propósito
+}
+
+export function planejarCurvaAbcPura(
+  novas: ClassificacaoNova[],
+  atuais: ClassificacaoAtual[],
+  grupoZero: boolean
+): PlanoAbc {
+  const atualPorProduto = new Map(atuais.map((a) => [a.produtoId, a]));
+  const novaPorProduto = new Map(novas.map((n) => [n.produtoId, n]));
+
+  // Ordem por valor para a distribuição de grupos ser estável entre rodadas.
+  const ordenadas = [...novas].sort((a, b) => b.valor - a.valor || a.produtoId.localeCompare(b.produtoId));
+  const posicao: Record<ClasseAbc, number> = { A: 0, B: 0, C: 0 };
+
+  const mudancas: LinhaDoPlano[] = [];
+  const entramNaA: LinhaDoPlano[] = [];
+  const saemDaA: LinhaDoPlano[] = [];
+  const resumo = { A: 0, B: 0, C: 0 };
+
+  for (const n of ordenadas) {
+    const atual = atualPorProduto.get(n.produtoId);
+    const grupo = grupoDe(n.classe, posicao[n.classe]++, grupoZero);
+    resumo[n.classe]++;
+    const linha: LinhaDoPlano = {
+      produtoId: n.produtoId,
+      de: atual?.classeAbc ?? null,
+      para: n.classe,
+      grupoContagem: grupo,
+      valor: n.valor,
+    };
+    if ((atual?.classeAbc ?? null) === n.classe) continue;
+    mudancas.push(linha);
+    if (n.classe === "A") entramNaA.push(linha);
+    if (atual?.classeAbc === "A") saemDaA.push(linha);
+  }
+
+  // Classificado hoje e sem compra nenhuma na janela: a casa parou de comprar.
+  // Vira C — fora do rodízio — e aparece em lista própria, porque sumir da
+  // folha de contagem sem alguém ver é o jeito silencioso de deixar de medir.
+  const semCompraNaJanela: LinhaDoPlano[] = [];
+  for (const a of atuais) {
+    if (novaPorProduto.has(a.produtoId)) continue;
+    if (!a.classeAbc) continue;
+    const linha: LinhaDoPlano = {
+      produtoId: a.produtoId,
+      de: a.classeAbc,
+      para: "C",
+      grupoContagem: null,
+      valor: 0,
+    };
+    semCompraNaJanela.push(linha);
+    mudancas.push(linha);
+    resumo.C++;
+    if (a.classeAbc === "A") saemDaA.push(linha);
+  }
+
+  return { mudancas, entramNaA, saemDaA, semCompraNaJanela, resumo };
+}

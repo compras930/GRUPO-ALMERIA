@@ -111,6 +111,11 @@ export default async function EstoquePage({
           <Link href={`/estoque/perdas${unidadeId ? `?unidadeId=${unidadeId}` : ""}`} className="btn">
             Perdas e baixas
           </Link>
+          {isAdmin && (
+            <Link href={`/estoque/curva-abc${unidadeId ? `?unidadeId=${unidadeId}` : ""}`} className="btn">
+              Curva ABC da contagem
+            </Link>
+          )}
           <Link href={`/estoque/contagem${unidadeId ? `?unidadeId=${unidadeId}` : ""}`} className="btn primary">
             + Registrar contagem
           </Link>
