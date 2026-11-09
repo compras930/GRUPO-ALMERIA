@@ -1,30 +1,39 @@
 import { describe, expect, it } from "vitest";
 import { entraNaSemanaPura, gruposDaSemana, semanaDoMes, GRUPO_TODA_SEMANA } from "@/lib/contagem-rotacao";
 
-describe("rodízio de contagem", () => {
-  it("a curva A aparece duas vezes por mês e a B uma", () => {
-    const itemA1 = { classeAbc: "A", grupoContagem: 1 };
-    const itemB3 = { classeAbc: "B", grupoContagem: 3 };
-    const semanasComA1 = [1, 2, 3, 4].filter((s) => entraNaSemanaPura(itemA1, s as 1 | 2 | 3 | 4));
-    const semanasComB3 = [1, 2, 3, 4].filter((s) => entraNaSemanaPura(itemB3, s as 1 | 2 | 3 | 4));
-    expect(semanasComA1).toEqual([1, 3]);
-    expect(semanasComB3).toEqual([3]);
+const semanasDe = (p: { classeAbc: string | null; grupoContagem: number | null }) =>
+  [1, 2, 3, 4].filter((s) => entraNaSemanaPura(p, s as 1 | 2 | 3 | 4));
+
+describe("rodízio de contagem — regra de 09/11/2026", () => {
+  it("a curva A inteira entra TODA semana", () => {
+    expect(semanasDe({ classeAbc: "A", grupoContagem: GRUPO_TODA_SEMANA })).toEqual([1, 2, 3, 4]);
   });
 
-  it("todo item da curva A e da B cai em alguma semana", () => {
+  it("a curva B cai em duas metades, uma a cada semana", () => {
+    expect(semanasDe({ classeAbc: "B", grupoContagem: 1 })).toEqual([1, 3]);
+    expect(semanasDe({ classeAbc: "B", grupoContagem: 2 })).toEqual([2, 4]);
+  });
+
+  it("A e B são contadas pelo menos duas vezes por mês — é o que a decisão pediu", () => {
+    expect(semanasDe({ classeAbc: "A", grupoContagem: 0 }).length).toBeGreaterThanOrEqual(2);
     for (const grupo of [1, 2]) {
-      const semanas = [1, 2, 3, 4].filter((s) => entraNaSemanaPura({ classeAbc: "A", grupoContagem: grupo }, s as any));
-      expect(semanas.length).toBe(2);
-    }
-    for (const grupo of [1, 2, 3, 4]) {
-      const semanas = [1, 2, 3, 4].filter((s) => entraNaSemanaPura({ classeAbc: "B", grupoContagem: grupo }, s as any));
-      expect(semanas.length).toBe(1);
+      expect(semanasDe({ classeAbc: "B", grupoContagem: grupo }).length).toBeGreaterThanOrEqual(2);
     }
   });
 
   it("curva C e produto sem classe ficam fora do rodízio", () => {
     expect(entraNaSemanaPura({ classeAbc: "C", grupoContagem: 1 }, 1)).toBe(false);
     expect(entraNaSemanaPura({ classeAbc: null, grupoContagem: null }, 1)).toBe(false);
+    // 0 é frequência, não promoção: zerar o grupo sem querer não pode colocar
+    // um item de curva C na folha semanal.
+    expect(semanasDe({ classeAbc: "C", grupoContagem: GRUPO_TODA_SEMANA })).toEqual([]);
+  });
+
+  it("os grupos da semana são os combinados", () => {
+    expect(gruposDaSemana(1)).toEqual({ a: GRUPO_TODA_SEMANA, b: 1 });
+    expect(gruposDaSemana(2)).toEqual({ a: GRUPO_TODA_SEMANA, b: 2 });
+    expect(gruposDaSemana(3)).toEqual({ a: GRUPO_TODA_SEMANA, b: 1 });
+    expect(gruposDaSemana(4)).toEqual({ a: GRUPO_TODA_SEMANA, b: 2 });
   });
 
   it("semana do mês vai de 1 a 4 e o fim do mês não cria uma quinta", () => {
@@ -32,42 +41,27 @@ describe("rodízio de contagem", () => {
     expect(semanaDoMes(new Date("2026-09-07T12:00:00Z"))).toBe(1);
     expect(semanaDoMes(new Date("2026-09-08T12:00:00Z"))).toBe(2);
     expect(semanaDoMes(new Date("2026-09-22T12:00:00Z"))).toBe(4);
-    // Dia 29 em diante cairia na "semana 5": sem o teto, o grupo 4 nunca seria
-    // contado em mês de 31 dias e o grupo 1 seria contado três vezes.
     expect(semanaDoMes(new Date("2026-09-30T12:00:00Z"))).toBe(4);
     expect(semanaDoMes(new Date("2026-08-31T12:00:00Z"))).toBe(4);
   });
-
-  it("os grupos da semana são os combinados", () => {
-    expect(gruposDaSemana(1)).toEqual({ a: 1, b: 1 });
-    expect(gruposDaSemana(3)).toEqual({ a: 1, b: 3 });
-  });
 });
 
-describe("grupo 0 — contagem toda semana", () => {
-  // O Beira Lago quer CMV SEMANAL, e consumo só existe entre duas contagens do
-  // MESMO item. Com o rodízio de dois grupos, um item da curva A fecha período
-  // de quinze em quinze dias — o que dá CMV quinzenal, não semanal.
-  const todasAsSemanas = (p: { classeAbc: string | null; grupoContagem: number | null }) =>
-    [1, 2, 3, 4].filter((s) => entraNaSemanaPura(p, s as 1 | 2 | 3 | 4));
+describe("herança do rodízio antigo — nada pode sumir da folha antes da reaplicação", () => {
+  // Enquanto a curva ABC não for reaplicada em cada casa, o banco ainda tem a
+  // curva A em grupos 1 e 2 e a B em 1 a 4. A folha de HOJE tem que funcionar
+  // com esses valores: a decisão era "pra hoje".
 
-  it("curva A no grupo 0 entra nas quatro semanas", () => {
-    expect(todasAsSemanas({ classeAbc: "A", grupoContagem: GRUPO_TODA_SEMANA })).toEqual([1, 2, 3, 4]);
+  it("curva A gravada em grupo 1 ou 2 já entra toda semana", () => {
+    expect(semanasDe({ classeAbc: "A", grupoContagem: 1 })).toEqual([1, 2, 3, 4]);
+    expect(semanasDe({ classeAbc: "A", grupoContagem: 2 })).toEqual([1, 2, 3, 4]);
   });
 
-  it("curva B no grupo 0 também", () => {
-    expect(todasAsSemanas({ classeAbc: "B", grupoContagem: GRUPO_TODA_SEMANA })).toEqual([1, 2, 3, 4]);
+  it("curva B em grupo 3 ou 4 vira a metade correspondente, em vez de nunca cair", () => {
+    expect(semanasDe({ classeAbc: "B", grupoContagem: 3 })).toEqual([1, 3]);
+    expect(semanasDe({ classeAbc: "B", grupoContagem: 4 })).toEqual([2, 4]);
   });
 
-  it("NÃO muda o rodízio de quem usa 1 e 2 — é o 104 Sul que não pode quebrar", () => {
-    expect(todasAsSemanas({ classeAbc: "A", grupoContagem: 1 })).toEqual([1, 3]);
-    expect(todasAsSemanas({ classeAbc: "A", grupoContagem: 2 })).toEqual([2, 4]);
-    expect(todasAsSemanas({ classeAbc: "B", grupoContagem: 4 })).toEqual([4]);
-  });
-
-  it("grupo 0 na curva C continua fora: 0 é frequência, não promoção", () => {
-    // Senão, zerar o grupo de um item sem querer o colocaria na folha semanal.
-    expect(todasAsSemanas({ classeAbc: "C", grupoContagem: GRUPO_TODA_SEMANA })).toEqual([]);
-    expect(todasAsSemanas({ classeAbc: null, grupoContagem: GRUPO_TODA_SEMANA })).toEqual([]);
+  it("curva B em grupo 0 (Beira Lago) continua entrando toda semana", () => {
+    expect(semanasDe({ classeAbc: "B", grupoContagem: GRUPO_TODA_SEMANA })).toEqual([1, 2, 3, 4]);
   });
 });

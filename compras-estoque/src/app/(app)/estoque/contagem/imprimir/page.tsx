@@ -10,7 +10,6 @@ import {
   semanaDoMes,
   gruposDaSemana,
   entraNaSemanaPura,
-  GRUPO_TODA_SEMANA,
   type Semana,
 } from "@/lib/contagem-rotacao";
 import BotaoImprimir from "@/components/BotaoImprimir";
@@ -85,16 +84,12 @@ export default async function ImprimirContagemPage({
     itens.map((i) => ({ ...i, aviso: avisoDePesagemPura(pesagens.get(i.id), i.unidadeMedida) }))
   );
 
-  // Casa que conta a curva inteira toda semana (grupoContagem = 0) não tem
-  // "grupo da semana" — dizer "curva A grupo 2" na folha dela seria mentira
-  // impressa, e papel circula.
-  const tudoTodaSemana =
-    registros.length > 0 && registros.every((r) => r.grupoContagem === GRUPO_TODA_SEMANA);
+  // A curva A inteira entra toda semana; da B entra uma das duas metades. O
+  // papel circula, então ele diz QUAL metade — quem conta precisa saber o que
+  // tem na mão.
   const descricao = todos
     ? "Contagem inicial — curvas A e B"
-    : tudoTodaSemana
-      ? "Curva A inteira — toda semana"
-      : `Semana ${semana} — curva A grupo ${grupos.a} + curva B grupo ${grupos.b}`;
+    : `Semana ${semana} — curva A inteira + curva B metade ${grupos.b}`;
 
   const hoje = new Date().toLocaleDateString("pt-BR");
 

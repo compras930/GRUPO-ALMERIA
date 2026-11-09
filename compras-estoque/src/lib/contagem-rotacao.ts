@@ -1,15 +1,22 @@
 // Qual bloco de produtos a contagem da semana pega.
 //
-// A ROTAÇÃO, decidida pelo setor de compras em 18/09/2026: curva A em dois
-// grupos, curva B em quatro. A semana conta um grupo de cada — na prática, ~45
-// itens. Cada item da curva A cai de quinze em quinze dias; cada um da B, uma
-// vez por mês.
+// A ROTAÇÃO VIGENTE, decidida pelo setor de compras em 09/11/2026, e agora
+// IGUAL EM TODAS AS CASAS:
 //
-// Frequência seguindo valor é a razão de a curva existir. A curva A do 104 Sul
-// são 55 itens que valem 80% do dinheiro, e doze deles são proteína — que é
-// onde some. Contar de duas em duas semanas dá 26 medições por ano em vez de
-// 12: a diferença entre achar um desvio enquanto ele acontece e achar trinta
-// dias depois, quando ninguém lembra o que houve.
+//   - CURVA A: toda semana, inteira. Nenhum rodízio.
+//   - CURVA B: metade numa semana, a outra metade na seguinte, alternando.
+//     Semanas 1 e 3 contam o grupo 1; semanas 2 e 4, o grupo 2.
+//
+// Assim cada item da curva A fecha período toda semana e cada item da B fecha
+// de quinze em quinze dias — ou seja, a curva A e a B são medidas PELO MENOS
+// DUAS VEZES POR MÊS, que é o que a decisão pediu.
+//
+// POR QUE MUDOU. Antes a curva A caía em dois grupos (quinzenal) e a B em
+// quatro (mensal). Consumo só existe entre duas contagens DO MESMO item: com a
+// A quinzenal, o CMV contado também era quinzenal, e um desvio de proteína
+// aparecia até trinta dias depois, quando ninguém lembra mais o que houve. O
+// Beira Lago já contava a curva A inteira toda semana (o antigo "grupo 0") e
+// sustentou a rotina — foi o que decidiu a régua para as outras casas.
 //
 // A curva C (5% do valor, metade do catálogo) fica de fora do rodízio de
 // propósito. Contar tudo toda semana nunca ia acontecer, e é por isso que
@@ -18,12 +25,25 @@
 export const SEMANAS = [1, 2, 3, 4] as const;
 export type Semana = (typeof SEMANAS)[number];
 
+/**
+ * GRUPO ZERO = TODA SEMANA.
+ *
+ * Convenção no valor que já existe em ParametroEstoqueProduto, em vez de uma
+ * coluna nova (o deploy roda só `prisma generate`, então coluna nova é uma
+ * janela em que a tela cai). Agora é onde a curva A inteira vive, em todas as
+ * casas.
+ */
+export const GRUPO_TODA_SEMANA = 0;
+
+/** Os dois blocos em que a curva B se divide. */
+export const GRUPOS_DA_B = [1, 2] as const;
+
 /** semana -> grupo da curva A, grupo da curva B */
 const GRUPOS: Record<Semana, { a: number; b: number }> = {
-  1: { a: 1, b: 1 },
-  2: { a: 2, b: 2 },
-  3: { a: 1, b: 3 },
-  4: { a: 2, b: 4 },
+  1: { a: GRUPO_TODA_SEMANA, b: 1 },
+  2: { a: GRUPO_TODA_SEMANA, b: 2 },
+  3: { a: GRUPO_TODA_SEMANA, b: 1 },
+  4: { a: GRUPO_TODA_SEMANA, b: 2 },
 };
 
 export function gruposDaSemana(semana: Semana) {
@@ -32,32 +52,24 @@ export function gruposDaSemana(semana: Semana) {
 
 export type ProdutoClassificado = { classeAbc: string | null; grupoContagem: number | null };
 
-/**
- * GRUPO ZERO = TODA SEMANA.
- *
- * O rodízio de dois grupos existe porque contar a curva A inteira toda semana
- * é trabalho que a operação não sustenta — está escrito no topo deste arquivo.
- * Mas isso é verdade para uma casa que quer MEDIR CONSUMO; para uma casa que
- * quer CMV SEMANAL, não serve: consumo só existe entre duas contagens DO MESMO
- * item, e com o rodízio o mesmo item só fecha período de quinze em quinze dias.
- *
- * O Beira Lago escolheu CMV semanal — 112 itens, toda segunda. Em vez de uma
- * coluna nova em Unidade (migração, e o banco teria que mudar antes do código),
- * a frequência vira uma convenção no valor que já existe: `grupoContagem = 0`
- * quer dizer "não faz parte do rodízio, entra sempre".
- *
- * Assim cada casa escolhe a sua: 104 Sul segue com 1 e 2 e conta metade da
- * curva A por semana; Beira Lago usa 0 e conta tudo. Mesma tela, mesma folha,
- * mesmo código.
- */
-export const GRUPO_TODA_SEMANA = 0;
-
 /** O produto entra na contagem desta semana? */
 export function entraNaSemanaPura(p: ProdutoClassificado, semana: Semana): boolean {
-  const { a, b } = GRUPOS[semana];
-  if (p.grupoContagem === GRUPO_TODA_SEMANA && (p.classeAbc === "A" || p.classeAbc === "B")) return true;
-  if (p.classeAbc === "A") return p.grupoContagem === a;
-  if (p.classeAbc === "B") return p.grupoContagem === b;
+  const { b } = GRUPOS[semana];
+  // Curva A: toda semana, qualquer que seja o grupo gravado. Aceitar qualquer
+  // grupo é de propósito: enquanto a curva ABC não for reaplicada, ainda há
+  // casa com A gravada em grupo 1 ou 2, e ela tem que entrar na folha de hoje
+  // em vez de esperar a reaplicação.
+  if (p.classeAbc === "A") return true;
+  if (p.classeAbc === "B") {
+    // Grupo 0 na B é herança do Beira Lago, que contava tudo toda semana.
+    // Continua valendo até a reaplicação dividir a B em duas metades.
+    if (p.grupoContagem === GRUPO_TODA_SEMANA) return true;
+    // Grupo 3 ou 4 é herança do rodízio antigo de quatro grupos: mapeia para a
+    // metade correspondente (3 -> 1, 4 -> 2) para que nenhum item da B suma da
+    // folha na semana seguinte à mudança.
+    const metade = p.grupoContagem === 3 ? 1 : p.grupoContagem === 4 ? 2 : p.grupoContagem;
+    return metade === b;
+  }
   // Sem classe, ou classe C: não entra no rodízio. Continua contável pela tela
   // de produto avulso — o rodízio é a rotina, não a única porta.
   return false;
@@ -68,8 +80,8 @@ export function entraNaSemanaPura(p: ProdutoClassificado, semana: Semana): boole
  * assim por diante; o que sobra do dia 29 em diante cai na semana 4.
  *
  * Semana do MÊS e não semana do ano porque a rotação tem que fechar dentro do
- * mês: cada item da curva B precisa ser contado uma vez por mês, e semana do
- * ano faria a quinta semana de alguns meses repetir o grupo 1 e pular o 4.
+ * mês: cada metade da curva B precisa cair duas vezes no mês, e semana do ano
+ * faria a quinta semana de alguns meses repetir uma metade e pular a outra.
  */
 export function semanaDoMes(d: Date): Semana {
   const n = Math.min(4, Math.ceil(d.getDate() / 7));

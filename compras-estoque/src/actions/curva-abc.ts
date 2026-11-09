@@ -27,8 +27,8 @@ export async function aplicarCurvaAbc(formData: FormData) {
   if (!unidadeId) throw new Error("Informe a casa.");
   const despensaId = await idDaUnidadeFisica(unidadeId);
 
-  const { novas, atuais, grupoZero } = await carregarCurvaDaJanela(despensaId);
-  const plano = planejarCurvaAbcPura(novas, atuais, grupoZero);
+  const { novas, atuais } = await carregarCurvaDaJanela(despensaId);
+  const plano = planejarCurvaAbcPura(novas, atuais);
   if (plano.mudancas.length === 0) return { mudou: 0 };
 
   await comRetentativaDeConflito(() =>

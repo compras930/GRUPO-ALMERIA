@@ -73,9 +73,10 @@ export async function carregarCurvaDaJanela(despensaId: string, hoje = new Date(
       classeAbc: p.classeAbc,
       grupoContagem: p.grupoContagem,
     })),
-    // Como a casa conta hoje. Preservar a convenção dela importa: trocar o
-    // Beira Lago de "toda semana" para rodízio quinzenal, sem ninguém pedir,
-    // mudaria o CMV de semanal para quinzenal — e a casa escolheu semanal.
+    // Se a casa JÁ conta a curva A inteira toda semana. Desde 09/11/2026 essa
+    // é a regra de todas elas (ver src/lib/contagem-rotacao.ts), então isto
+    // não decide mais nada do plano — serve só para a tela dizer se a casa
+    // ainda está no rodízio antigo e precisa aplicar.
     grupoZero: parametros.some((p) => p.classeAbc === "A" && p.grupoContagem === 0),
     de,
     ate,

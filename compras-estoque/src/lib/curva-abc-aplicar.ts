@@ -24,6 +24,8 @@
 //
 // Núcleo puro: sem Prisma, sem I/O.
 
+import { GRUPO_TODA_SEMANA } from "@/lib/contagem-rotacao";
+
 export type ClasseAbc = "A" | "B" | "C";
 
 /** O que está gravado hoje para um produto nesta casa. */
@@ -58,26 +60,24 @@ export type PlanoAbc = {
 };
 
 /**
- * Distribui os itens da curva A entre os grupos de rodízio.
+ * Em que bloco da rotina cada item cai — ver src/lib/contagem-rotacao.ts.
  *
- * `grupoZero` é a casa que conta a curva A INTEIRA toda semana (o Beira Lago
- * escolheu assim, para ter CMV semanal — ver src/lib/contagem-rotacao.ts).
- * Nas outras, A alterna entre os grupos 1 e 2, e B entre 1 e 4.
+ * Curva A inteira TODA SEMANA, em todas as casas: grupo 0. Curva B em duas
+ * metades, grupos 1 e 2, que se alternam a cada semana.
  *
- * Alterna pela POSIÇÃO na ordem de valor, não aleatoriamente: assim os dois
- * grupos ficam com metade do dinheiro cada, em vez de um grupo levar os dez
- * itens mais caros e o outro o resto.
+ * Alterna pela POSIÇÃO na ordem de valor, não aleatoriamente: assim as duas
+ * metades da B ficam com metade do dinheiro cada, em vez de uma levar os dez
+ * itens mais caros e a outra o resto.
  */
-function grupoDe(classe: ClasseAbc, posicaoNaClasse: number, grupoZero: boolean): number | null {
-  if (classe === "A") return grupoZero ? 0 : (posicaoNaClasse % 2) + 1;
-  if (classe === "B") return (posicaoNaClasse % 4) + 1;
+function grupoDe(classe: ClasseAbc, posicaoNaClasse: number): number | null {
+  if (classe === "A") return GRUPO_TODA_SEMANA;
+  if (classe === "B") return (posicaoNaClasse % 2) + 1;
   return null; // curva C fica fora do rodízio, de propósito
 }
 
 export function planejarCurvaAbcPura(
   novas: ClassificacaoNova[],
-  atuais: ClassificacaoAtual[],
-  grupoZero: boolean
+  atuais: ClassificacaoAtual[]
 ): PlanoAbc {
   const atualPorProduto = new Map(atuais.map((a) => [a.produtoId, a]));
   const novaPorProduto = new Map(novas.map((n) => [n.produtoId, n]));
@@ -93,7 +93,7 @@ export function planejarCurvaAbcPura(
 
   for (const n of ordenadas) {
     const atual = atualPorProduto.get(n.produtoId);
-    const grupo = grupoDe(n.classe, posicao[n.classe]++, grupoZero);
+    const grupo = grupoDe(n.classe, posicao[n.classe]++);
     resumo[n.classe]++;
     const linha: LinhaDoPlano = {
       produtoId: n.produtoId,
@@ -102,10 +102,20 @@ export function planejarCurvaAbcPura(
       grupoContagem: grupo,
       valor: n.valor,
     };
-    if ((atual?.classeAbc ?? null) === n.classe) continue;
+    // MUDANÇA DE GRUPO TAMBÉM É MUDANÇA.
+    //
+    // Antes a comparação olhava só a classe, e por isso a troca de rotação de
+    // 09/11 não teria efeito nenhum: a curva A continuava A, a B continuava B,
+    // nada entrava em `mudancas`, e os grupos gravados (A em 1 e 2, B em 1 a 4)
+    // ficariam intactos — a tela diria "a curva gravada já é a da janela" e a
+    // folha continuaria com o rodízio velho.
+    if ((atual?.classeAbc ?? null) === n.classe && (atual?.grupoContagem ?? null) === grupo) continue;
     mudancas.push(linha);
-    if (n.classe === "A") entramNaA.push(linha);
-    if (atual?.classeAbc === "A") saemDaA.push(linha);
+    // As duas listas falam de CLASSE, não de grupo: item que já era A e só
+    // mudou de bloco de contagem não "entra" nem "sai" da curva A, e listá-lo
+    // nas duas assustaria quem decide sem motivo.
+    if (n.classe === "A" && atual?.classeAbc !== "A") entramNaA.push(linha);
+    if (atual?.classeAbc === "A" && n.classe !== "A") saemDaA.push(linha);
   }
 
   // Classificado hoje e sem compra nenhuma na janela: a casa parou de comprar.

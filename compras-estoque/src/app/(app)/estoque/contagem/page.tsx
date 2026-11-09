@@ -8,7 +8,6 @@ import {
   semanaDoMes,
   gruposDaSemana,
   entraNaSemanaPura,
-  GRUPO_TODA_SEMANA,
   type Semana,
 } from "@/lib/contagem-rotacao";
 import ContagemForm from "@/components/ContagemForm";
@@ -159,9 +158,7 @@ export default async function ContagemPage({
           <p className="eyebrow" style={{ margin: 0 }}>
             {todos
               ? `Contagem inicial · curvas A e B · ${itensDaSemana.length} itens`
-              : doRodizio.length > 0 && doRodizio.every((p) => p.grupoContagem === GRUPO_TODA_SEMANA)
-                ? `Curva A inteira · toda semana · ${itensDaSemana.length} itens`
-                : `Semana ${semana} · curva A grupo ${grupos.a} + curva B grupo ${grupos.b} · ${itensDaSemana.length} itens`}
+              : `Semana ${semana} · curva A inteira + curva B metade ${grupos.b} · ${itensDaSemana.length} itens`}
           </p>
           <ContagemLoteForm
             unidadeId={unidadeId}

@@ -36,7 +36,7 @@ export default async function CurvaAbcPage({
   const despensaId = await idDaUnidadeFisica(escolhida);
 
   const janela = await carregarCurvaDaJanela(despensaId);
-  const plano = planejarCurvaAbcPura(janela.novas, janela.atuais, janela.grupoZero);
+  const plano = planejarCurvaAbcPura(janela.novas, janela.atuais);
 
   const ids = [
     ...new Set([...plano.entramNaA, ...plano.saemDaA].map((l) => l.produtoId)),
@@ -110,17 +110,13 @@ export default async function CurvaAbcPage({
               Grava a classificação recalculada em {plano.mudancas.length}{" "}
               {plano.mudancas.length === 1 ? "produto" : "produtos"}. A folha da próxima contagem já sai
               com a lista nova.{" "}
-              {janela.grupoZero ? (
-                <>
-                  Esta casa conta a curva A <strong>inteira toda semana</strong>, e a aplicação mantém
-                  isso.
-                </>
-              ) : (
-                <>
-                  Esta casa usa <strong>rodízio</strong>: a curva A entra alternada nos grupos 1 e 2, a
-                  B em quatro grupos.
-                </>
-              )}
+              A rotina vigente vale para todas as casas: curva A{" "}
+              <strong>inteira toda semana</strong> e curva B em{" "}
+              <strong>duas metades</strong>, que se alternam (semanas 1 e 3 contam a metade 1;
+              semanas 2 e 4, a metade 2).{" "}
+              {janela.grupoZero
+                ? "Esta casa já contava a curva A toda semana."
+                : "Esta casa ainda está com o rodízio antigo gravado — aplicar é o que a passa para a rotina nova."}
             </p>
             <AplicarCurvaForm unidadeId={escolhida} quantas={plano.mudancas.length} />
           </div>
