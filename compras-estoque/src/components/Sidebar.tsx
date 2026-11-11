@@ -56,6 +56,8 @@ const NAV: GrupoNav[] = [
       // Derivado do helper, não repetido à mão: a regra de quem vê pedido mora
       // em um lugar só, e o menu segue ela.
       { href: "/pedidos", label: "Pedidos de compra", papeis: PAPEIS.filter(podeVerPedidos) },
+      // A tela de quem compra: junta as casas e entrega a mensagem pronta.
+      { href: "/pedidos/separar", label: "Separar por fornecedor", papeis: ["ADMIN"] },
     ],
   },
   {

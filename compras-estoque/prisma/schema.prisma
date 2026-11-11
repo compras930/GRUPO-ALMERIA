@@ -27,6 +27,11 @@ model Unidade {
   /// fatura por casa, então a mensagem tem que dizer qual é.
   cnpj String?
 
+  /// O nome com que o fornecedor conhece a casa ("Casa Almeria Noroeste"). No
+  /// app ela é "Noroeste" — curto, bom para menu e seletor; na mensagem, o
+  /// nome curto seria ambíguo. São dois públicos, e dois nomes.
+  nomeFiscal String?
+
   // Quando duas "casas" são a MESMA unidade física — Noroeste e Matri: cardápio
   // próprio e caixa próprio, mas uma cozinha, uma despensa, uma compra — a casa
   // que não guarda estoque aponta pra que guarda.

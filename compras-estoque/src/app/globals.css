@@ -1330,3 +1330,19 @@ tr.linha-pedida td {
   background: var(--paper);
   font-weight: 500;
 }
+
+/* A mensagem pronta do fornecedor. Monoespaçada e com a quebra preservada
+   porque ela vai ser COPIADA para o WhatsApp: o que se vê aqui tem que ser
+   exatamente o que chega lá. */
+.mensagem-fornecedor {
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 14px;
+  margin: 10px 0 0;
+  overflow-x: auto;
+}
