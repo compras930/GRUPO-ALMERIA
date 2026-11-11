@@ -14,6 +14,18 @@ O VOCABULÁRIO É O DO PAINEL ("Insumo de cozinha", "Bebida", "Revenda emporio"�
 e não uma tradução para os nomes antigos. Dois vocabulários para a mesma coisa
 é como o CMV do Wine Garden virou 1,0% em novembro: cada lado conhecia metade.
 
+CASA PELA LINHA DE COMPRA, não por CodigoCompraProduto. A primeira versão
+usava aquela tabela e atualizou 14 produtos de 1.079: ela só guarda os códigos
+que precisaram de CONVERSÃO de unidade, não todos os que a casa compra. O
+código de verdade está em ItemNotaCompra — no `codigoBruto` e, nas cargas
+antigas que não o preenchiam, no quarto campo de `chaveOrigem`
+(unidade|data|NF|codigoProduto|seq).
+
+SÓ AS TRÊS CASAS DO TEKNISA. O Beira Lago vem do XMenu, que tem espaço de
+código independente: nada garante que "1042" de um não seja "1042" do outro.
+Restringir pela casa é mais barato que depender de `origemBruta`, que está no
+schema mas pode não estar no banco.
+
 AGRUPA POR CATEGORIA em vez de uma linha por produto: sete UPDATEs com lista de
 código cabem em ~16 KB, e o console do Neon trunca script grande sem avisar.
 
@@ -67,12 +79,17 @@ for categoria in sorted(por_categoria):
     print(f"-- {categoria}: {len(codigos)} códigos")
     print('UPDATE "Produto" p')
     print(f"   SET categoria = '{categoria}'")
-    print('  FROM "CodigoCompraProduto" c')
-    print(' WHERE c."produtoId" = p.id')
-    print("   AND c.origem = 'TEKNISA'")
-    print(f"   AND c.codigo IN ({lista})")
-    print("   AND coalesce(p.categoria, '') IS DISTINCT FROM "
-          f"'{categoria}';")
+    print(f" WHERE coalesce(p.categoria, '') IS DISTINCT FROM '{categoria}'")
+    print("   AND p.id IN (")
+    print('     SELECT i."produtoId"')
+    print('       FROM "ItemNotaCompra" i')
+    print('       JOIN "NotaCompra" n ON n.id = i."notaCompraId"')
+    print('       JOIN "Unidade"    u ON u.id = n."unidadeId"')
+    print('      WHERE i."produtoId" IS NOT NULL')
+    print("        AND u.nome IN ('104 Sul', 'Noroeste', 'Wine Garden')")
+    print("        AND coalesce(i.\"codigoBruto\", split_part(coalesce(i.\"chaveOrigem\", ''), '|', 4))")
+    print(f"            IN ({lista})")
+    print("   );")
     print()
 
 print("-- Conferência: quanto sobrou sem categoria, por casa, nos últimos 3 meses.")
