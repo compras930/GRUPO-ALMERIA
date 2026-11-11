@@ -20,7 +20,8 @@ baixado duas vezes.
 Consequência prática: **não dá para reenviar a semana corrente várias vezes por
 dia**. A segunda rodada do dia bate em 409 e não entra.
 
-O jeito certo de ter número diário, sem tocar na trava:
+O jeito certo de ter número diário, sem tocar na trava (e, para o dia de hoje,
+usando o modo de substituição logo abaixo):
 
 - **Venda: uma carga por DIA FECHADO.** `periodoInicio = periodoFim = o dia`.
   Dias são períodos disjuntos, então cada um entra uma vez e nenhum conflita com
@@ -33,14 +34,39 @@ O jeito certo de ter número diário, sem tocar na trava:
 Com isso o painel fica: **compra de hoje até a última rodada** e **venda fechada
 até ontem**. É o máximo honesto sem mudar o app.
 
-### Se vocês quiserem a venda PARCIAL do dia de hoje
+### Venda PARCIAL do dia de hoje — já dá, com `substituir: true`
 
-Dá para fazer, mas exige uma mudança no app (um modo `substituir` que apaga a
-carga do dia e reverte as baixas de estoque antes de recarregar). Eu consigo
-fazer, mas é a parte perigosa do sistema — é exatamente onde um erro soma venda
-ou estoque duas vezes em silêncio. **Me diga se vocês querem**, e eu faço com
-teste de rollback antes. Vale lembrar que CMV calculado com meio dia de venda e
-um dia inteiro de compra não significa nada — o parcial serve para faturamento,
+O app ganhou um modo de substituição. Mandando
+
+```json
+{ "unidade": "...", "periodoInicio": "2026-11-11", "periodoFim": "2026-11-11",
+  "substituir": true, "itens": [ ... ] }
+```
+
+a rota **apaga a carga daquele período exato** — devolvendo ao estoque
+exatamente o que ela tinha baixado, apagando os movimentos e o rascunho de
+pedido que ela gerou — e grava a nova no lugar. O resultado vem no campo
+`substituicao` da resposta, dizendo quantas linhas e movimentos foram
+revertidos.
+
+Assim o mesmo dia pode ser reenviado de hora em hora: o saldo fica como se o
+dia tivesse sido carregado **uma vez só**, com o último número.
+
+Três coisas para você saber ao montar o workflow:
+
+1. **`substituir` é opt-in e nunca deve ser o padrão.** Sem ele, a trava de
+   período continua valendo — que é o que protege a carga histórica.
+2. **O período tem que bater exato.** Mandar a semana com `substituir: true`
+   por cima de cargas diárias devolve **409** dizendo quantas cargas seriam
+   apagadas. Isso é proposital: apagar a semana para gravar um dia perderia
+   seis dias de venda.
+3. **Depois da contagem, a substituição é recusada** (409 também). A contagem
+   sobrescreve o saldo; devolver o consumo de uma carga que a contagem já
+   liquidou inflaria o estoque. Na prática: o dia de ontem pode ser
+   substituído até a contagem da casa acontecer, não depois.
+
+Vale lembrar, para o painel: CMV calculado com meio dia de venda e um dia
+inteiro de compra não significa nada. O parcial serve para **faturamento**,
 não para CMV.
 
 ## O que eu preciso saber de você
@@ -70,9 +96,14 @@ não para CMV.
 
 ## O que fazer, se as respostas acima permitirem
 
-- **Venda:** um workflow diário, 06h, `periodoInicio = periodoFim = ontem`, uma
-  chamada por casa (Beira Lago, 104 Sul, Noroeste, Wine Garden). Resposta 409
-  significa "esse dia já entrou" — trate como sucesso silencioso, não como erro.
+- **Venda, dia fechado:** um workflow diário, 06h, `periodoInicio = periodoFim
+  = ontem`, uma chamada por casa (Beira Lago, 104 Sul, Noroeste, Wine Garden),
+  **sem** `substituir`. Resposta 409 significa "esse dia já entrou" — trate
+  como sucesso silencioso, não como erro.
+- **Venda, dia corrente (opcional):** se quiserem o faturamento do dia se
+  atualizando, um segundo workflow com `periodoInicio = periodoFim = hoje` e
+  `"substituir": true`, nas mesmas rodadas da compra. Um 409 aqui é recusa de
+  verdade (período que não bate, ou contagem já feita) — me mande a mensagem.
 - **Compra:** o "Atualiza tudo" passa a rodar 3× ao dia. Nada muda no payload.
 - **Em cima de qualquer 4xx que não seja 409**, me avise com o corpo da resposta:
   o app devolve mensagem em português dizendo o que recusou e por quê.

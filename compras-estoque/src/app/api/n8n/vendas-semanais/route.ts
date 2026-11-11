@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { verificarTokenN8n, respostaNaoAutorizada } from "@/lib/n8n-auth";
 import { N8N_SERVICE_USER_EMAIL } from "@/lib/constants";
 import { processarVendaSemanal, VendaSemanalDuplicadaError, type ItemVendaSemanalInput } from "@/lib/venda-semanal";
+import { removerCargaDeVenda, SubstituicaoRecusadaError } from "@/lib/venda-substituir";
 
 // A carga real é grande: a planilha semanal do Teknisa chega com ~2200 linhas
 // de nota, que viram ~440 por casa. O $transaction aqui tolera 60s, mas a
@@ -14,7 +15,21 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   if (!verificarTokenN8n(request)) return respostaNaoAutorizada();
 
-  let body: { unidade?: string; periodoInicio?: string; periodoFim?: string; itens?: ItemVendaSemanalInput[] };
+  let body: {
+    unidade?: string;
+    periodoInicio?: string;
+    periodoFim?: string;
+    itens?: ItemVendaSemanalInput[];
+    // `substituir: true` é o modo da carga DIÁRIA: o mesmo dia é reenviado
+    // várias vezes porque ele ainda está aberto. Apaga a carga daquele
+    // período exato — e só dele — antes de gravar. Ver
+    // src/lib/venda-substituir.ts, que recusa quando o período não bate ou
+    // quando houve contagem depois.
+    //
+    // OPT-IN, nunca o padrão: a trava de período é o que impede somar a mesma
+    // venda duas vezes, e quem pede para passar por cima dela tem que dizer.
+    substituir?: boolean;
+  };
   try {
     body = await request.json();
   } catch {
@@ -58,10 +73,19 @@ export async function POST(request: Request) {
   }
 
   try {
+    const substituicao = body.substituir
+      ? await removerCargaDeVenda(unidade, periodoInicio, periodoFim)
+      : null;
     const resultado = await processarVendaSemanal(unidade, periodoInicio, periodoFim, itens, servico.id);
     revalidarTelasDaCarga();
-    return Response.json(resultado);
+    return Response.json({ ...resultado, substituicao });
   } catch (e: any) {
+    // 409 também aqui: a substituição foi recusada porque o que está gravado
+    // não é o que este envio traz. É a mesma família de erro — "este período
+    // conflita com algo que já existe" — e o n8n já sabe tratar 409.
+    if (e instanceof SubstituicaoRecusadaError) {
+      return Response.json({ erro: e.message }, { status: 409 });
+    }
     if (e instanceof VendaSemanalDuplicadaError) {
       return Response.json({ erro: e.message }, { status: 409 });
     }
