@@ -28,14 +28,19 @@ export default function PedidoDaListaForm({
   diretriz: DiretrizDoPedido;
 }) {
   const [qtd, setQtd] = useState<Record<string, string>>({});
+  // Itens fora da lista: produto novo para teste, pedido do chef. Começa
+  // fechado — é a exceção, e aberto empurraria a lista para baixo toda vez.
+  const [fora, setFora] = useState<{ nome: string; unidade: string; quantidade: string }[]>([]);
   const [motivo, setMotivo] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
 
   const extra = diretriz.tipo === "EXTRA";
   const preenchidos = useMemo(
-    () => Object.entries(qtd).filter(([, v]) => Number(v) > 0).length,
-    [qtd]
+    () =>
+      Object.entries(qtd).filter(([, v]) => Number(v) > 0).length +
+      fora.filter((f) => f.nome.trim() && Number(f.quantidade) > 0).length,
+    [qtd, fora]
   );
   const termo = busca.trim().toLowerCase();
 
@@ -44,11 +49,15 @@ export default function PedidoDaListaForm({
     const itens = Object.entries(qtd)
       .map(([listaItemId, v]) => ({ listaItemId, quantidade: Number(v) }))
       .filter((i) => i.quantidade > 0);
-    if (itens.length === 0) {
+    const extras = fora
+      .filter((f) => f.nome.trim() && Number(f.quantidade) > 0)
+      .map((f) => ({ nome: f.nome.trim(), unidade: f.unidade.trim(), quantidade: Number(f.quantidade) }));
+    if (itens.length === 0 && extras.length === 0) {
       setErro("Preencha a quantidade de pelo menos um item.");
       return;
     }
     formData.set("itens", JSON.stringify(itens));
+    formData.set("foraDaLista", JSON.stringify(extras));
     try {
       const r = await criarPedidoDaLista(formData);
       if (r?.erro) {
@@ -161,6 +170,87 @@ export default function PedidoDaListaForm({
           </div>
         );
       })}
+
+      {/* FORA DA LISTA — produto novo, teste, pedido do chef.
+          Fica no fim porque é a exceção; no topo, empurraria a lista para
+          baixo toda semana para um caso que acontece de vez em quando. */}
+      <div style={{ marginTop: 28 }}>
+        <p className="eyebrow" style={{ marginBottom: 6 }}>
+          Fora da lista {fora.length > 0 ? `· ${fora.length}` : ""}
+        </p>
+        <p className="hint" style={{ marginBottom: 10 }}>
+          Produto novo, teste, pedido do chef — o que ainda não está na lista da casa. Escreva o nome
+          como você falaria com o fornecedor. Quem compra decide de quem vem, e se o item vira
+          rotina, ele entra na lista depois.
+        </p>
+        {fora.length > 0 && (
+          <table style={{ marginBottom: 10 }}>
+            <thead>
+              <tr>
+                <th>Produto</th>
+                <th style={{ width: 110 }}>Unidade</th>
+                <th className="num" style={{ width: 120 }}>Quantidade</th>
+                <th style={{ width: 90 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {fora.map((f, idx) => (
+                <tr key={idx}>
+                  <td>
+                    <input
+                      value={f.nome}
+                      placeholder="ex.: BURRATA DEFUMADA 250G"
+                      style={{ width: "100%" }}
+                      onChange={(e) =>
+                        setFora((p) => p.map((x, i) => (i === idx ? { ...x, nome: e.target.value } : x)))
+                      }
+                    />
+                  </td>
+                  <td>
+                    <input
+                      value={f.unidade}
+                      placeholder="KG, UND…"
+                      style={{ width: "100%" }}
+                      onChange={(e) =>
+                        setFora((p) => p.map((x, i) => (i === idx ? { ...x, unidade: e.target.value } : x)))
+                      }
+                    />
+                  </td>
+                  <td className="num">
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      inputMode="decimal"
+                      style={{ width: 100, textAlign: "right" }}
+                      value={f.quantidade}
+                      onChange={(e) =>
+                        setFora((p) => p.map((x, i) => (i === idx ? { ...x, quantidade: e.target.value } : x)))
+                      }
+                    />
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="btn small danger"
+                      onClick={() => setFora((p) => p.filter((_, i) => i !== idx))}
+                    >
+                      Remover
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <button
+          type="button"
+          className="btn small"
+          onClick={() => setFora((p) => [...p, { nome: "", unidade: "", quantidade: "" }])}
+        >
+          + Item fora da lista
+        </button>
+      </div>
 
       {erro && <p className="error-msg" style={{ marginTop: 16 }}>{erro}</p>}
 

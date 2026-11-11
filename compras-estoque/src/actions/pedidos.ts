@@ -196,14 +196,30 @@ export async function criarPedidoDaLista(formData: FormData): Promise<Recusa | v
   }
 
   let pedidos: { listaItemId: string; quantidade: number }[];
+  // ITENS FORA DA LISTA: produto novo para teste, pedido do chef, a coisa que
+  // ninguém comprava até esta semana. Eles entram como texto livre, com
+  // unidade, e sem fornecedor — quem compra decide isso na separação.
+  //
+  // NÃO ENTRAM NA LISTA AUTOMATICAMENTE. Teste que não virou rotina viraria
+  // lixo permanente na folha de 250 linhas de todo mundo. Quem decide que o
+  // item veio para ficar é quem compra, pela tela da lista.
+  let fora: { nome: string; unidade: string; quantidade: number }[];
   try {
     pedidos = JSON.parse(String(formData.get("itens") || "[]"));
+    fora = JSON.parse(String(formData.get("foraDaLista") || "[]"));
   } catch {
     return { erro: "Itens inválidos." };
   }
   pedidos = pedidos.filter((i) => i.listaItemId && i.quantidade > 0);
-  if (pedidos.length === 0) {
+  fora = fora
+    .map((i) => ({ ...i, nome: String(i.nome ?? "").trim(), unidade: String(i.unidade ?? "").trim() }))
+    .filter((i) => i.nome && i.quantidade > 0);
+  if (pedidos.length === 0 && fora.length === 0) {
     return { erro: "Preencha a quantidade de pelo menos um item." };
+  }
+  const semUnidade = fora.find((i) => !i.unidade);
+  if (semUnidade) {
+    return { erro: `Diga a unidade de "${semUnidade.nome}" — KG, UND, CX…` };
   }
 
   // Relê a lista do banco em vez de confiar no que veio da tela: o nome e a
@@ -226,6 +242,16 @@ export async function criarPedidoDaLista(formData: FormData): Promise<Recusa | v
       precoUnitEsperado: 0,
     }];
   });
+  for (const f of fora) {
+    itens.push({
+      produtoId: null,
+      nomeBruto: f.nome,
+      unidadeBruta: f.unidade.toUpperCase(),
+      fornecedorId: null,
+      quantidade: f.quantidade,
+      precoUnitEsperado: 0,
+    });
+  }
   if (itens.length === 0) return { erro: "Nenhum item da lista desta casa foi reconhecido." };
 
   const motivo = String(formData.get("motivoExtra") || "").trim();

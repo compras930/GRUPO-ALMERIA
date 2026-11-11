@@ -43,6 +43,8 @@ const NAV: GrupoNav[] = [
       { href: "/estoque/contagem", label: "Contagem da semana" },
       { href: "/estoque/perdas", label: "Perdas e baixas" },
       { href: "/estoque/consumo", label: "Consumo" },
+      // O CMV que sai da prateleira — é o que a contagem semanal produz.
+      { href: "/estoque/cmv-semanal", label: "CMV semanal" },
       { href: "/estoque/conciliacao", label: "Conferência da contagem", papeis: ["ADMIN"] },
       // Fica logo abaixo da contagem porque é a tela que decide O QUE a
       // contagem traz. Sem link no menu ela só existia para quem soubesse a
