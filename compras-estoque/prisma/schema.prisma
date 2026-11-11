@@ -23,6 +23,10 @@ model Unidade {
   metaCmvBebidas Float?
   metaCmvVinhos  Float?
 
+  /// CNPJ da casa, como vai na mensagem do pedido ao fornecedor. O fornecedor
+  /// fatura por casa, então a mensagem tem que dizer qual é.
+  cnpj String?
+
   // Quando duas "casas" são a MESMA unidade física — Noroeste e Matri: cardápio
   // próprio e caixa próprio, mas uma cozinha, uma despensa, uma compra — a casa
   // que não guarda estoque aponta pra que guarda.
@@ -50,6 +54,7 @@ model Unidade {
   notasCompra       NotaCompra[]
   vendasSemanais    VendaSemanal[]
   parametrosEstoque ParametroEstoqueProduto[]
+  listaDePedido     ListaPedidoItem[]
 }
 
 // Papel: "ADMIN" | "APROVADOR" | "SOLICITANTE" | "RECEBEDOR"
@@ -84,7 +89,9 @@ model Fornecedor {
   ativo    Boolean  @default(true)
   criadoEm DateTime @default(now())
 
-  pedidos PedidoCompra[]
+  pedidos          PedidoCompra[]
+  itensPedido      ItemPedido[]
+  itensDaLista     ListaPedidoItem[]
 }
 
 model Produto {
@@ -134,6 +141,7 @@ model Produto {
   parametrosEstoque ParametroEstoqueProduto[]
   conversoesCompra  ConversaoUnidadeCompra[]
   codigosCompra     CodigoCompraProduto[]
+  naListaDePedido   ListaPedidoItem[]
 
   // Atenção: esta constraint é case-sensitive (texto em Postgres compara byte a
   // byte), então ela NÃO impede "BURRATA" e "Burrata" de coexistirem — brecha que
@@ -196,13 +204,73 @@ model ItemPedido {
   pedidoId String
   pedido   PedidoCompra @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
 
-  produtoId String
-  produto   Produto @relation(fields: [produtoId], references: [id])
+  // NULÁVEL desde 11/11/2026, quando o pedido passou a sair da LISTA DA CASA.
+  //
+  // A lista é o vocabulário de quem pede ("QUEIJO MUSSARELA FLEURY (PEÇA)"); o
+  // Produto é o vocabulário da nota, que vem do Teknisa. Os dois vão se
+  // encontrar, mas exigir o encontro ANTES do pedido existir seria travar a
+  // compra da casa até alguém parear 885 nomes — e a casa compra toda semana.
+  produtoId String?
+  produto   Produto? @relation(fields: [produtoId], references: [id])
+
+  // O que o gerente pediu, com as palavras dele. Guardado mesmo quando casou:
+  // é o que vai na mensagem do fornecedor e o que permite parear depois.
+  nomeBruto    String?
+  unidadeBruta String?
+
+  // O fornecedor é POR ITEM, e não só do pedido.
+  //
+  // A planilha de hoje funciona assim: a casa manda a lista inteira, e a
+  // compra divide entre Alimente, hortifrúti, bebidas. Um fornecedor por
+  // pedido obrigaria o gerente a saber de quem vem cada coisa — que é
+  // justamente o trabalho de quem compra, não o dele.
+  fornecedorId String?
+  fornecedor   Fornecedor? @relation(fields: [fornecedorId], references: [id])
 
   quantidade        Float
   precoUnitEsperado Float
 
   itensRecebimento ItemRecebimento[]
+}
+
+/// Lista de compras de uma casa: o que ela costuma pedir, na ordem e com as
+/// palavras da planilha que o gerente já usa.
+///
+/// É CATÁLOGO, NÃO PEDIDO. O gerente abre a lista toda semana e preenche só a
+/// quantidade do que precisa — exatamente como na planilha. O pedido que sai
+/// dali é outra coisa, e guarda a quantidade.
+///
+/// `produtoId` é opcional de propósito: a lista existe e funciona antes de
+/// alguém parear os 885 nomes com o cadastro do Teknisa. Quando o par existir,
+/// o pedido passa a saber preço e estoque do item — e enquanto não existir, a
+/// casa não fica sem comprar.
+model ListaPedidoItem {
+  id        String  @id @default(cuid())
+  unidadeId String
+  unidade   Unidade @relation(fields: [unidadeId], references: [id])
+
+  /// Seção da planilha: "LATICÍNIOS / FRIOS", "PROTEÍNAS"… É por onde quem
+  /// pede anda pela despensa, e por isso é a ordem da tela.
+  secao String
+  nome  String
+  /// Unidade de COMPRA (KG, UND, CX, FD): como o fornecedor vende, que nem
+  /// sempre é como o estoque mede.
+  unidadeCompra String
+  ordem         Int     @default(0)
+  ativo         Boolean @default(true)
+
+  produtoId String?
+  produto   Produto? @relation(fields: [produtoId], references: [id])
+
+  /// Fornecedor de quem este item costuma vir. Preenchido com o tempo, pela
+  /// tela de separação: é o que faz a divisão por fornecedor parar de ser
+  /// trabalho manual toda semana.
+  fornecedorPadraoId String?
+  fornecedorPadrao   Fornecedor? @relation(fields: [fornecedorPadraoId], references: [id])
+
+  criadoEm DateTime @default(now())
+
+  @@unique([unidadeId, nome])
 }
 
 // ---------- Recebimento (conferência) ----------

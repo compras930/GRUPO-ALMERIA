@@ -24,8 +24,8 @@ export default async function NovoRecebimentoPage({ params }: { params: { pedido
 
   const itensPendentes = pedido.itens.map((item) => ({
     itemPedidoId: item.id,
-    produtoNome: item.produto.nome,
-    unidadeMedida: item.produto.unidadeMedida,
+    produtoNome: item.produto?.nome ?? item.nomeBruto ?? "(sem cadastro)",
+    unidadeMedida: item.produto?.unidadeMedida ?? item.unidadeBruta ?? "",
     quantidadePedida: item.quantidade,
     quantidadeJaRecebida: item.itensRecebimento.reduce((s, r) => s + r.quantidadeRecebida, 0),
     precoUnitEsperado: item.precoUnitEsperado,

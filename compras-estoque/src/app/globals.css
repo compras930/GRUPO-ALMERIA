@@ -1297,3 +1297,28 @@ td.num,
 .aviso-diretriz.extra {
   border-left-color: var(--warn);
 }
+
+/* A barra de envio da lista de pedido. Fixa no rodapé porque a lista tem
+   centenas de linhas: um botão só no fim obrigaria a rolar tudo de volta. */
+.barra-envio {
+  position: sticky;
+  bottom: 0;
+  margin-top: 24px;
+  padding: 12px 16px;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  box-shadow: var(--sombra);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+/* Linha com quantidade preenchida: marcada de leve, para a pessoa achar o que
+   já pediu ao rolar de volta, sem transformar a tabela num semáforo. */
+tr.linha-pedida td {
+  background: var(--paper);
+  font-weight: 500;
+}

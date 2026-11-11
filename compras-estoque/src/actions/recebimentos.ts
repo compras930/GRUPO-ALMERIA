@@ -64,20 +64,30 @@ export async function registrarRecebimento(pedidoId: string, formData: FormData)
       const itemPedido = itemPedidoPorId.get(item.itemPedidoId);
       if (!itemPedido) continue;
 
+      // ITEM SEM PRODUTO NÃO MEXE NO SALDO.
+      //
+      // Desde que o pedido pode sair da LISTA DA CASA (11/11/2026), uma linha
+      // pode existir só com o nome que o gerente escreveu, sem par no cadastro.
+      // O recebimento dela fica gravado — é registro de que a mercadoria
+      // chegou —, mas não há produto para creditar: inventar um produto aqui
+      // criaria saldo num cadastro que ninguém olha, e o estoque de verdade
+      // continuaria errado, calado.
+      //
+      // O par é feito na tela de pareamento, e a partir dali o recebimento
+      // volta a mover estoque.
+      const produtoId = itemPedido.produtoId;
+      if (!produtoId) continue;
+
       await tx.estoqueSaldo.upsert({
-        where: { unidadeId_produtoId: { unidadeId: unidadeFisicaId, produtoId: itemPedido.produtoId } },
+        where: { unidadeId_produtoId: { unidadeId: unidadeFisicaId, produtoId } },
         update: { quantidade: { increment: item.quantidadeRecebida } },
-        create: {
-          unidadeId: unidadeFisicaId,
-          produtoId: itemPedido.produtoId,
-          quantidade: item.quantidadeRecebida,
-        },
+        create: { unidadeId: unidadeFisicaId, produtoId, quantidade: item.quantidadeRecebida },
       });
 
       await tx.movimentoEstoque.create({
         data: {
           unidadeId: unidadeFisicaId,
-          produtoId: itemPedido.produtoId,
+          produtoId,
           tipo: "ENTRADA_RECEBIMENTO",
           quantidade: item.quantidadeRecebida,
           referencia: recebimento.id,

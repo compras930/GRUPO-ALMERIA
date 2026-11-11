@@ -89,16 +89,23 @@ export default async function PedidoDetalhePage({ params }: { params: { id: stri
               const divergente = item.itensRecebimento.length > 0 && recebido !== item.quantidade;
               return (
                 <tr key={item.id}>
-                  <td>{item.produto.nome}</td>
+                  {/* O nome do cadastro quando o item casou; o que o gerente
+                      escreveu quando ainda não — a linha nunca fica anônima. */}
+                  <td>
+                    {item.produto?.nome ?? item.nomeBruto ?? "—"}
+                    {!item.produto && item.nomeBruto ? (
+                      <span className="tag warn" style={{ marginLeft: 6 }}>sem cadastro</span>
+                    ) : null}
+                  </td>
                   <td className="num">
-                    {item.quantidade} {item.produto.unidadeMedida}
+                    {item.quantidade} {item.produto?.unidadeMedida ?? item.unidadeBruta ?? ""}
                   </td>
                   <td className="num">
                     {item.itensRecebimento.length === 0 ? (
                       "—"
                     ) : (
                       <span className={divergente ? "tag warn" : "tag ok"}>
-                        {recebido} {item.produto.unidadeMedida}
+                        {recebido} {item.produto?.unidadeMedida ?? item.unidadeBruta ?? ""}
                       </span>
                     )}
                   </td>
@@ -135,7 +142,7 @@ export default async function PedidoDetalhePage({ params }: { params: { id: stri
                     const precoDivergente = it.precoUnitRecebido !== it.itemPedido.precoUnitEsperado;
                     return (
                       <tr key={it.id}>
-                        <td>{it.itemPedido.produto.nome}</td>
+                        <td>{it.itemPedido.produto?.nome ?? it.itemPedido.nomeBruto ?? "—"}</td>
                         <td className="num">{it.quantidadeRecebida}</td>
                         <td className="num">{fmtCurrency(it.precoUnitRecebido)}</td>
                         <td>
@@ -162,14 +169,19 @@ export default async function PedidoDetalhePage({ params }: { params: { id: stri
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
         {podeAprovarEsse && (
           <>
-            <ActionButton action={() => aprovarPedido(pedido.id)} className="btn primary">
+            {/* `.bind`, e não uma arrow: closure criada aqui é uma FUNÇÃO
+                COMUM passada para um Client Component, e o Next recusa isso em
+                produção — a tela inteira do pedido morria com "An error
+                occurred in the Server Components render" para quem aprova.
+                Localmente, em dev, ela passava. */}
+            <ActionButton action={aprovarPedido.bind(null, pedido.id)} className="btn primary">
               Aprovar pedido
             </ActionButton>
             <RejeitarForm pedidoId={pedido.id} />
           </>
         )}
         {podeReceber(user.papel) && pedido.status === "APROVADO" && (
-          <ActionButton action={() => marcarEnviado(pedido.id)} className="btn">
+          <ActionButton action={marcarEnviado.bind(null, pedido.id)} className="btn">
             Marcar como enviado ao fornecedor
           </ActionButton>
         )}
@@ -180,7 +192,7 @@ export default async function PedidoDetalhePage({ params }: { params: { id: stri
         )}
         {podeCancelar && (
           <ActionButton
-            action={() => cancelarPedido(pedido.id)}
+            action={cancelarPedido.bind(null, pedido.id)}
             className="btn danger"
             confirmMsg="Cancelar este pedido de compra?"
           >

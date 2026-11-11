@@ -171,3 +171,85 @@ export async function cancelarPedido(id: string) {
   revalidatePath(`/pedidos/${id}`);
   revalidatePath("/pedidos");
 }
+
+/**
+ * O pedido da semana feito a partir da LISTA DA CASA.
+ *
+ * É o fluxo que substitui a planilha: o gerente desce a lista dele, preenche
+ * só a quantidade do que precisa, e manda. Nada de escolher produto do
+ * cadastro, nada de saber fornecedor — essas duas coisas são trabalho de quem
+ * compra, e pedi-las ao gerente é o que mantinha a planilha viva.
+ *
+ * O FORNECEDOR NÃO É PEDIDO AQUI. Cada item carrega o fornecedor padrão da
+ * lista, quando já existe um; o resto é separado depois, na tela de quem
+ * compra. O pedido nasce sem fornecedor no cabeçalho de propósito: ele é da
+ * CASA, e vai virar várias mensagens, uma por fornecedor.
+ */
+export async function criarPedidoDaLista(formData: FormData): Promise<Recusa | void> {
+  const user = await requireSession();
+  if (!podeCriarPedido(user.papel)) return { erro: "Seu papel não pode criar pedidos." };
+
+  const unidadeId = String(formData.get("unidadeId") || "");
+  const observacao = String(formData.get("observacao") || "").trim() || null;
+  if (!unidadeVisivel(user.papel, user.unidadeId, unidadeId)) {
+    return { erro: "Você não tem acesso a essa casa." };
+  }
+
+  let pedidos: { listaItemId: string; quantidade: number }[];
+  try {
+    pedidos = JSON.parse(String(formData.get("itens") || "[]"));
+  } catch {
+    return { erro: "Itens inválidos." };
+  }
+  pedidos = pedidos.filter((i) => i.listaItemId && i.quantidade > 0);
+  if (pedidos.length === 0) {
+    return { erro: "Preencha a quantidade de pelo menos um item." };
+  }
+
+  // Relê a lista do banco em vez de confiar no que veio da tela: o nome e a
+  // unidade que vão para o fornecedor têm que ser os cadastrados, e não um
+  // texto que podia ter sido alterado no caminho.
+  const daLista = await prisma.listaPedidoItem.findMany({
+    where: { id: { in: pedidos.map((p) => p.listaItemId) }, unidadeId },
+    select: { id: true, nome: true, unidadeCompra: true, produtoId: true, fornecedorPadraoId: true },
+  });
+  const porId = new Map(daLista.map((l) => [l.id, l]));
+  const itens = pedidos.flatMap((p) => {
+    const l = porId.get(p.listaItemId);
+    if (!l) return [];
+    return [{
+      produtoId: l.produtoId,
+      nomeBruto: l.nome,
+      unidadeBruta: l.unidadeCompra,
+      fornecedorId: l.fornecedorPadraoId,
+      quantidade: p.quantidade,
+      precoUnitEsperado: 0,
+    }];
+  });
+  if (itens.length === 0) return { erro: "Nenhum item da lista desta casa foi reconhecido." };
+
+  const motivo = String(formData.get("motivoExtra") || "").trim();
+  const detalhe = String(formData.get("motivoDetalhe") || "").trim();
+  const avaliacao = await avaliarPedidoDaCasa(unidadeId, { motivo, detalhe });
+  if (avaliacao.erro) return { erro: avaliacao.erro };
+
+  const ultimo = await prisma.pedidoCompra.findFirst({ orderBy: { numero: "desc" } });
+  const pedido = await prisma.pedidoCompra.create({
+    data: {
+      numero: (ultimo?.numero ?? 0) + 1,
+      unidadeId,
+      fornecedorId: null,
+      solicitanteId: user.id,
+      observacao,
+      status: "AGUARDANDO_APROVACAO",
+      tipo: avaliacao.tipo,
+      motivoExtra: avaliacao.tipo === "EXTRA" ? motivo : null,
+      motivoDetalhe: avaliacao.tipo === "EXTRA" && detalhe ? detalhe : null,
+      semanaRef: avaliacao.semana.inicio,
+      itens: { create: itens },
+    },
+  });
+
+  revalidatePath("/pedidos");
+  redirect(`/pedidos/${pedido.id}`);
+}
