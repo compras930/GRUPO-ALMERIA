@@ -9,6 +9,7 @@
 // é a mesma, e a tela continua de pé.
 
 import { prisma } from "@/lib/prisma";
+import { casasDaCozinha } from "@/lib/unidade-fisica";
 import {
   avaliarPedidoPura,
   diaEmBrasiliaPura,
@@ -27,6 +28,17 @@ export type PedidoDaSemana = {
   criadoEm: Date;
 };
 
+/**
+ * A SEMANA É DA DESPENSA, NÃO DA CASA.
+ *
+ * Noroeste e Matri são duas casas e uma despensa só — mesma cozinha, mesma
+ * prateleira, mesmo fornecedor. Contar a semana por casa daria a elas DOIS
+ * pedidos normais por semana para um estoque só, e a diretriz ("um por
+ * semana") viraria letra morta justamente onde o gasto é maior.
+ *
+ * Ver src/lib/unidade-fisica.ts. Para as outras três casas isto não muda nada:
+ * cada uma é a própria despensa.
+ */
 export async function pedidosDaSemana(
   unidadeId: string,
   agora = new Date()
@@ -37,16 +49,18 @@ export async function pedidosDaSemana(
   const fim = new Date(`${semana.fim}T03:00:00.000Z`);
   fim.setUTCDate(fim.getUTCDate() + 1);
 
+  const daCozinha = await casasDaCozinha(unidadeId);
+
   try {
     const pedidos = await prisma.pedidoCompra.findMany({
-      where: { unidadeId, semanaRef: semana.inicio, status: { notIn: NAO_CONTAM } },
+      where: { unidadeId: { in: daCozinha }, semanaRef: semana.inicio, status: { notIn: NAO_CONTAM } },
       select: { id: true, numero: true, tipo: true, motivoExtra: true, criadoEm: true },
       orderBy: { numero: "asc" },
     });
     return { hoje, semana, pedidos };
   } catch {
     const antigos = await prisma.pedidoCompra.findMany({
-      where: { unidadeId, criadoEm: { gte: inicio, lt: fim }, status: { notIn: NAO_CONTAM } },
+      where: { unidadeId: { in: daCozinha }, criadoEm: { gte: inicio, lt: fim }, status: { notIn: NAO_CONTAM } },
       select: { id: true, numero: true, criadoEm: true },
       orderBy: { numero: "asc" },
     });
