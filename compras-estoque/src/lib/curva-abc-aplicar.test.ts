@@ -79,6 +79,16 @@ describe("planejarCurvaAbcPura", () => {
     expect(p.mudancas.map((l) => l.produtoId).sort()).toEqual(["parado", "vivo"]);
   });
 
+  it("produto fora do escopo sai da folha e aparece em lista PRÓPRIA", () => {
+    // Travessa classificada em A por ter sido comprada: vira C e some da
+    // folha — mas por outro motivo que "a casa parou de comprar", e quem lê a
+    // tela precisa ver a diferença.
+    const p = planejarCurvaAbcPura([nova("vivo", "A", 10)], [atual("travessa", "A", 0)], new Set(["travessa"]));
+    expect(p.foraDoEscopo.map((l) => l.produtoId)).toEqual(["travessa"]);
+    expect(p.semCompraNaJanela).toHaveLength(0);
+    expect(p.mudancas.map((l) => l.produtoId).sort()).toEqual(["travessa", "vivo"]);
+  });
+
   it("produto sem classe e sem compra não entra em nada", () => {
     const p = planejarCurvaAbcPura([], [atual("nunca", null)]);
     expect(p.mudancas).toHaveLength(0);

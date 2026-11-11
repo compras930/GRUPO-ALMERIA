@@ -55,6 +55,14 @@ export type PlanoAbc = {
   saemDaA: LinhaDoPlano[];
   /** Classificado hoje, sem NENHUMA compra na janela. Vira C. */
   semCompraNaJanela: LinhaDoPlano[];
+  /**
+   * Classificado hoje, mas NÃO é estoque de despensa (ativo imobilizado, taxa,
+   * serviço). Sai da folha — ver src/lib/escopo-contagem.ts.
+   *
+   * Lista própria porque o motivo é outro: "a casa parou de comprar" e "isto
+   * nunca deveria estar aqui" pedem reações diferentes de quem lê.
+   */
+  foraDoEscopo: LinhaDoPlano[];
   /** Quantos ficam em cada classe depois de aplicar. */
   resumo: { A: number; B: number; C: number };
 };
@@ -77,7 +85,9 @@ function grupoDe(classe: ClasseAbc, posicaoNaClasse: number): number | null {
 
 export function planejarCurvaAbcPura(
   novas: ClassificacaoNova[],
-  atuais: ClassificacaoAtual[]
+  atuais: ClassificacaoAtual[],
+  /** Produtos comprados que não são estoque de despensa. */
+  foraDoEscopoIds: ReadonlySet<string> = new Set()
 ): PlanoAbc {
   const atualPorProduto = new Map(atuais.map((a) => [a.produtoId, a]));
   const novaPorProduto = new Map(novas.map((n) => [n.produtoId, n]));
@@ -122,6 +132,7 @@ export function planejarCurvaAbcPura(
   // Vira C — fora do rodízio — e aparece em lista própria, porque sumir da
   // folha de contagem sem alguém ver é o jeito silencioso de deixar de medir.
   const semCompraNaJanela: LinhaDoPlano[] = [];
+  const foraDoEscopo: LinhaDoPlano[] = [];
   for (const a of atuais) {
     if (novaPorProduto.has(a.produtoId)) continue;
     if (!a.classeAbc) continue;
@@ -132,11 +143,12 @@ export function planejarCurvaAbcPura(
       grupoContagem: null,
       valor: 0,
     };
-    semCompraNaJanela.push(linha);
+    if (foraDoEscopoIds.has(a.produtoId)) foraDoEscopo.push(linha);
+    else semCompraNaJanela.push(linha);
     mudancas.push(linha);
     resumo.C++;
     if (a.classeAbc === "A") saemDaA.push(linha);
   }
 
-  return { mudancas, entramNaA, saemDaA, semCompraNaJanela, resumo };
+  return { mudancas, entramNaA, saemDaA, semCompraNaJanela, foraDoEscopo, resumo };
 }

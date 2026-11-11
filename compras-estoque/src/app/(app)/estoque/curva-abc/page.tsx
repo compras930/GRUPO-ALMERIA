@@ -36,10 +36,10 @@ export default async function CurvaAbcPage({
   const despensaId = await idDaUnidadeFisica(escolhida);
 
   const janela = await carregarCurvaDaJanela(despensaId);
-  const plano = planejarCurvaAbcPura(janela.novas, janela.atuais);
+  const plano = planejarCurvaAbcPura(janela.novas, janela.atuais, janela.foraDoEscopo);
 
   const ids = [
-    ...new Set([...plano.entramNaA, ...plano.saemDaA].map((l) => l.produtoId)),
+    ...new Set([...plano.entramNaA, ...plano.saemDaA, ...plano.foraDoEscopo].map((l) => l.produtoId)),
   ];
   const produtos = await prisma.produto.findMany({
     where: { id: { in: ids } },
@@ -154,6 +154,38 @@ export default async function CurvaAbcPage({
                         <td className="num">
                           {l.valor > 0 ? fmtCurrency(l.valor) : "nenhuma compra na janela"}
                         </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {plano.foraDoEscopo.length > 0 && (
+            <div className="card">
+              <h2 style={{ fontSize: 15, marginBottom: 4 }}>Saem da folha — não são estoque de despensa</h2>
+              <p className="hint" style={{ marginBottom: 14 }}>
+                Travessa, enxoval, taxa, serviço, gás. A casa pagou por eles, mas eles não esperam
+                numa prateleira para serem contados — e linha de folha que não dá para contar ensina
+                quem conta a pular linha.
+              </p>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Produto</th>
+                    <th>Categoria</th>
+                    <th>Era</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {plano.foraDoEscopo.map((l) => {
+                    const p = nomeDe.get(l.produtoId);
+                    return (
+                      <tr key={l.produtoId}>
+                        <td>{p?.nome ?? l.produtoId}</td>
+                        <td className="cat">{p?.categoria ?? "—"}</td>
+                        <td className="cat">{l.de}</td>
                       </tr>
                     );
                   })}

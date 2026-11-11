@@ -9,6 +9,7 @@
 import { prisma } from "@/lib/prisma";
 import { ultimosMeses } from "@/lib/mes";
 import { curvaAbcPura } from "@/lib/curva-abc";
+import { ehContavel } from "@/lib/escopo-contagem";
 import type { ClassificacaoAtual, ClassificacaoNova } from "@/lib/curva-abc-aplicar";
 
 export const MESES_DA_JANELA = 3;
@@ -18,6 +19,11 @@ export type CurvaDaJanela = {
   atuais: ClassificacaoAtual[];
   /** A casa conta a curva A inteira toda semana (grupo zero). */
   grupoZero: boolean;
+  /**
+   * Produtos que a casa comprou mas que não são estoque de despensa (ativo
+   * imobilizado, taxas, serviço). Saem da folha — ver src/lib/escopo-contagem.ts.
+   */
+  foraDoEscopo: Set<string>;
   de: Date;
   ate: Date;
   /** Quanto a casa comprou na janela, só do que casou com produto. */
@@ -54,9 +60,18 @@ export async function carregarCurvaDaJanela(despensaId: string, hoje = new Date(
   // existe no cadastro. Ele aparece no painel como cadastro a fazer, que é
   // onde ele pode ser resolvido.
   const porProduto = new Map<string, number>();
+  const foraDoEscopo = new Set<string>();
   let totalComprado = 0;
   for (const l of compras) {
     if (!l.produto) continue;
+    // Travessa, toalha, gás e taxa de maquininha são compra de verdade — e
+    // nada disso espera numa prateleira para ser contado. O valor segue no
+    // total (foi pago), mas o produto não entra na curva.
+    if (!ehContavel(l.produto.categoria)) {
+      foraDoEscopo.add(l.produto.id);
+      totalComprado += l.valorTotal ?? (l.quantidade === null ? 0 : l.quantidade * l.precoUnitNovo);
+      continue;
+    }
     const valor = l.valorTotal ?? (l.quantidade === null ? 0 : l.quantidade * l.precoUnitNovo);
     porProduto.set(l.produto.id, (porProduto.get(l.produto.id) ?? 0) + valor);
     totalComprado += valor;
@@ -78,6 +93,7 @@ export async function carregarCurvaDaJanela(despensaId: string, hoje = new Date(
     // não decide mais nada do plano — serve só para a tela dizer se a casa
     // ainda está no rodízio antigo e precisa aplicar.
     grupoZero: parametros.some((p) => p.classeAbc === "A" && p.grupoContagem === 0),
+    foraDoEscopo,
     de,
     ate,
     totalComprado,
