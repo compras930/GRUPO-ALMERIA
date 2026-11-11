@@ -44,6 +44,11 @@ const NAV: GrupoNav[] = [
       { href: "/estoque/perdas", label: "Perdas e baixas" },
       { href: "/estoque/consumo", label: "Consumo" },
       { href: "/estoque/conciliacao", label: "Conferência da contagem", papeis: ["ADMIN"] },
+      // Fica logo abaixo da contagem porque é a tela que decide O QUE a
+      // contagem traz. Sem link no menu ela só existia para quem soubesse a
+      // URL — e a curva gravada envelhece calada, que é o problema que ela
+      // resolve.
+      { href: "/estoque/curva-abc", label: "Curva ABC da contagem", papeis: ["ADMIN"] },
       { href: "/estoque", label: "Saldos" },
       { href: "/estoque/compras", label: "Compras por período" },
       { href: "/cmv", label: "Fichas técnicas", papeis: ["ADMIN"] },
