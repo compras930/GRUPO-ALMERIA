@@ -6,8 +6,17 @@ export function podeAprovarPedido(papel: Papel) {
   return papel === "ADMIN" || papel === "APROVADOR";
 }
 
+/**
+ * O GERENTE passou a criar pedido em 11/11/2026.
+ *
+ * Quem sabe o que falta na casa é quem está nela: antes o gerente mandava a
+ * lista por mensagem e outra pessoa digitava, o que custava um dia e perdia
+ * item no caminho. Criar não é aprovar — o pedido continua saindo como
+ * AGUARDANDO_APROVACAO, e a diretriz da semana (ver src/lib/regra-de-pedido.ts)
+ * é justamente o que torna seguro abrir a porta.
+ */
 export function podeCriarPedido(papel: Papel) {
-  return papel === "ADMIN" || papel === "SOLICITANTE";
+  return papel === "ADMIN" || papel === "SOLICITANTE" || papel === "GERENTE";
 }
 
 export function podeReceber(papel: Papel) {
@@ -19,13 +28,11 @@ export function podeGerenciarCadastros(papel: Papel) {
 }
 
 /**
- * O GERENTE opera a casa — conta estoque, lança perda, olha consumo — e não
- * participa do fluxo de compra. Esconder os pedidos dele não é segurança (as
- * ações já recusam por papel); é tirar da tela número que não é da conta dele
- * e que ele não tem como resolver.
+ * Todo papel vê pedidos — o gerente agora cria os da própria casa, e a lista
+ * já é escopada por unidade. Esconder a tela dele esconderia o próprio pedido.
  */
-export function podeVerPedidos(papel: Papel) {
-  return papel !== "GERENTE";
+export function podeVerPedidos(_papel: Papel) {
+  return true;
 }
 
 /**

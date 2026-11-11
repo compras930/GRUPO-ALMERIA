@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/session";
 import { podeCriarPedido } from "@/lib/permissions";
 import { STATUS_PEDIDO_LABEL, type StatusPedido } from "@/lib/constants";
+import { MOTIVO_EXTRA_LABEL } from "@/lib/regra-de-pedido";
 
 function tagClasse(status: StatusPedido) {
   if (status === "APROVADO" || status === "ENVIADO" || status === "RECEBIDO_TOTAL") return "ok";
@@ -14,12 +15,36 @@ function tagClasse(status: StatusPedido) {
 export default async function PedidosPage() {
   const user = await requireSession();
 
-  const pedidos = await prisma.pedidoCompra.findMany({
-    where: user.papel === "ADMIN" ? {} : { unidadeId: user.unidadeId ?? "" },
-    orderBy: { numero: "desc" },
-    include: { unidade: true, fornecedor: true, solicitante: true, itens: true },
-    take: 100,
-  });
+  // Select explícito e tolerante: as colunas da diretriz (tipo, motivoExtra)
+  // podem ainda não existir no banco — o deploy não roda migração. Sem o
+  // fallback, a tela de pedidos inteira cairia com P2022 nessa janela.
+  // Ver prisma/scripts/pedidos/1-colunas-da-diretriz.sql.
+  const where = user.papel === "ADMIN" ? {} : { unidadeId: user.unidadeId ?? "" };
+  const campos = {
+    id: true,
+    numero: true,
+    status: true,
+    unidade: { select: { nome: true } },
+    fornecedor: { select: { nome: true } },
+    solicitante: { select: { nome: true } },
+    itens: { select: { id: true } },
+  };
+  let pedidos: any[];
+  try {
+    pedidos = await prisma.pedidoCompra.findMany({
+      where,
+      orderBy: { numero: "desc" },
+      select: { ...campos, tipo: true, motivoExtra: true, motivoDetalhe: true },
+      take: 100,
+    });
+  } catch {
+    pedidos = await prisma.pedidoCompra.findMany({
+      where,
+      orderBy: { numero: "desc" },
+      select: campos,
+      take: 100,
+    });
+  }
 
   return (
     <div>
@@ -45,6 +70,7 @@ export default async function PedidosPage() {
               <th>Unidade</th>
               <th>Fornecedor</th>
               <th>Solicitante</th>
+              <th>Pedido</th>
               <th className="num">Itens</th>
               <th>Status</th>
               <th></th>
@@ -57,6 +83,19 @@ export default async function PedidosPage() {
                 <td>{p.unidade.nome}</td>
                 <td>{p.fornecedor?.nome ?? "—"}</td>
                 <td>{p.solicitante.nome}</td>
+                <td>
+                  {p.tipo === "EXTRA" ? (
+                    <>
+                      <span className="tag warn">extra</span>{" "}
+                      <span className="cat">
+                        {MOTIVO_EXTRA_LABEL[p.motivoExtra ?? ""] ?? "motivo não informado"}
+                        {p.motivoDetalhe ? ` — ${p.motivoDetalhe}` : ""}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="cat">da semana</span>
+                  )}
+                </td>
                 <td className="num">{p.itens.length}</td>
                 <td>
                   <span className={`tag ${tagClasse(p.status as StatusPedido)}`}>

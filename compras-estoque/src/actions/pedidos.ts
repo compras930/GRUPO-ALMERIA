@@ -5,12 +5,24 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/session";
 import { podeAprovarPedido, podeCriarPedido, unidadeVisivel } from "@/lib/permissions";
+import { avaliarPedidoDaCasa } from "@/lib/pedido-semana-db";
 
 type ItemInput = { produtoId: string; quantidade: number; precoUnitEsperado: number };
 
-export async function criarPedido(formData: FormData) {
+/**
+ * RECUSA DEVOLVIDA, NÃO LANÇADA.
+ *
+ * Em produção o Next esconde a mensagem de qualquer erro lançado dentro de uma
+ * server action e entrega "An error occurred in the Server Components render"
+ * — ou seja, o gerente que esqueceu o motivo via um texto de framework no
+ * lugar da regra. Recusa de regra é informação para quem está pedindo, então
+ * ela volta como valor; `throw` fica para o que é bug de verdade.
+ */
+type Recusa = { erro: string };
+
+export async function criarPedido(formData: FormData): Promise<Recusa | void> {
   const user = await requireSession();
-  if (!podeCriarPedido(user.papel)) throw new Error("Seu papel não pode criar pedidos.");
+  if (!podeCriarPedido(user.papel)) return { erro: "Seu papel não pode criar pedidos." };
 
   const unidadeId = String(formData.get("unidadeId") || "");
   const fornecedorId = String(formData.get("fornecedorId") || "");
@@ -18,39 +30,72 @@ export async function criarPedido(formData: FormData) {
   const itensRaw = String(formData.get("itens") || "[]");
 
   if (!unidadeVisivel(user.papel, user.unidadeId, unidadeId)) {
-    throw new Error("Você não tem acesso a essa unidade.");
+    return { erro: "Você não tem acesso a essa unidade." };
   }
-  if (!unidadeId || !fornecedorId) throw new Error("Selecione unidade e fornecedor.");
+  if (!unidadeId || !fornecedorId) return { erro: "Selecione unidade e fornecedor." };
 
   let itens: ItemInput[];
   try {
     itens = JSON.parse(itensRaw);
   } catch {
-    throw new Error("Itens inválidos.");
+    return { erro: "Itens inválidos." };
   }
   itens = itens.filter((i) => i.produtoId && i.quantidade > 0);
-  if (itens.length === 0) throw new Error("Adicione ao menos um item com quantidade.");
+  if (itens.length === 0) return { erro: "Adicione ao menos um item com quantidade." };
+
+  // A DIRETRIZ DE PEDIDOS, decidida no servidor e não na tela.
+  //
+  // O formulário já mostra se este é o pedido da semana ou um extra, mas a
+  // validação não pode morar lá: entre abrir a tela e enviar, outra pessoa da
+  // casa pode ter mandado o pedido da semana — e o campo de motivo nem estaria
+  // na tela de quem enviou. Quem conta é o banco, no momento de gravar.
+  const motivo = String(formData.get("motivoExtra") || "").trim();
+  const detalhe = String(formData.get("motivoDetalhe") || "").trim();
+  const avaliacao = await avaliarPedidoDaCasa(unidadeId, { motivo, detalhe });
+  if (avaliacao.erro) return { erro: avaliacao.erro };
 
   const ultimo = await prisma.pedidoCompra.findFirst({ orderBy: { numero: "desc" } });
   const numero = (ultimo?.numero ?? 0) + 1;
 
-  const pedido = await prisma.pedidoCompra.create({
-    data: {
-      numero,
-      unidadeId,
-      fornecedorId,
-      solicitanteId: user.id,
-      observacao,
-      status: "AGUARDANDO_APROVACAO",
-      itens: {
-        create: itens.map((i) => ({
-          produtoId: i.produtoId,
-          quantidade: i.quantidade,
-          precoUnitEsperado: i.precoUnitEsperado || 0,
-        })),
-      },
+  const base = {
+    numero,
+    unidadeId,
+    fornecedorId,
+    solicitanteId: user.id,
+    observacao,
+    status: "AGUARDANDO_APROVACAO",
+    itens: {
+      create: itens.map((i) => ({
+        produtoId: i.produtoId,
+        quantidade: i.quantidade,
+        precoUnitEsperado: i.precoUnitEsperado || 0,
+      })),
     },
-  });
+  };
+  const daDiretriz = {
+    tipo: avaliacao.tipo,
+    motivoExtra: avaliacao.tipo === "EXTRA" ? motivo : null,
+    motivoDetalhe: avaliacao.tipo === "EXTRA" && detalhe ? detalhe : null,
+    semanaRef: avaliacao.semana.inicio,
+  };
+
+  let pedido;
+  try {
+    pedido = await prisma.pedidoCompra.create({ data: { ...base, ...daDiretriz } });
+  } catch (e: any) {
+    // P2022: as colunas da diretriz ainda não foram aplicadas no banco (o
+    // deploy não roda migração). Melhor um pedido gravado sem a marcação do
+    // que a casa impedida de comprar — ver prisma/scripts/pedidos/.
+    if (e?.code !== "P2022") throw e;
+    pedido = await prisma.pedidoCompra.create({
+      data: {
+        ...base,
+        observacao: [observacao, avaliacao.tipo === "EXTRA" ? `[EXTRA: ${motivo}${detalhe ? ` — ${detalhe}` : ""}]` : null]
+          .filter(Boolean)
+          .join(" ") || null,
+      },
+    });
+  }
 
   revalidatePath("/pedidos");
   redirect(`/pedidos/${pedido.id}`);

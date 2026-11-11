@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { PAPEIS } from "@/lib/constants";
-import { exigeUnidade, unidadeVisivel, podeVerPedidos } from "@/lib/permissions";
+import {
+  exigeUnidade,
+  unidadeVisivel,
+  podeVerPedidos,
+  podeCriarPedido,
+  podeAprovarPedido,
+} from "@/lib/permissions";
 
 describe("exigeUnidade", () => {
   it("dispensa só o ADMIN", () => {
@@ -37,11 +43,19 @@ describe("unidadeVisivel", () => {
   });
 });
 
-describe("podeVerPedidos", () => {
-  it("esconde pedido do gerente e mostra pro resto", () => {
-    expect(podeVerPedidos("GERENTE")).toBe(false);
-    for (const papel of PAPEIS.filter((p) => p !== "GERENTE")) {
+describe("pedidos", () => {
+  it("todo papel vê a tela de pedidos — o gerente agora cria os da própria casa", () => {
+    for (const papel of PAPEIS) {
       expect(podeVerPedidos(papel), papel).toBe(true);
     }
+  });
+
+  it("o gerente cria pedido, mas continua sem aprovar o próprio", () => {
+    expect(podeCriarPedido("GERENTE")).toBe(true);
+    expect(podeAprovarPedido("GERENTE")).toBe(false);
+  });
+
+  it("recebedor não cria pedido", () => {
+    expect(podeCriarPedido("RECEBEDOR")).toBe(false);
   });
 });

@@ -2,8 +2,18 @@
 
 import { useState } from "react";
 import { criarPedido } from "@/actions/pedidos";
+import { MOTIVOS_EXTRA, rotuloCurto } from "@/lib/regra-de-pedido";
 
 type Opcao = { id: string; nome: string };
+
+export type DiretrizDoPedido = {
+  tipo: "NORMAL" | "EXTRA";
+  aviso: string | null;
+  jaFeitos: number;
+  diaPreferido: string;
+  feriado: { dia: string; nome: string } | null;
+  numerosDaSemana: number[];
+};
 type Produto = { id: string; nome: string; unidadeMedida: string };
 
 type Item = { produtoId: string; quantidade: string; precoUnitEsperado: string };
@@ -13,12 +23,16 @@ export default function NovoPedidoForm({
   fornecedores,
   produtos,
   unidadeFixaId,
+  diretriz,
 }: {
   unidades: Opcao[];
   fornecedores: Opcao[];
   produtos: Produto[];
   unidadeFixaId: string | null;
+  diretriz?: DiretrizDoPedido;
 }) {
+  const [motivo, setMotivo] = useState("");
+  const extra = diretriz?.tipo === "EXTRA";
   const [itens, setItens] = useState<Item[]>([{ produtoId: "", quantidade: "", precoUnitEsperado: "" }]);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -49,7 +63,13 @@ export default function NovoPedidoForm({
     }
     formData.set("itens", JSON.stringify(itensValidos));
     try {
-      await criarPedido(formData);
+      // A ação DEVOLVE a recusa de regra (ver src/actions/pedidos.ts): em
+      // produção, erro lançado chega aqui como texto de framework.
+      const r = await criarPedido(formData);
+      if (r?.erro) {
+        setErro(r.erro);
+        return;
+      }
     } catch (e: any) {
       // criarPedido faz redirect() em sucesso — chegar aqui num catch normalmente é erro real,
       // mas o redirect do Next lança uma exceção especial internamente; se for ela, deixa propagar.
@@ -60,6 +80,66 @@ export default function NovoPedidoForm({
 
   return (
     <form action={handleSubmit}>
+      {diretriz && (
+        <div className={`aviso-diretriz${extra ? " extra" : ""}`}>
+          {extra ? (
+            <>
+              <strong>Pedido extra.</strong> Esta casa já fez o pedido desta semana
+              {diretriz.numerosDaSemana.length > 0
+                ? ` (nº ${diretriz.numerosDaSemana.join(", ")})`
+                : ""}
+              . Extra não é proibido — é caro: frete avulso, preço de emergência, alguém parando o
+              serviço para receber. Diga o motivo e siga.
+            </>
+          ) : (
+            <>
+              {/* O aviso já nomeia o dia e o feriado — repetir a frase aqui
+                  dizia a mesma coisa duas vezes na mesma linha. */}
+              <strong>Pedido da semana.</strong>{" "}
+              {diretriz.aviso ??
+                `Hoje é o dia combinado (${rotuloCurto(diretriz.diaPreferido)}${
+                  diretriz.feriado ? `, porque a segunda caiu em ${diretriz.feriado.nome}` : ""
+                }).`}
+            </>
+          )}
+        </div>
+      )}
+
+      {extra && (
+        <div className="field-row">
+          <div className="field-group">
+            <label htmlFor="motivoExtra">Motivo do pedido extra</label>
+            <select
+              id="motivoExtra"
+              name="motivoExtra"
+              required
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+            >
+              <option value="" disabled>
+                Selecione
+              </option>
+              {MOTIVOS_EXTRA.map((m) => (
+                <option key={m.valor} value={m.valor}>
+                  {m.rotulo}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field-group" style={{ flex: 2 }}>
+            <label htmlFor="motivoDetalhe">
+              Detalhe {motivo === "OUTRO" ? "(obrigatório)" : "(opcional)"}
+            </label>
+            <input
+              id="motivoDetalhe"
+              name="motivoDetalhe"
+              placeholder="o que aconteceu, em uma linha"
+              required={motivo === "OUTRO"}
+            />
+          </div>
+        </div>
+      )}
+
       <div className="field-row">
         <div className="field-group">
           <label htmlFor="unidadeId">Unidade</label>

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
-import { criarUsuario, alternarUsuario } from "@/actions/usuarios";
+import { criarUsuario, alternarUsuario, redefinirSenha } from "@/actions/usuarios";
 import { PAPEIS, PAPEL_LABEL } from "@/lib/constants";
 
 export default async function UsuariosPage() {
@@ -90,11 +90,31 @@ export default async function UsuariosPage() {
                 <span className={`tag ${u.ativo ? "ok" : "bad"}`}>{u.ativo ? "Ativo" : "Inativo"}</span>
               </td>
               <td className="num">
-                <form action={alternarUsuario.bind(null, u.id, !u.ativo)}>
-                  <button className="btn small" type="submit">
-                    {u.ativo ? "Desativar" : "Ativar"}
-                  </button>
-                </form>
+                <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                  {/* Senha nova ao lado do usuário, e não numa tela à parte:
+                      na implantação isso é feito em sequência, casa a casa. */}
+                  <form
+                    action={redefinirSenha.bind(null, u.id)}
+                    style={{ display: "flex", gap: 6 }}
+                  >
+                    <input
+                      name="senha"
+                      type="password"
+                      required
+                      minLength={6}
+                      placeholder="nova senha"
+                      style={{ width: 130 }}
+                    />
+                    <button className="btn small" type="submit">
+                      Redefinir
+                    </button>
+                  </form>
+                  <form action={alternarUsuario.bind(null, u.id, !u.ativo)}>
+                    <button className="btn small" type="submit">
+                      {u.ativo ? "Desativar" : "Ativar"}
+                    </button>
+                  </form>
+                </div>
               </td>
             </tr>
           ))}

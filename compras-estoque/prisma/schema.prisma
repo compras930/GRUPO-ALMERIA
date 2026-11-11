@@ -156,6 +156,17 @@ model PedidoCompra {
   numero       Int      @unique // gerado em app code (maior número + 1) ao criar o pedido
   status       String   @default("RASCUNHO")
   observacao   String?
+
+  // A DIRETRIZ DE PEDIDOS — ver src/lib/regra-de-pedido.ts.
+  // tipo: NORMAL (o pedido da semana) ou EXTRA (qualquer um além dele).
+  // motivoExtra só existe no EXTRA, e é o que transforma "pediram de novo" em
+  // número que se conta por causa: falta, erro, perda, esquecimento, evento.
+  // semanaRef é a segunda-feira da semana (AAAA-MM-DD), gravada para que a
+  // contagem por semana não dependa de recalcular fuso em cima de criadoEm.
+  tipo          String  @default("NORMAL")
+  motivoExtra   String?
+  motivoDetalhe String?
+  semanaRef     String?
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
