@@ -699,7 +699,8 @@ td {
 @media print {
   /* Fora tudo que não é a folha: menu lateral, botões, margens do app. */
   .sidebar,
-  .folha-acoes {
+  .folha-acoes,
+  .nao-imprime {
     display: none !important;
   }
   .shell,
@@ -716,6 +717,13 @@ td {
      cada folha é onde some produto na hora de digitar. */
   .folha-tabela tr {
     page-break-inside: avoid;
+  }
+  /* O bloco de um fornecedor tenta não partir entre páginas: a mercadoria
+     chega numa entrega só, e conferir meia lista na folha seguinte é como se
+     perde item. Quando o fornecedor tem itens demais, parte — melhor partir
+     que estourar a página. */
+  .folha-categoria {
+    page-break-after: avoid;
   }
   .folha-tabela thead {
     display: table-header-group;

@@ -185,6 +185,12 @@ export default async function PedidoDetalhePage({ params }: { params: { id: stri
             Marcar como enviado ao fornecedor
           </ActionButton>
         )}
+        {/* A folha de conferência: é o papel que vai para o estoquista bater
+            contra a nota de entrega. Sempre disponível, em qualquer status —
+            quem recebe pode precisar dela depois de o pedido já ter saído. */}
+        <Link href={`/pedidos/${pedido.id}/imprimir`} className="btn" target="_blank">
+          Folha de conferência
+        </Link>
         {podeReceberEsse && (
           <Link href={`/recebimentos/novo/${pedido.id}`} className="btn destaque">
             Registrar recebimento
