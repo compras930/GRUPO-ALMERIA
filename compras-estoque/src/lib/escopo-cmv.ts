@@ -48,6 +48,22 @@ const CATEGORIAS_ENXUTO = [
   "BEBIDAS NAO ALCOOLICAS",
   // comum aos dois
   "VINHOS",
+  // O VOCABULÁRIO DO PAINEL, que passou a ser o do cadastro em 11/11/2026.
+  //
+  // Até então as três casas do Teknisa tinham a maior parte do dinheiro em
+  // produto SEM categoria — R$ 1,1 milhão somando as três, em três meses — e
+  // o enxuto delas enxergava perto de um quinto da compra real. A classificação
+  // veio da Árvore de Produtos do painel (ver
+  // prisma/scripts/codigo-teknisa/), que já é a régua usada lá.
+  //
+  // Os nomes antigos ficam: o Beira Lago continua chegando pelo XMenu com
+  // "MATERIA PRIMA", e produto classificado à mão antes disso também.
+  "INSUMO DE COZINHA",
+  "BEBIDA",
+  // Fora, de propósito, pela mesma régua do painel: "Revenda emporio"
+  // (mercadoria revendida como veio, que tem margem própria), "Embalagem e
+  // descartavel", "Higiene e limpeza", "Refeicao de funcionario" e
+  // "Fora do CMV".
 ];
 
 const chave = (s: string) =>

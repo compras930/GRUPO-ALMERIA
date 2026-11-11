@@ -49,6 +49,19 @@ describe("ehEnxuto", () => {
     }
   });
 
+  it("o vocabulário do painel entra — é o que o cadastro passou a usar", () => {
+    expect(ehEnxuto("Insumo de cozinha")).toBe(true);
+    expect(ehEnxuto("Bebida")).toBe(true);
+  });
+
+  it("revenda, embalagem, higiene e refeição de funcionário ficam fora", () => {
+    // Mesma régua do painel: revenda tem margem própria, e o resto não vira
+    // prato vendido. Eles entram no CMV cheio.
+    for (const c of ["Revenda emporio", "Embalagem e descartavel", "Higiene e limpeza", "Refeicao de funcionario", "Fora do CMV"]) {
+      expect(ehEnxuto(c), c).toBe(false);
+    }
+  });
+
   it("sem categoria NÃO é enxuto", () => {
     // Cadastro faltando não pode entrar calado no número da diretoria.
     expect(ehEnxuto(null)).toBe(false);

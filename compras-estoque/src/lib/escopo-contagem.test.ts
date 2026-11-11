@@ -28,6 +28,18 @@ describe("o que entra na folha de contagem", () => {
     }
   });
 
+  it("o vocabulário do painel também é entendido", () => {
+    expect(ehContavel("Insumo de cozinha")).toBe(true);
+    expect(ehContavel("Bebida")).toBe(true);
+    // Revenda, embalagem, higiene e refeição de funcionário ficam fora do CMV
+    // enxuto, mas estão na prateleira e somem de lá.
+    expect(ehContavel("Revenda emporio")).toBe(true);
+    expect(ehContavel("Embalagem e descartavel")).toBe(true);
+    expect(ehContavel("Refeicao de funcionario")).toBe(true);
+    // Lenha, GLP, cilindro de CO2, travessa.
+    expect(ehContavel("Fora do CMV")).toBe(false);
+  });
+
   it("sem categoria ENTRA: cadastro incompleto não é motivo para parar de medir", () => {
     expect(ehContavel(null)).toBe(true);
     expect(ehContavel("")).toBe(true);

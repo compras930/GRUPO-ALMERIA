@@ -51,6 +51,10 @@ const CATEGORIAS_FORA_DA_CONTAGEM = [
   "MARKETING",
   "MATERIAL DE ESCRITORIO",
   "UNIFORME",
+  // O guarda-chuva do painel para o que não é mercadoria de prateleira. Em
+  // 11/11/2026 eram oito produtos nas três casas do Teknisa: lenha, GLP,
+  // cilindro de CO2, travessas e um copo. Gás não se conta na despensa.
+  "FORA DO CMV",
 ];
 
 const chave = (s: string) =>
