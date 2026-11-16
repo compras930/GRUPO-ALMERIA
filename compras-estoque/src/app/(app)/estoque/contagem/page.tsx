@@ -17,6 +17,11 @@ import { carregarPesagens } from "@/lib/pesagem-db";
 import { avisoDePesagemPura } from "@/lib/pesagem";
 import { carregarContexto } from "@/lib/selecao-db";
 
+// A gravação da folha inteira acontece numa server action desta página, e o
+// prazo da função segue o da rota. Com 214 itens, o padrão da Vercel cortava
+// a transação no meio — ver registrarContagemEmLote.
+export const maxDuration = 60;
+
 export default async function ContagemPage({
   searchParams,
 }: {

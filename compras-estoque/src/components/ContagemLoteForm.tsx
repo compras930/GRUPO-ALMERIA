@@ -34,8 +34,16 @@ export default function ContagemLoteForm({
         setOk(null);
         startTransition(async () => {
           try {
+            // A ação DEVOLVE a recusa em vez de lançar: em produção o Next
+            // esconde a mensagem de erro lançado numa server action, e quem
+            // conta via "An error occurred in the Server Components render"
+            // no lugar do que de fato aconteceu.
             const r = await registrarContagemEmLote(formData);
-            setOk(r.registradas);
+            if (r.erro) {
+              setErro(r.erro);
+              return;
+            }
+            setOk(r.registradas ?? 0);
             router.refresh();
           } catch (e: any) {
             setErro(e?.message || "Não foi possível registrar a contagem.");

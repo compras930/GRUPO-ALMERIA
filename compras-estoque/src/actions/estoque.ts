@@ -21,65 +21,107 @@ import { TIPO_PERDA } from "@/lib/constants";
  * deixaria parte dos produtos com data nova e parte com data velha — e o
  * relatório de consumo entre contagens leria períodos que nunca existiram.
  */
-export async function registrarContagemEmLote(formData: FormData) {
+export async function registrarContagemEmLote(
+  formData: FormData
+): Promise<{ registradas: number; erro?: undefined } | { erro: string; registradas?: undefined }> {
   const user = await requireSession();
   const unidadeId = String(formData.get("unidadeId") || "");
   if (!unidadeVisivel(user.papel, user.unidadeId, unidadeId)) {
-    throw new Error("Você não tem acesso a essa unidade.");
+    return { erro: "Você não tem acesso a essa unidade." };
   }
   const unidadeFisicaId = await idDaUnidadeFisica(unidadeId);
 
-  const contadas: { produtoId: string; quantidade: number }[] = [];
+  // DEDUPLICA POR PRODUTO, e o último valor digitado vence.
+  //
+  // Dois caminhos levam o mesmo produto a aparecer duas vezes na folha: o
+  // cadastro duplicado do Teknisa (item de compra e item de estoque) e a
+  // mesma prateleira contada em duas seções. Sem isto, a gravação em lote
+  // batia no "ON CONFLICT ... cannot affect row a second time" e perdia a
+  // contagem inteira — 214 campos preenchidos, nada gravado.
+  const porProduto = new Map<string, number>();
   for (const [campo, valor] of formData.entries()) {
     if (!campo.startsWith("qtd_")) continue;
     const texto = String(valor).trim();
     if (texto === "") continue;
     const quantidade = Number(texto.replace(",", "."));
     if (Number.isNaN(quantidade) || quantidade < 0) {
-      throw new Error(`Quantidade inválida: "${texto}".`);
+      return { erro: `Quantidade inválida: "${texto}".` };
     }
-    contadas.push({ produtoId: campo.slice(4), quantidade });
+    porProduto.set(campo.slice(4), quantidade);
   }
-  if (contadas.length === 0) throw new Error("Nenhuma quantidade preenchida.");
+  if (porProduto.size === 0) return { erro: "Nenhuma quantidade preenchida." };
 
-  await prisma.$transaction(async (tx) => {
-    const saldos = await tx.estoqueSaldo.findMany({
-      where: { unidadeId: unidadeFisicaId, produtoId: { in: contadas.map((c) => c.produtoId) } },
-    });
-    const saldoPorProduto = new Map(saldos.map((s) => [s.produtoId, s.quantidade]));
+  // Ordem estável de id — ver src/lib/ordem-de-bloqueio.ts.
+  const contadas = emOrdemDeBloqueio(porProduto).map(([produtoId, quantidade]) => ({
+    produtoId,
+    quantidade,
+  }));
 
-    for (const { produtoId, quantidade } of contadas) {
-      const quantidadeSistema = saldoPorProduto.get(produtoId) ?? 0;
-      const diferenca = quantidade - quantidadeSistema;
-
-      await tx.contagemEstoque.create({
-        data: {
-          unidadeId: unidadeFisicaId,
-          produtoId,
-          quantidadeSistema,
-          quantidadeContada: quantidade,
-          diferenca,
-          contadoPorId: user.id,
-        },
-      });
-      await tx.estoqueSaldo.upsert({
-        where: { unidadeId_produtoId: { unidadeId: unidadeFisicaId, produtoId } },
-        update: { quantidade },
-        create: { unidadeId: unidadeFisicaId, produtoId, quantidade },
-      });
-      if (diferenca !== 0) {
-        await tx.movimentoEstoque.create({
-          data: {
-            unidadeId: unidadeFisicaId,
-            produtoId,
-            tipo: "AJUSTE_CONTAGEM",
-            quantidade: diferenca,
-            observacao: "Ajuste por contagem de inventário",
-          },
+  await comRetentativaDeConflito(() =>
+    prisma.$transaction(
+      async (tx) => {
+        const saldos = await tx.estoqueSaldo.findMany({
+          where: { unidadeId: unidadeFisicaId, produtoId: { in: contadas.map((c) => c.produtoId) } },
+          select: { produtoId: true, quantidade: true },
         });
-      }
-    }
-  });
+        const saldoPorProduto = new Map(saldos.map((s) => [s.produtoId, s.quantidade]));
+
+        const linhas = contadas.map(({ produtoId, quantidade }) => ({
+          produtoId,
+          quantidade,
+          quantidadeSistema: saldoPorProduto.get(produtoId) ?? 0,
+          diferenca: quantidade - (saldoPorProduto.get(produtoId) ?? 0),
+        }));
+
+        // EM LOTE, e não item a item.
+        //
+        // A folha passou a ter 214 itens quando a curva A virou semanal (ver
+        // src/lib/contagem-rotacao.ts). Item a item eram três consultas por
+        // produto — mais de 600 idas ao banco dentro de uma transação, contra
+        // um Postgres que está do outro lado da rede. A gravação estourava o
+        // tempo e a contagem inteira se perdia, depois de alguém passar uma
+        // hora na câmara fria. Agora são três comandos, qualquer que seja o
+        // tamanho da folha.
+        await tx.contagemEstoque.createMany({
+          data: linhas.map((l) => ({
+            unidadeId: unidadeFisicaId,
+            produtoId: l.produtoId,
+            quantidadeSistema: l.quantidadeSistema,
+            quantidadeContada: l.quantidade,
+            diferenca: l.diferenca,
+            contadoPorId: user.id,
+          })),
+        });
+
+        // A CONTAGEM SOBRESCREVE O SALDO — é a regra que torna o consumo
+        // calculável. `ON CONFLICT DO UPDATE` com os valores vindos de
+        // `unnest` faz isso para a folha inteira num comando só.
+        await tx.$executeRaw`
+          INSERT INTO "EstoqueSaldo" ("id", "unidadeId", "produtoId", "quantidade", "atualizadoEm")
+          SELECT gen_random_uuid()::text, ${unidadeFisicaId}, t.produto, t.qtd, now()
+            FROM unnest(${contadas.map((c) => c.produtoId)}::text[],
+                        ${contadas.map((c) => c.quantidade)}::double precision[]) AS t(produto, qtd)
+          ON CONFLICT ("unidadeId", "produtoId")
+          DO UPDATE SET "quantidade" = EXCLUDED."quantidade", "atualizadoEm" = now()`;
+
+        const ajustes = linhas.filter((l) => l.diferenca !== 0);
+        if (ajustes.length > 0) {
+          await tx.movimentoEstoque.createMany({
+            data: ajustes.map((l) => ({
+              unidadeId: unidadeFisicaId,
+              produtoId: l.produtoId,
+              tipo: "AJUSTE_CONTAGEM",
+              quantidade: l.diferenca,
+              observacao: "Ajuste por contagem de inventário",
+            })),
+          });
+        }
+      },
+      // Mesmo prazo das cargas do n8n — e o `maxDuration` da página tem que
+      // ser pelo menos isto, senão a função é cortada no meio da transação.
+      { timeout: 60_000, maxWait: 10_000 }
+    )
+  );
 
   revalidatePath("/estoque");
   revalidatePath("/estoque/contagem");
