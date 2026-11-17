@@ -32,6 +32,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         unidadeNome={session.user.unidadeNome}
         userName={session.user.name ?? null}
         seletor={
+          // Casa e mês não dizem nada para quem só vê a manutenção.
+          session.user.papel === "MANUTENCAO" ? undefined : (
           <SeletorContexto
             casas={ctx.casas}
             meses={ctx.meses}
@@ -39,6 +41,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             mes={ctx.mes}
             podeVerTodas={session.user.papel === "ADMIN"}
           />
+          )
         }
       />
       <main className="main">{children}</main>

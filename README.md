@@ -14,7 +14,17 @@ papéis de acesso (solicitante, aprovador, recebedor, admin). Veja o
 [README do projeto](./compras-estoque/README.md) para detalhes, como rodar
 localmente e como publicar.
 
-### 2. `dashboard-fichas-tecnicas.html` — Fichas Técnicas & Controle de CMV
+### 2. Manutenção — chamados técnicos das casas
+
+Módulo dentro do mesmo sistema (`compras-estoque/`, menu **Manutenção**): a
+casa abre o chamado com foto, o responsável da manutenção aceita ou recusa e
+aciona o colaborador da categoria pelo WhatsApp (API oficial da Meta), o
+colaborador dá o OK e finaliza com fotos por um link, e o gerente aprova.
+Painel em vermelho/amarelo/verde, relatório com tempos, maiores demandas,
+duplicados e repetidos, exportação em Excel e resumo semanal pelo WhatsApp.
+Implantação: [`compras-estoque/docs/manutencao.md`](./compras-estoque/docs/manutencao.md).
+
+### 3. `dashboard-fichas-tecnicas.html` — Fichas Técnicas & Controle de CMV
 
 Dashboard interno para controle de fichas técnicas, custos e CMV (Custo da
 Mercadoria Vendida) dos pratos e vinhos das unidades do Grupo Almeria.
