@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { erroDe } from "@/lib/erro-de-acao";
 
 /**
  * Formulário de uma ação do chamado (encaminhar, recusar, reprovar...). Pode
@@ -17,7 +18,7 @@ export default function FormAcao({
   classeAbrir = "btn",
   confirmar,
 }: {
-  action: (fd: FormData) => Promise<void>;
+  action: (fd: FormData) => Promise<unknown>;
   children?: React.ReactNode;
   botao: string;
   classeBotao?: string;
@@ -48,7 +49,8 @@ export default function FormAcao({
         setErro(null);
         start(async () => {
           try {
-            await action(fd);
+            const msg = erroDe(await action(fd));
+            if (msg) return setErro(msg);
             router.refresh();
             if (abrirCom) setAberto(false);
           } catch (err: any) {

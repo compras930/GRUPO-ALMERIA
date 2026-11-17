@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { aceitarPorToken, concluirPorToken } from "@/actions/manutencao";
 import SeletorFotos from "./SeletorFotos";
+import { erroDe } from "@/lib/erro-de-acao";
 
 export function BotaoAceitar({ token }: { token: string }) {
   const [pending, start] = useTransition();
@@ -18,7 +19,8 @@ export function BotaoAceitar({ token }: { token: string }) {
         onClick={() =>
           start(async () => {
             try {
-              await aceitarPorToken(token);
+              const msg = erroDe(await aceitarPorToken(token));
+              if (msg) return setErro(msg);
               router.refresh();
             } catch (e: any) {
               setErro(e?.message || "Erro ao confirmar.");
@@ -47,7 +49,8 @@ export function FormConcluir({ token }: { token: string }) {
         setErro(null);
         start(async () => {
           try {
-            await concluirPorToken(token, fd);
+            const msg = erroDe(await concluirPorToken(token, fd));
+            if (msg) return setErro(msg);
             router.refresh();
           } catch (err: any) {
             setErro(err?.message || "Erro ao enviar.");
