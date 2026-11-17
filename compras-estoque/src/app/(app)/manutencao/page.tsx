@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/session";
-import { podeGerenciarManutencao, veTodosOsChamados } from "@/lib/permissions";
+import { ehAgente, podeAbrirChamado, podeGerenciarManutencao, veTodosOsChamados } from "@/lib/permissions";
 import {
   GRUPO_PAINEL_LABEL,
   STATUS_DO_GRUPO,
@@ -33,7 +33,10 @@ export default async function PainelManutencao({
     ? await prisma.unidade.findMany({ where: { ativo: true }, orderBy: { nome: "asc" }, select: { id: true, nome: true } })
     : [];
   const casa = todas && searchParams.casa ? searchParams.casa : null;
-  const escopo = escopoChamados({ papel: user.papel, unidadeId: user.unidadeId ?? null }, casa);
+  const escopo = escopoChamados({ id: user.id, papel: user.papel, unidadeId: user.unidadeId ?? null }, casa);
+  const agente = ehAgente(user.papel);
+  // O agente atende várias casas: a coluna Casa importa para ele também.
+  const mostrarCasa = todas || agente;
   const filtro = FILTROS.find((f) => f.chave === searchParams.filtro) ?? FILTROS[0];
   const agora = new Date();
   const trintaDias = new Date(agora.getTime() - 30 * 86_400_000);
@@ -70,11 +73,13 @@ export default async function PainelManutencao({
       <div className="page-header cabecalho-acao">
         <div>
           <p className="eyebrow">Manutenção</p>
-          <h1>Chamados</h1>
+          <h1>{agente ? "Meus chamados" : "Chamados"}</h1>
         </div>
-        <Link href="/manutencao/novo" className="btn primary">
-          + Abrir chamado
-        </Link>
+        {podeAbrirChamado(user.papel) && (
+          <Link href="/manutencao/novo" className="btn primary">
+            + Abrir chamado
+          </Link>
+        )}
       </div>
       <SubmenuManutencao papel={user.papel} />
 
@@ -125,7 +130,7 @@ export default async function PainelManutencao({
             <thead>
               <tr>
                 <th>Nº</th>
-                {todas && <th>Casa</th>}
+                {mostrarCasa && <th>Casa</th>}
                 <th>Problema</th>
                 <th>Situação</th>
                 <th>Quem atende</th>
@@ -143,7 +148,7 @@ export default async function PainelManutencao({
                         <strong>{c.numero}</strong>
                       </Link>
                     </td>
-                    {todas && <td>{c.unidade.nome}</td>}
+                    {mostrarCasa && <td>{c.unidade.nome}</td>}
                     <td className="col-problema">
                       <Link href={`/manutencao/${c.id}`}>{c.titulo}</Link>
                       <div className="cat">

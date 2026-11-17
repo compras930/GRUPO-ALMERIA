@@ -6,13 +6,18 @@ import {
   podeVerPedidos,
   podeCriarPedido,
   podeAprovarPedido,
+  podeVerChamado,
+  podeAbrirChamado,
+  podeTriarChamado,
+  podeAprovarServico,
 } from "@/lib/permissions";
 
 describe("exigeUnidade", () => {
   it("dispensa só o ADMIN e o responsável da manutenção", () => {
     expect(exigeUnidade("ADMIN")).toBe(false);
     expect(exigeUnidade("MANUTENCAO")).toBe(false);
-    for (const papel of PAPEIS.filter((p) => p !== "ADMIN" && p !== "MANUTENCAO")) {
+    expect(exigeUnidade("AGENTE_MANUTENCAO")).toBe(false);
+    for (const papel of PAPEIS.filter((p) => p !== "ADMIN" && p !== "MANUTENCAO" && p !== "AGENTE_MANUTENCAO")) {
       expect(exigeUnidade(papel), papel).toBe(true);
     }
   });
@@ -21,7 +26,7 @@ describe("exigeUnidade", () => {
     // Papel novo entra nesta regra por omissão: se um dia aparecer outro que
     // possa ficar sem casa, é aqui que o teste quebra e obriga a decidir.
     for (const papel of PAPEIS) {
-      expect(exigeUnidade(papel)).toBe(papel !== "ADMIN" && papel !== "MANUTENCAO");
+      expect(exigeUnidade(papel)).toBe(papel !== "ADMIN" && papel !== "MANUTENCAO" && papel !== "AGENTE_MANUTENCAO");
     }
   });
 });
@@ -58,5 +63,24 @@ describe("pedidos", () => {
 
   it("recebedor não cria pedido", () => {
     expect(podeCriarPedido("RECEBEDOR")).toBe(false);
+  });
+});
+
+describe("podeVerChamado", () => {
+  const chamado = { unidadeId: "bl", colaboradorUsuarioId: "agente-1" };
+  it("agente vê só o que foi encaminhado a ele", () => {
+    expect(podeVerChamado({ id: "agente-1", papel: "AGENTE_MANUTENCAO", unidadeId: null }, chamado)).toBe(true);
+    expect(podeVerChamado({ id: "agente-2", papel: "AGENTE_MANUTENCAO", unidadeId: null }, chamado)).toBe(false);
+  });
+  it("gerente vê os da casa dele; responsável e admin veem todos", () => {
+    expect(podeVerChamado({ id: "g", papel: "GERENTE", unidadeId: "bl" }, chamado)).toBe(true);
+    expect(podeVerChamado({ id: "g", papel: "GERENTE", unidadeId: "ns" }, chamado)).toBe(false);
+    expect(podeVerChamado({ id: "m", papel: "MANUTENCAO", unidadeId: null }, chamado)).toBe(true);
+    expect(podeVerChamado({ id: "a", papel: "ADMIN", unidadeId: null }, chamado)).toBe(true);
+  });
+  it("agente não abre chamado nem faz triagem", () => {
+    expect(podeAbrirChamado("AGENTE_MANUTENCAO")).toBe(false);
+    expect(podeTriarChamado("AGENTE_MANUTENCAO")).toBe(false);
+    expect(podeAprovarServico("AGENTE_MANUTENCAO")).toBe(false);
   });
 });

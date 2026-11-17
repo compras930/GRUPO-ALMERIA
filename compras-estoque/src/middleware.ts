@@ -13,7 +13,7 @@ import { withAuth } from "next-auth/middleware";
 export default withAuth(function middleware(req) {
   const papel = (req.nextauth.token as any)?.papel;
   const caminho = req.nextUrl.pathname;
-  if (papel === "MANUTENCAO" && !caminho.startsWith("/manutencao") && !caminho.startsWith("/api/manutencao")) {
+  if ((papel === "MANUTENCAO" || papel === "AGENTE_MANUTENCAO") && !caminho.startsWith("/manutencao") && !caminho.startsWith("/api/manutencao")) {
     return NextResponse.redirect(new URL("/manutencao", req.url));
   }
   return NextResponse.next();

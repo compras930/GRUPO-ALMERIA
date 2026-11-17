@@ -51,6 +51,14 @@ export const TEMPLATES = {
       "Veja os detalhes e registre a correção em: {{4}}\n" +
       "Grupo Almeria · Manutenção",
   },
+  chamado_aprovado: {
+    descricao: "Para o colaborador, quando a casa aprova o serviço",
+    corpo:
+      "O serviço do chamado nº {{1}} — {{2}} foi aprovado pela casa e o chamado está finalizado.\n" +
+      "Obrigado pelo atendimento, {{3}}.\n" +
+      "Detalhes: {{4}}\n" +
+      "Grupo Almeria · Manutenção",
+  },
   chamado_recusado: {
     descricao: "Para o gerente da casa, quando a manutenção recusa o chamado",
     corpo:
@@ -112,6 +120,7 @@ export const CHAMADA_DO_MODELO: Record<NomeTemplate, string> = {
   chamado_encaminhado: "Envie o chamado ao colaborador",
   chamado_para_aprovacao: "Avise a casa que o serviço foi concluído",
   chamado_reprovado: "Avise o colaborador da reprovação",
+  chamado_aprovado: "Avise o colaborador que o serviço foi aprovado",
   chamado_recusado: "Avise a casa da recusa",
   relatorio_semanal_manutencao: "Envie o resumo da semana",
 };

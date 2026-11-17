@@ -9,7 +9,19 @@
 // MANUTENCAO é o responsável da manutenção do Grupo: recebe os chamados de
 // todas as casas, aceita ou recusa e aciona o colaborador. Não pertence a uma
 // casa e só enxerga o módulo de Manutenção (ver src/middleware.ts).
-export const PAPEIS = ["ADMIN", "APROVADOR", "SOLICITANTE", "RECEBEDOR", "GERENTE", "MANUTENCAO"] as const;
+//
+// AGENTE_MANUTENCAO é o Agente de Manutenção do Grupo com login: vê só os
+// chamados encaminhados a ele, dá o OK e finaliza. Nasce na tela de
+// Colaboradores ("Criar acesso"), ligado ao cadastro de colaborador dele.
+export const PAPEIS = [
+  "ADMIN",
+  "APROVADOR",
+  "SOLICITANTE",
+  "RECEBEDOR",
+  "GERENTE",
+  "MANUTENCAO",
+  "AGENTE_MANUTENCAO",
+] as const;
 export type Papel = (typeof PAPEIS)[number];
 
 export const PAPEL_LABEL: Record<Papel, string> = {
@@ -19,6 +31,7 @@ export const PAPEL_LABEL: Record<Papel, string> = {
   RECEBEDOR: "Recebedor",
   GERENTE: "Gerente da unidade",
   MANUTENCAO: "Responsável da manutenção",
+  AGENTE_MANUTENCAO: "Agente de manutenção",
 };
 
 export const STATUS_PEDIDO = [

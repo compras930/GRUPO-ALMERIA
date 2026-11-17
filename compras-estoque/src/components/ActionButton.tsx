@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { erroDe } from "@/lib/erro-de-acao";
 
 export default function ActionButton({
   action,
@@ -9,7 +10,8 @@ export default function ActionButton({
   className = "btn",
   confirmMsg,
 }: {
-  action: () => Promise<void>;
+  // `unknown`: ações que devolvem `{ erro }` em vez de lançar (ver erroDe).
+  action: () => Promise<unknown>;
   children: React.ReactNode;
   className?: string;
   confirmMsg?: string;
@@ -29,7 +31,8 @@ export default function ActionButton({
           setErro(null);
           startTransition(async () => {
             try {
-              await action();
+              const msg = erroDe(await action());
+              if (msg) return setErro(msg);
               router.refresh();
             } catch (e: any) {
               setErro(e?.message || "Ocorreu um erro.");

@@ -13,6 +13,7 @@ import {
   type StatusChamado,
 } from "@/lib/manutencao/constantes";
 import SeletorFotos from "./SeletorFotos";
+import { erroDe } from "@/lib/erro-de-acao";
 
 type Dup = Extract<ResultadoAbertura, { ok: false }>["duplicados"];
 
@@ -32,6 +33,9 @@ export default function AbrirChamadoForm({ casas }: { casas: { id: string; nome:
     start(async () => {
       try {
         const r = await abrirChamado(fd);
+        const msg = erroDe(r);
+        if (msg) return setErro(msg);
+        if (!("ok" in r)) return;
         if (r.ok) router.push(`/manutencao/${r.id}?novo=1`);
         else setDuplicados(r.duplicados);
       } catch (e: any) {
