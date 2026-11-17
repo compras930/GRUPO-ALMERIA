@@ -2,6 +2,9 @@ import { prisma } from "@/lib/prisma";
 import { rotuloCategoria, URGENCIA_LABEL, type Urgencia } from "@/lib/manutencao/constantes";
 import { estaAtrasado, fmtDataHora, fmtDuracao } from "@/lib/manutencao/regras";
 import { BotaoAceitar, FormConcluir } from "@/components/manutencao/AcoesColaborador";
+import EnvioWhatsapp from "@/components/manutencao/EnvioWhatsapp";
+import { INCLUDE_MENSAGEM, destinatariosDaCasa, textoMensagem, type Destinatario } from "@/lib/manutencao/notificar";
+import { whatsappConfigurado } from "@/lib/manutencao/whatsapp";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Chamado de manutenção — Grupo Almeria", robots: { index: false } };
@@ -33,13 +36,32 @@ export default async function PaginaColaborador({ params }: { params: { token: s
           </p>
         </div>
       ) : (
-        <Conteudo c={c} token={params.token} />
+        <Conteudo c={c} token={params.token} avisoCasa={await avisoParaCasa(c.id, c.status)} />
       )}
     </div>
   );
 }
 
-function Conteudo({ c, token }: { c: any; token: string }) {
+/**
+ * Sem envio automático, o aviso de "serviço concluído" sai do celular do
+ * próprio colaborador — ele é quem está com o chamado na mão nessa hora.
+ */
+async function avisoParaCasa(id: string, status: string) {
+  if (status !== "AGUARDANDO_APROVACAO" || whatsappConfigurado()) return null;
+  const c = await prisma.chamadoManutencao.findUnique({ where: { id }, include: INCLUDE_MENSAGEM });
+  if (!c) return null;
+  return { texto: textoMensagem("chamado_para_aprovacao", c), destinos: await destinatariosDaCasa(c.unidadeId, c.abertoPorId) };
+}
+
+function Conteudo({
+  c,
+  token,
+  avisoCasa,
+}: {
+  c: any;
+  token: string;
+  avisoCasa: { texto: string; destinos: Destinatario[] } | null;
+}) {
   const agora = new Date();
   const atrasado = estaAtrasado(c, agora);
   const fotosAbertura = c.fotos.filter((f: any) => f.etapa === "ABERTURA");
@@ -94,6 +116,15 @@ function Conteudo({ c, token }: { c: any; token: string }) {
           <h2 className="titulo-secao">Terminou? Registre o serviço</h2>
           <FormConcluir token={token} />
         </div>
+      )}
+
+      {avisoCasa && (
+        <EnvioWhatsapp
+          titulo="Último passo: avise a casa"
+          texto={avisoCasa.texto}
+          destinos={avisoCasa.destinos}
+          destaque
+        />
       )}
 
       {c.status === "AGUARDANDO_APROVACAO" && (

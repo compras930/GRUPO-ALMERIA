@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { chamadosDoPeriodo, isoBrasilia, inicioDoDiaBrasilia } from "./consultas";
 import { montarRelatorio } from "./relatorio";
 import { fmtDuracao } from "./regras";
-import { enviarTemplate, urlBase } from "./whatsapp";
+import { enviarTemplate, renderizarTemplate, urlBase } from "./whatsapp";
 import { fmtTelefone } from "./regras";
 
 /** A semana fechada anterior a `hoje`: segunda a domingo, em Brasília. */
@@ -48,13 +48,10 @@ export async function montarResumoSemanal(hoje = new Date()) {
   };
 }
 
-export async function enviarResumoSemanal(hoje = new Date()) {
-  const resumo = await montarResumoSemanal(hoje);
-  const destinos = await prisma.contatoUsuario.findMany({
-    where: { recebeRelatorioSemanal: true, usuario: { ativo: true } },
-    include: { usuario: { select: { nome: true } } },
-  });
-  const params = [
+type Resumo = Awaited<ReturnType<typeof montarResumoSemanal>>;
+
+export function parametrosResumo(resumo: Resumo) {
+  return [
     resumo.periodo,
     resumo.abertos,
     resumo.finalizados,
@@ -65,10 +62,34 @@ export async function enviarResumoSemanal(hoje = new Date()) {
     resumo.maiorDemanda,
     resumo.link,
   ];
+}
+
+export async function destinatariosRelatorio() {
+  const cs = await prisma.contatoUsuario.findMany({
+    where: { recebeRelatorioSemanal: true, usuario: { ativo: true } },
+    include: { usuario: { select: { nome: true } } },
+  });
+  return cs.map((c) => ({ nome: c.usuario.nome, telefone: c.telefone }));
+}
+
+/** O texto pronto, para o envio manual. */
+export async function resumoSemanalManual(hoje = new Date()) {
+  const resumo = await montarResumoSemanal(hoje);
+  return {
+    periodo: resumo.periodo,
+    texto: renderizarTemplate("relatorio_semanal_manutencao", parametrosResumo(resumo)),
+    destinos: await destinatariosRelatorio(),
+  };
+}
+
+export async function enviarResumoSemanal(hoje = new Date()) {
+  const resumo = await montarResumoSemanal(hoje);
+  const destinos = await destinatariosRelatorio();
+  const params = parametrosResumo(resumo);
   const envios = [];
   for (const d of destinos) {
     const r = await enviarTemplate(d.telefone, "relatorio_semanal_manutencao", params);
-    envios.push({ para: `${d.usuario.nome} (${fmtTelefone(d.telefone)})`, ok: r.ok, erro: r.ok ? null : r.motivo });
+    envios.push({ para: `${d.nome} (${fmtTelefone(d.telefone)})`, ok: r.ok, erro: r.ok ? null : r.motivo });
   }
   return { resumo, envios };
 }

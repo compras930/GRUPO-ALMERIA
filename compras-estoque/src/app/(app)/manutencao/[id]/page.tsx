@@ -15,14 +15,15 @@ import {
   type StatusChamado,
   type Urgencia,
 } from "@/lib/manutencao/constantes";
-import { estaAtrasado, fmtDataHora, fmtDuracao, fmtTelefone, possiveisDuplicados } from "@/lib/manutencao/regras";
+import { estaAtrasado, fmtDataHora, fmtDuracao, possiveisDuplicados } from "@/lib/manutencao/regras";
 import {
   INCLUDE_MENSAGEM,
   destinatariosDoModelo,
   linkColaborador,
   textoMensagem,
 } from "@/lib/manutencao/notificar";
-import { linkWaMe, whatsappConfigurado, type NomeTemplate } from "@/lib/manutencao/whatsapp";
+import { CHAMADA_DO_MODELO, whatsappConfigurado, type NomeTemplate } from "@/lib/manutencao/whatsapp";
+import EnvioWhatsapp from "@/components/manutencao/EnvioWhatsapp";
 import {
   aprovarServico,
   cancelarChamado,
@@ -39,12 +40,17 @@ import ActionButton from "@/components/ActionButton";
 const MODELO_DA_ETAPA: Partial<Record<StatusChamado, NomeTemplate>> = {
   ABERTO: "chamado_novo",
   ENCAMINHADO: "chamado_encaminhado",
-  EM_ANDAMENTO: "chamado_encaminhado",
   AGUARDANDO_APROVACAO: "chamado_para_aprovacao",
   RECUSADO: "chamado_recusado",
 };
 
-export default async function ChamadoPage({ params }: { params: { id: string } }) {
+export default async function ChamadoPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams: { novo?: string };
+}) {
   const user = await requireSession();
   const c = await prisma.chamadoManutencao.findUnique({
     where: { id: params.id },
@@ -100,12 +106,60 @@ export default async function ChamadoPage({ params }: { params: { id: string } }
   const daCategoria = colaboradores.filter((k) => k.categorias.includes(c.categoria));
   const outros = colaboradores.filter((k) => !k.categorias.includes(c.categoria));
 
-  const modelo = MODELO_DA_ETAPA[status] === "chamado_encaminhado" && c.reprovacoes > 0 && status === "EM_ANDAMENTO"
-    ? "chamado_reprovado"
-    : MODELO_DA_ETAPA[status];
-  const mostrarEnvioManual = (triador || aprovador) && modelo;
+  // A mensagem da etapa e QUEM a manda no modo manual: quem vive a etapa.
+  // A casa avisa a manutenção; a manutenção avisa o colaborador e a casa; quem
+  // reprovou avisa o colaborador. (O aviso de serviço concluído é mandado pelo
+  // próprio colaborador, na página dele — aqui fica de reserva.)
+  const modelo: NomeTemplate | undefined =
+    status === "EM_ANDAMENTO" ? (c.reprovacoes > 0 ? "chamado_reprovado" : undefined) : MODELO_DA_ETAPA[status];
+  const quemEnvia: Record<NomeTemplate, boolean> = {
+    chamado_novo: !triador || c.abertoPorId === user.id,
+    chamado_encaminhado: triador,
+    chamado_reprovado: aprovador || triador,
+    chamado_para_aprovacao: triador,
+    chamado_recusado: triador,
+    relatorio_semanal_manutencao: false,
+  };
+  const mostrarEnvioManual = modelo && quemEnvia[modelo];
+  const manual = !whatsappConfigurado();
   const destinos = mostrarEnvioManual ? await destinatariosDoModelo(modelo!, c) : [];
   const textoManual = mostrarEnvioManual ? textoMensagem(modelo!, c) : "";
+
+  const envio = mostrarEnvioManual ? (
+    <EnvioWhatsapp
+      titulo={manual ? CHAMADA_DO_MODELO[modelo!] : "WhatsApp desta etapa"}
+      texto={textoManual}
+      destinos={destinos}
+      destaque={manual}
+      rodape={
+        <>
+          {destinos.length === 0 && (
+            <p className="hint" style={{ marginTop: 10 }}>
+              Ninguém com WhatsApp cadastrado para esta etapa — use “Escolher contato ou grupo”.
+              {triador && (
+                <>
+                  {" "}
+                  <Link href="/manutencao/contatos">Cadastrar telefones</Link>
+                </>
+              )}
+            </p>
+          )}
+          {!manual && (
+            <div style={{ marginTop: 10 }}>
+              <ActionButton action={reenviarWhatsapp.bind(null, c.id)} className="btn small">
+                Reenviar automático
+              </ActionButton>
+            </div>
+          )}
+          {triador && c.tokenAcesso && (status === "ENCAMINHADO" || status === "EM_ANDAMENTO") && (
+            <p className="hint" style={{ marginTop: 10 }}>
+              Link do colaborador: <code>{linkColaborador(c)}</code>
+            </p>
+          )}
+        </>
+      }
+    />
+  ) : null;
 
   const fotosAbertura = c.fotos.filter((f) => f.etapa === "ABERTURA");
   const fotosConclusao = c.fotos.filter((f) => f.etapa === "CONCLUSAO");
@@ -133,6 +187,13 @@ export default async function ChamadoPage({ params }: { params: { id: string } }
           <TagStatus status={c.status} atrasado={atrasado} />
         </div>
       </div>
+
+      {searchParams.novo && (
+        <p className="ok-msg" style={{ marginBottom: 14 }}>
+          Chamado nº {c.numero} aberto.{manual ? " Agora avise a manutenção pelo WhatsApp:" : " A manutenção foi avisada pelo WhatsApp."}
+        </p>
+      )}
+      {manual && envio}
 
       <div className="resumo-chamado">
         <div>
@@ -417,45 +478,7 @@ export default async function ChamadoPage({ params }: { params: { id: string } }
         </div>
       )}
 
-      {mostrarEnvioManual && (
-        <div className="card" style={{ marginTop: 20 }}>
-          <h2 className="titulo-secao">WhatsApp desta etapa</h2>
-          {!whatsappConfigurado() && (
-            <p className="hint" style={{ marginBottom: 10 }}>
-              O envio automático ainda não está ligado. Use os botões abaixo para mandar a mensagem pelo seu WhatsApp.
-            </p>
-          )}
-          {destinos.length === 0 ? (
-            <p className="hint">
-              Ninguém com WhatsApp cadastrado para receber esta mensagem.
-              {triador && (
-                <>
-                  {" "}
-                  <Link href="/manutencao/contatos">Cadastrar telefones</Link>
-                </>
-              )}
-            </p>
-          ) : (
-            <div className="btn-row">
-              {destinos.map((d) => (
-                <a key={d.telefone} className="btn small" href={linkWaMe(d.telefone, textoManual)} target="_blank" rel="noreferrer">
-                  Enviar para {d.nome} ({fmtTelefone(d.telefone)})
-                </a>
-              ))}
-              {whatsappConfigurado() && (
-                <ActionButton action={reenviarWhatsapp.bind(null, c.id)} className="btn small">
-                  Reenviar automático
-                </ActionButton>
-              )}
-            </div>
-          )}
-          {triador && c.tokenAcesso && (status === "ENCAMINHADO" || status === "EM_ANDAMENTO") && (
-            <p className="hint" style={{ marginTop: 10 }}>
-              Link do colaborador: <code>{linkColaborador(c)}</code>
-            </p>
-          )}
-        </div>
-      )}
+      {!manual && envio}
     </div>
   );
 }

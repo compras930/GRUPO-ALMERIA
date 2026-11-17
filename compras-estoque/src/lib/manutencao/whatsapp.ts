@@ -97,10 +97,24 @@ export function renderizarTemplate(nome: NomeTemplate, params: (string | number)
   return TEMPLATES[nome].corpo.replace(/\{\{(\d+)\}\}/g, (_m, i) => sanitizarParametro(params[Number(i) - 1]));
 }
 
-/** Link que abre o WhatsApp de quem clica, com a mensagem pronta. */
-export function linkWaMe(telefone: string, texto: string): string {
-  return `https://wa.me/${telefone}?text=${encodeURIComponent(texto)}`;
+/**
+ * Link que abre o WhatsApp de quem clica, com a mensagem pronta. Sem telefone,
+ * o próprio WhatsApp pergunta para quem enviar — é assim que se manda para um
+ * GRUPO, que não tem número.
+ */
+export function linkWaMe(telefone: string | null, texto: string): string {
+  return `https://wa.me/${telefone ?? ""}?text=${encodeURIComponent(texto)}`;
 }
+
+/** O que o botão diz em cada etapa — a ação, não o nome do modelo. */
+export const CHAMADA_DO_MODELO: Record<NomeTemplate, string> = {
+  chamado_novo: "Avise a manutenção",
+  chamado_encaminhado: "Envie o chamado ao colaborador",
+  chamado_para_aprovacao: "Avise a casa que o serviço foi concluído",
+  chamado_reprovado: "Avise o colaborador da reprovação",
+  chamado_recusado: "Avise a casa da recusa",
+  relatorio_semanal_manutencao: "Envie o resumo da semana",
+};
 
 export function whatsappConfigurado(): boolean {
   return Boolean(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID);
