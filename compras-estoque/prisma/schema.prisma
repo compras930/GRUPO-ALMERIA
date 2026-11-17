@@ -60,6 +60,8 @@ model Unidade {
   vendasSemanais    VendaSemanal[]
   parametrosEstoque ParametroEstoqueProduto[]
   listaDePedido     ListaPedidoItem[]
+
+  chamadosManutencao ChamadoManutencao[]
 }
 
 // Papel: "ADMIN" | "APROVADOR" | "SOLICITANTE" | "RECEBEDOR"
@@ -83,6 +85,12 @@ model Usuario {
 
   notasCompraImportadas    NotaCompra[]   @relation("NotaCompraImportador")
   vendasSemanaisImportadas VendaSemanal[] @relation("VendaSemanalImportador")
+
+  // Manutenção — relações só do lado de lá: nenhuma coluna nova em Usuario.
+  contatoWhatsapp   ContatoUsuario?
+  chamadosAbertos   ChamadoManutencao[] @relation("ChamadoAbertoPor")
+  chamadosTriados   ChamadoManutencao[] @relation("ChamadoTriadoPor")
+  chamadosAprovados ChamadoManutencao[] @relation("ChamadoAprovadoPor")
 }
 
 model Fornecedor {
@@ -720,4 +728,139 @@ model ConversaoUnidadeCompra {
   criadoEm      DateTime @default(now())
 
   @@unique([produtoId, unidadeCompra])
+}
+
+// ---------- Manutenção (chamados técnicos das casas) ----------
+//
+// SÓ TABELAS NOVAS, nenhuma coluna nova em tabela que já existe. O deploy roda
+// `prisma generate` e não `migrate deploy`; coluna nova em Usuario derrubaria o
+// login enquanto o SQL não fosse aplicado. Tabela nova só deixa as telas de
+// Manutenção fora do ar nesse intervalo — o resto do sistema nem percebe.
+// Ver prisma/scripts/manutencao/1-criar-tabelas.sql e src/lib/manutencao/.
+
+/// O WhatsApp de quem tem login: o responsável da manutenção recebe chamado
+/// novo, o gerente recebe serviço para aprovar, e quem marcar recebe o
+/// relatório semanal. Tabela à parte pelo motivo acima.
+model ContatoUsuario {
+  usuarioId              String   @id
+  usuario                Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  telefone               String
+  recebeRelatorioSemanal Boolean  @default(false)
+  atualizadoEm           DateTime @updatedAt
+}
+
+/// Quem executa o reparo: pedreiro, eletricista, técnico de máquina, agente de
+/// manutenção da casa. NÃO tem login — recebe o chamado no WhatsApp com um link
+/// próprio e responde por ele.
+model ColaboradorManutencao {
+  id         String   @id @default(cuid())
+  nome       String
+  telefone   String
+  /// Categorias que atende (ver CATEGORIAS_MANUTENCAO em src/lib/manutencao/constantes.ts).
+  categorias String[]
+  /// true = Agente de Manutenção do Grupo; false = prestador externo.
+  interno    Boolean  @default(false)
+  empresa    String?
+  observacao String?
+  ativo      Boolean  @default(true)
+  criadoEm   DateTime @default(now())
+
+  chamados ChamadoManutencao[]
+}
+
+// Status: ABERTO → (RECUSADO) | ENCAMINHADO → EM_ANDAMENTO → AGUARDANDO_APROVACAO
+//         → FINALIZADO (ou volta a EM_ANDAMENTO se a casa reprovar). CANCELADO
+//         quando quem abriu desiste antes da triagem.
+model ChamadoManutencao {
+  id     String @id @default(cuid())
+  numero Int    @unique @default(autoincrement())
+  status String @default("ABERTO")
+
+  unidadeId   String
+  unidade     Unidade @relation(fields: [unidadeId], references: [id])
+  abertoPorId String
+  abertoPor   Usuario @relation("ChamadoAbertoPor", fields: [abertoPorId], references: [id])
+
+  categoria String
+  urgencia  String
+  titulo    String
+  descricao String
+  /// Onde/qual equipamento ("Câmara fria 2", "Banheiro feminino"). É o que
+  /// permite achar chamado REPETIDO — o mesmo defeito voltando no mesmo lugar.
+  local      String?
+  /// `local` normalizado (minúsculo, sem acento) — chave de comparação.
+  localChave String?
+
+  abertoEm DateTime @default(now())
+
+  // Triagem pelo responsável da manutenção
+  triadoPorId   String?
+  triadoPor     Usuario?  @relation("ChamadoTriadoPor", fields: [triadoPorId], references: [id])
+  triadoEm      DateTime?
+  motivoRecusa  String?
+  /// Preenchido quando a recusa é "já existe chamado para isso".
+  duplicadoDeId String?
+  duplicadoDe   ChamadoManutencao?  @relation("ChamadoDuplicado", fields: [duplicadoDeId], references: [id])
+  duplicatas    ChamadoManutencao[] @relation("ChamadoDuplicado")
+
+  // Encaminhamento ao colaborador
+  colaboradorId String?
+  colaborador   ColaboradorManutencao? @relation(fields: [colaboradorId], references: [id])
+  encaminhadoEm DateTime?
+  /// Horas para concluir, contadas a partir do OK do colaborador.
+  prazoHoras    Int?
+  /// Segredo do link que o colaborador recebe (/m/<token>). Trocado a cada
+  /// novo encaminhamento — link antigo de quem saiu do chamado para de valer.
+  tokenAcesso   String? @unique
+
+  // Execução
+  aceitoEm         DateTime?
+  prazoFinal       DateTime?
+  concluidoEm      DateTime?
+  servicoExecutado String?
+
+  // Aprovação pela casa
+  aprovadoPorId    String?
+  aprovadoPor      Usuario?  @relation("ChamadoAprovadoPor", fields: [aprovadoPorId], references: [id])
+  finalizadoEm     DateTime?
+  reprovacoes      Int       @default(0)
+  motivoReprovacao String?
+
+  atualizadoEm DateTime @updatedAt
+
+  fotos   FotoChamado[]
+  eventos EventoChamado[]
+
+  @@index([unidadeId, status])
+  @@index([abertoEm])
+}
+
+/// Foto guardada no próprio Postgres, já reduzida no navegador (~150 KB).
+/// Evita depender de mais um serviço de arquivos; se o volume crescer, é esta
+/// tabela que migra para um storage.
+model FotoChamado {
+  id        String            @id @default(cuid())
+  chamadoId String
+  chamado   ChamadoManutencao @relation(fields: [chamadoId], references: [id], onDelete: Cascade)
+  /// ABERTURA (foto do problema) | CONCLUSAO (foto do serviço feito)
+  etapa     String
+  mime      String
+  dados     Bytes
+  criadoEm  DateTime          @default(now())
+
+  @@index([chamadoId])
+}
+
+/// Linha do tempo do chamado: cada mudança de status, cada WhatsApp enviado
+/// (ou que falhou). É o rastro que hoje se perde no grupo.
+model EventoChamado {
+  id        String            @id @default(cuid())
+  chamadoId String
+  chamado   ChamadoManutencao @relation(fields: [chamadoId], references: [id], onDelete: Cascade)
+  tipo      String
+  descricao String
+  autor     String?
+  criadoEm  DateTime          @default(now())
+
+  @@index([chamadoId, criadoEm])
 }

@@ -38,6 +38,18 @@ type GrupoNav = { titulo: string | null; itens: ItemNav[] };
 const NAV: GrupoNav[] = [
   { titulo: null, itens: [{ href: "/dashboard", label: "Painel" }] },
   {
+    // Todo mundo abre chamado; a gestão (relatório, colaboradores, telefones)
+    // é do responsável da manutenção e do admin.
+    titulo: "Manutenção",
+    itens: [
+      { href: "/manutencao", label: "Chamados" },
+      { href: "/manutencao/novo", label: "Abrir chamado" },
+      { href: "/manutencao/relatorio", label: "Relatório", papeis: ["ADMIN", "MANUTENCAO"] },
+      { href: "/manutencao/colaboradores", label: "Colaboradores", papeis: ["ADMIN", "MANUTENCAO"] },
+      { href: "/manutencao/contatos", label: "WhatsApp da equipe", papeis: ["ADMIN", "MANUTENCAO"] },
+    ],
+  },
+  {
     titulo: "Estoque",
     itens: [
       { href: "/estoque/contagem", label: "Contagem da semana" },
@@ -80,8 +92,20 @@ const NAV: GrupoNav[] = [
  */
 function ativo(pathname: string | null, href: string) {
   if (!pathname) return false;
+  if (href === "/manutencao") {
+    // "Chamados" acende no painel e no detalhe de um chamado, mas não nas
+    // telas irmãs do menu (abrir, relatório, cadastros).
+    return pathname === href || (/^\/manutencao\/[^/]+$/.test(pathname) && !IRMAOS_MANUTENCAO.has(pathname));
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
+
+const IRMAOS_MANUTENCAO = new Set([
+  "/manutencao/novo",
+  "/manutencao/relatorio",
+  "/manutencao/colaboradores",
+  "/manutencao/contatos",
+]);
 
 export default function Sidebar({
   papel,
@@ -135,7 +159,7 @@ export default function Sidebar({
           depois, e ler de cima para baixo é "nesta casa, neste mês, veja
           isto". Embaixo, pareceriam ajuste da última tela aberta. */}
       {seletor}
-      {NAV.map((grupo) => {
+      {NAV.filter((g) => papel !== "MANUTENCAO" || g.titulo === "Manutenção").map((grupo) => {
         const itens = grupo.itens.filter(
           (i) => (!i.papeis || i.papeis.includes(papel)) && (!i.daUnidade || unidadeNome !== null)
         );

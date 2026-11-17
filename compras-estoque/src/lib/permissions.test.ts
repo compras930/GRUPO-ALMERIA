@@ -9,9 +9,10 @@ import {
 } from "@/lib/permissions";
 
 describe("exigeUnidade", () => {
-  it("dispensa só o ADMIN", () => {
+  it("dispensa só o ADMIN e o responsável da manutenção", () => {
     expect(exigeUnidade("ADMIN")).toBe(false);
-    for (const papel of PAPEIS.filter((p) => p !== "ADMIN")) {
+    expect(exigeUnidade("MANUTENCAO")).toBe(false);
+    for (const papel of PAPEIS.filter((p) => p !== "ADMIN" && p !== "MANUTENCAO")) {
       expect(exigeUnidade(papel), papel).toBe(true);
     }
   });
@@ -20,7 +21,7 @@ describe("exigeUnidade", () => {
     // Papel novo entra nesta regra por omissão: se um dia aparecer outro que
     // possa ficar sem casa, é aqui que o teste quebra e obriga a decidir.
     for (const papel of PAPEIS) {
-      expect(exigeUnidade(papel)).toBe(papel !== "ADMIN");
+      expect(exigeUnidade(papel)).toBe(papel !== "ADMIN" && papel !== "MANUTENCAO");
     }
   });
 });

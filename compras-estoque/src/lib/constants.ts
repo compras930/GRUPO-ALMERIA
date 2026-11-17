@@ -5,7 +5,11 @@
 // perda todo dia e olha o consumo da própria casa. Não é um papel de compra —
 // ele NÃO cria nem aprova pedido, e os helpers de permissão já garantem isso
 // por omissão (cada um lista quem pode; quem não está, não pode).
-export const PAPEIS = ["ADMIN", "APROVADOR", "SOLICITANTE", "RECEBEDOR", "GERENTE"] as const;
+//
+// MANUTENCAO é o responsável da manutenção do Grupo: recebe os chamados de
+// todas as casas, aceita ou recusa e aciona o colaborador. Não pertence a uma
+// casa e só enxerga o módulo de Manutenção (ver src/middleware.ts).
+export const PAPEIS = ["ADMIN", "APROVADOR", "SOLICITANTE", "RECEBEDOR", "GERENTE", "MANUTENCAO"] as const;
 export type Papel = (typeof PAPEIS)[number];
 
 export const PAPEL_LABEL: Record<Papel, string> = {
@@ -14,6 +18,7 @@ export const PAPEL_LABEL: Record<Papel, string> = {
   SOLICITANTE: "Solicitante",
   RECEBEDOR: "Recebedor",
   GERENTE: "Gerente da unidade",
+  MANUTENCAO: "Responsável da manutenção",
 };
 
 export const STATUS_PEDIDO = [

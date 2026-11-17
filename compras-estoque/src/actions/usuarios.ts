@@ -23,7 +23,7 @@ export async function criarUsuario(formData: FormData) {
   // depois pelo que ele viu.
   if (exigeUnidade(papel) && !unidadeId) {
     throw new Error(
-      `${PAPEL_LABEL[papel]} precisa de uma unidade. Só o administrador fica sem casa.`
+      `${PAPEL_LABEL[papel]} precisa de uma unidade. Só o administrador e o responsável da manutenção ficam sem casa.`
     );
   }
 

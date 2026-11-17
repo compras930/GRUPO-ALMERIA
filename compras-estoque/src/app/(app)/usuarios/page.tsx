@@ -53,7 +53,7 @@ export default async function UsuariosPage() {
               <select id="unidadeId" name="unidadeId" defaultValue="">
                 {/* Só o admin fica sem casa — ver `exigeUnidade`. O rótulo diz
                     isso em vez de "Todas", que convidava a deixar em branco. */}
-                <option value="">Nenhuma (só para administrador)</option>
+                <option value="">Nenhuma (só administrador e responsável da manutenção)</option>
                 {unidades.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.nome}
