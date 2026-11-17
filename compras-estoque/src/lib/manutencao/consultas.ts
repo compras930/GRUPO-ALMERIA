@@ -3,12 +3,17 @@
 
 import { prisma } from "@/lib/prisma";
 import type { Papel } from "@/lib/constants";
-import { veTodosOsChamados } from "@/lib/permissions";
+import { ehAgente, veTodosOsChamados } from "@/lib/permissions";
 import type { ChamadoRelatorio } from "./relatorio";
 
 /** Filtro de casa: quem não vê tudo vê só a própria. */
-export function escopoChamados(user: { papel: Papel; unidadeId: string | null }, unidadeFiltro?: string | null) {
+export function escopoChamados(
+  user: { id?: string; papel: Papel; unidadeId: string | null },
+  unidadeFiltro?: string | null
+) {
   if (veTodosOsChamados(user.papel)) return unidadeFiltro ? { unidadeId: unidadeFiltro } : {};
+  // Agente: os encaminhados a ele, de qualquer casa.
+  if (ehAgente(user.papel)) return { colaborador: { usuarioId: user.id ?? "__ninguem__" } };
   return { unidadeId: user.unidadeId ?? "__nenhuma__" };
 }
 

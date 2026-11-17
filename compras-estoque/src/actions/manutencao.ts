@@ -1,14 +1,16 @@
 "use server";
 
 import { randomBytes } from "node:crypto";
+import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/session";
 import {
+  podeAbrirChamado,
+  podeVerChamado,
   podeAprovarServico,
   podeGerenciarManutencao,
   podeTriarChamado,
-  unidadeVisivel,
   veTodosOsChamados,
 } from "@/lib/permissions";
 import {
@@ -88,11 +90,16 @@ async function transicionar(id: string, de: StatusChamado[], data: Record<string
 }
 
 async function chamadoVisivel(id: string, user: Usuario) {
-  const c = await prisma.chamadoManutencao.findUnique({ where: { id } });
+  const c = await prisma.chamadoManutencao.findUnique({
+    where: { id },
+    include: { colaborador: { select: { usuarioId: true } } },
+  });
   if (!c) throw new ErroUsuario("Chamado não encontrado.");
-  if (!veTodosOsChamados(user.papel) && !unidadeVisivel(user.papel, user.unidadeId ?? null, c.unidadeId)) {
-    throw new ErroUsuario("Este chamado é de outra casa.");
-  }
+  const visivel = podeVerChamado(
+    { id: user.id, papel: user.papel, unidadeId: user.unidadeId ?? null },
+    { unidadeId: c.unidadeId, colaboradorUsuarioId: c.colaborador?.usuarioId ?? null }
+  );
+  if (!visivel) throw new ErroUsuario("Este chamado não é seu.");
   return c;
 }
 
@@ -106,6 +113,7 @@ export type ResultadoAbertura =
 
 async function abrirChamadoImpl(fd: FormData): Promise<ResultadoAbertura> {
   const user = await requireSession();
+  if (!podeAbrirChamado(user.papel)) throw new ErroUsuario("Seu acesso é só para atender chamados.");
   const unidadeId = veTodosOsChamados(user.papel) ? texto(fd, "unidadeId", 100) : user.unidadeId;
   if (!unidadeId) throw new ErroUsuario("Escolha a casa do chamado.");
   const categoria = texto(fd, "categoria", 50);
@@ -244,6 +252,7 @@ async function reenviarWhatsappImpl(id: string) {
     EM_ANDAMENTO: c.reprovacoes > 0 ? "chamado_reprovado" : "chamado_encaminhado",
     AGUARDANDO_APROVACAO: "chamado_para_aprovacao",
     RECUSADO: "chamado_recusado",
+    FINALIZADO: "chamado_aprovado",
   };
   const nome = modelo[c.status as StatusChamado];
   if (!nome) throw new ErroUsuario("Não há mensagem a reenviar nesta etapa.");
@@ -265,6 +274,7 @@ async function aprovarServicoImpl(id: string, _fd?: FormData) {
     aprovadoPorId: user.id,
   });
   await evento(id, "APROVADO", "Serviço aprovado pela casa. Chamado finalizado.", user.name);
+  await notificarChamado(id, "chamado_aprovado");
   revalidar(id);
 }
 
@@ -369,7 +379,44 @@ async function salvarColaboradorImpl(fd: FormData) {
 
 async function alternarColaboradorImpl(id: string, ativo: boolean) {
   await requireGestaoManutencao();
-  await prisma.colaboradorManutencao.update({ where: { id }, data: { ativo } });
+  const col = await prisma.colaboradorManutencao.update({ where: { id }, data: { ativo } });
+  // Desativar o agente também desliga o login dele.
+  if (col.usuarioId) await prisma.usuario.update({ where: { id: col.usuarioId }, data: { ativo } });
+  revalidatePath("/manutencao/colaboradores");
+}
+
+/**
+ * Login para o Agente de Manutenção: entra no app e vê só os chamados dele.
+ * Criado aqui (e não em Usuários) porque o login NASCE ligado ao cadastro de
+ * colaborador — é essa ligação que diz quais chamados são dele.
+ */
+async function criarAcessoAgenteImpl(colaboradorId: string, fd: FormData) {
+  await requireGestaoManutencao();
+  const col = await prisma.colaboradorManutencao.findUnique({ where: { id: colaboradorId } });
+  if (!col) throw new ErroUsuario("Colaborador não encontrado.");
+  if (!col.interno) throw new ErroUsuario("Só o Agente de Manutenção (interno) tem login. Terceiro usa o link do WhatsApp.");
+  if (col.usuarioId) throw new ErroUsuario("Este colaborador já tem acesso.");
+  const email = texto(fd, "email", 200).toLowerCase();
+  const senha = String(fd.get("senha") ?? "");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ErroUsuario("Informe um e-mail válido (é o login dele).");
+  if (senha.length < 6) throw new ErroUsuario("A senha precisa ter ao menos 6 caracteres.");
+  if (await prisma.usuario.findUnique({ where: { email } })) throw new ErroUsuario("Já existe um usuário com este e-mail.");
+  await prisma.$transaction(async (tx) => {
+    const u = await tx.usuario.create({
+      data: { nome: col.nome, email, senhaHash: await bcrypt.hash(senha, 10), papel: "AGENTE_MANUTENCAO" },
+    });
+    await tx.colaboradorManutencao.update({ where: { id: col.id }, data: { usuarioId: u.id } });
+  });
+  revalidatePath("/manutencao/colaboradores");
+}
+
+async function redefinirSenhaAgenteImpl(colaboradorId: string, fd: FormData) {
+  await requireGestaoManutencao();
+  const col = await prisma.colaboradorManutencao.findUnique({ where: { id: colaboradorId } });
+  if (!col?.usuarioId) throw new ErroUsuario("Este colaborador não tem acesso.");
+  const senha = String(fd.get("senha") ?? "");
+  if (senha.length < 6) throw new ErroUsuario("A senha precisa ter ao menos 6 caracteres.");
+  await prisma.usuario.update({ where: { id: col.usuarioId }, data: { senhaHash: await bcrypt.hash(senha, 10) } });
   revalidatePath("/manutencao/colaboradores");
 }
 
@@ -445,4 +492,12 @@ export async function alternarColaborador(id: string, ativo: boolean) {
 
 export async function salvarContato(usuarioId: string, fd: FormData) {
   return comErro(() => salvarContatoImpl(usuarioId, fd));
+}
+
+export async function criarAcessoAgente(colaboradorId: string, fd: FormData) {
+  return comErro(() => criarAcessoAgenteImpl(colaboradorId, fd));
+}
+
+export async function redefinirSenhaAgente(colaboradorId: string, fd: FormData) {
+  return comErro(() => redefinirSenhaAgenteImpl(colaboradorId, fd));
 }

@@ -51,7 +51,7 @@ export function exigeUnidade(papel: Papel) {
   // O responsável da manutenção atende TODAS as casas, e não vaza nada: o
   // middleware o prende no módulo de Manutenção, onde a visão de todas as
   // casas é justamente o trabalho dele.
-  return papel !== "ADMIN" && papel !== "MANUTENCAO";
+  return papel !== "ADMIN" && !somenteManutencao(papel);
 }
 
 /** Um usuário só vê/opera dados da própria unidade, a menos que seja ADMIN. */
@@ -64,7 +64,25 @@ export function unidadeVisivel(papel: Papel, unidadeUsuario: string | null, unid
 
 /** Papéis que só enxergam o módulo de Manutenção. */
 export function somenteManutencao(papel: Papel) {
-  return papel === "MANUTENCAO";
+  return papel === "MANUTENCAO" || papel === "AGENTE_MANUTENCAO";
+}
+
+/** O agente vê só os chamados encaminhados a ele. */
+export function ehAgente(papel: Papel) {
+  return papel === "AGENTE_MANUTENCAO";
+}
+
+/**
+ * Quem pode ver UM chamado: quem vê todos; o agente, se o chamado é dele; os
+ * demais, se é da casa deles.
+ */
+export function podeVerChamado(
+  user: { id: string; papel: Papel; unidadeId: string | null },
+  c: { unidadeId: string; colaboradorUsuarioId: string | null }
+) {
+  if (veTodosOsChamados(user.papel)) return true;
+  if (ehAgente(user.papel)) return c.colaboradorUsuarioId === user.id;
+  return unidadeVisivel(user.papel, user.unidadeId, c.unidadeId);
 }
 
 /** Quem vê os chamados de TODAS as casas. Os demais veem os da própria. */
@@ -73,8 +91,9 @@ export function veTodosOsChamados(papel: Papel) {
 }
 
 /** Qualquer pessoa da casa abre chamado — quem vê o defeito é quem avisa. */
-export function podeAbrirChamado(_papel: Papel) {
-  return true;
+export function podeAbrirChamado(papel: Papel) {
+  // O agente não tem casa: quem abre é a casa, e ele atende.
+  return !ehAgente(papel);
 }
 
 /** Aceitar, recusar e encaminhar: o responsável da manutenção (e o admin). */

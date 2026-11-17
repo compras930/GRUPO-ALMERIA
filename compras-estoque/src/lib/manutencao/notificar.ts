@@ -61,6 +61,8 @@ export function parametros(nome: NomeTemplate, c: ChamadoParaMensagem): (string 
       return [c.numero, c.unidade.nome, c.motivoReprovacao ?? "", linkColaborador(c)];
     case "chamado_recusado":
       return [c.numero, c.unidade.nome, c.motivoRecusa ?? "", linkChamado(c)];
+    case "chamado_aprovado":
+      return [c.numero, c.unidade.nome, (c.colaborador?.nome ?? "").split(" ")[0] || "colaborador", linkColaborador(c)];
     default:
       throw new Error(`Modelo ${nome} não é de chamado.`);
   }
@@ -108,6 +110,7 @@ export async function destinatariosDoModelo(
       return destinatariosManutencao();
     case "chamado_encaminhado":
     case "chamado_reprovado":
+    case "chamado_aprovado":
       return c.colaborador ? [{ nome: c.colaborador.nome, telefone: c.colaborador.telefone }] : [];
     case "chamado_para_aprovacao":
     case "chamado_recusado":

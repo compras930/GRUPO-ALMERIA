@@ -91,6 +91,8 @@ model Usuario {
   chamadosAbertos   ChamadoManutencao[] @relation("ChamadoAbertoPor")
   chamadosTriados   ChamadoManutencao[] @relation("ChamadoTriadoPor")
   chamadosAprovados ChamadoManutencao[] @relation("ChamadoAprovadoPor")
+  /// Login do Agente de Manutenção (papel AGENTE_MANUTENCAO).
+  colaboradorManutencao ColaboradorManutencao?
 }
 
 model Fornecedor {
@@ -764,6 +766,11 @@ model ColaboradorManutencao {
   observacao String?
   ativo      Boolean  @default(true)
   criadoEm   DateTime @default(now())
+
+  /// Login do sistema, para o Agente de Manutenção que prefere usar o app a
+  /// abrir cada link do WhatsApp. Terceiro não tem: usa só o link.
+  usuarioId String?  @unique
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
 
   chamados ChamadoManutencao[]
 }

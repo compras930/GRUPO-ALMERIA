@@ -30,7 +30,7 @@ export async function GET(req: Request) {
   if (!session || !podeGerenciarManutencao(session.user.papel)) return new Response("Sem acesso.", { status: 403 });
   const sp = Object.fromEntries(new URL(req.url).searchParams);
   const { deIso, ateIso, de, ate } = periodoDosParametros(sp);
-  const escopo = escopoChamados({ papel: session.user.papel, unidadeId: session.user.unidadeId ?? null }, sp.casa || null);
+  const escopo = escopoChamados({ id: session.user.id, papel: session.user.papel, unidadeId: session.user.unidadeId ?? null }, sp.casa || null);
   const cs = await chamadosDoPeriodo(de, ate, escopo);
   const agora = new Date();
   const r = montarRelatorio(cs, agora);

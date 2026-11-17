@@ -2,12 +2,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/session";
-import {
-  podeAprovarServico,
-  podeTriarChamado,
-  unidadeVisivel,
-  veTodosOsChamados,
-} from "@/lib/permissions";
+import { ehAgente, podeAprovarServico, podeTriarChamado, podeVerChamado } from "@/lib/permissions";
+import { BotaoAceitar, FormConcluir } from "@/components/manutencao/AcoesColaborador";
 import {
   PRAZO_PADRAO_HORAS,
   URGENCIA_LABEL,
@@ -42,6 +38,7 @@ const MODELO_DA_ETAPA: Partial<Record<StatusChamado, NomeTemplate>> = {
   ENCAMINHADO: "chamado_encaminhado",
   AGUARDANDO_APROVACAO: "chamado_para_aprovacao",
   RECUSADO: "chamado_recusado",
+  FINALIZADO: "chamado_aprovado",
 };
 
 export default async function ChamadoPage({
@@ -67,9 +64,13 @@ export default async function ChamadoPage({
     },
   });
   if (!c) notFound();
-  if (!veTodosOsChamados(user.papel) && !unidadeVisivel(user.papel, user.unidadeId ?? null, c.unidadeId)) {
-    redirect("/manutencao");
-  }
+  const visivel = podeVerChamado(
+    { id: user.id, papel: user.papel, unidadeId: user.unidadeId ?? null },
+    { unidadeId: c.unidadeId, colaboradorUsuarioId: c.colaborador?.usuarioId ?? null }
+  );
+  if (!visivel) redirect("/manutencao");
+  // O agente logado atende pelo app: as mesmas ações da página do link.
+  const souOAgente = ehAgente(user.papel) && c.colaborador?.usuarioId === user.id;
 
   const agora = new Date();
   const atrasado = estaAtrasado(c, agora);
@@ -116,7 +117,8 @@ export default async function ChamadoPage({
     chamado_novo: !triador || c.abertoPorId === user.id,
     chamado_encaminhado: triador,
     chamado_reprovado: aprovador || triador,
-    chamado_para_aprovacao: triador,
+    chamado_para_aprovacao: triador || souOAgente,
+    chamado_aprovado: aprovador || triador,
     chamado_recusado: triador,
     relatorio_semanal_manutencao: false,
   };
@@ -215,6 +217,33 @@ export default async function ChamadoPage({
       </div>
 
       {/* ---------------- Ações ---------------- */}
+      {souOAgente && c.tokenAcesso && status === "ENCAMINHADO" && (
+        <div className="card destaque-aprovacao">
+          <p style={{ marginBottom: 12 }}>
+            Confirme que vai atender. O prazo de <strong>{c.prazoHoras} horas</strong> começa a contar a partir do
+            seu OK.
+          </p>
+          <BotaoAceitar token={c.tokenAcesso} />
+        </div>
+      )}
+      {souOAgente && c.tokenAcesso && status === "EM_ANDAMENTO" && (
+        <div className="card destaque-aprovacao">
+          {c.prazoFinal && (
+            <p className={atrasado ? "error-msg" : "hint"} style={{ marginBottom: 12, fontSize: 14 }}>
+              {atrasado
+                ? `Prazo vencido há ${fmtDuracao(agora.getTime() - c.prazoFinal.getTime())}.`
+                : `Prazo: até ${fmtDataHora(c.prazoFinal)} (faltam ${fmtDuracao(c.prazoFinal.getTime() - agora.getTime())}).`}
+            </p>
+          )}
+          {c.reprovacoes > 0 && (
+            <p className="aviso-duplicado" style={{ marginBottom: 12 }}>
+              A casa pediu correção: {c.motivoReprovacao}
+            </p>
+          )}
+          <h2 className="titulo-secao">Terminou? Registre o serviço</h2>
+          <FormConcluir token={c.tokenAcesso} />
+        </div>
+      )}
       {triador && status === "ABERTO" && (
         <div className="card">
           <h2 className="titulo-secao">Triagem</h2>

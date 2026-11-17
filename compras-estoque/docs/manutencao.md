@@ -42,6 +42,13 @@ Se o deploy chegar antes do SQL, só as telas de Manutenção ficam fora do ar.
   dos gerentes e de quem recebe o relatório semanal.
 - Em Manutenção → **Colaboradores**, cadastrar pedreiro, eletricista, técnico
   de máquinas, Agente de Manutenção etc., com as categorias que cada um atende.
+- **Agente de Manutenção com login**: no cadastro dele (marcado como interno),
+  coluna *Acesso ao app* → **Criar acesso** (e-mail e senha). Ele entra no app
+  e vê **só os chamados encaminhados a ele** — dá o OK e finaliza com fotos por
+  lá. Não abre chamado nem vê nenhuma outra tela. Desativar o colaborador
+  desliga o login. Requer `prisma/scripts/manutencao/2-acesso-do-agente.sql`.
+- **Terceiros** não têm login: recebem cada chamado pelo link do WhatsApp, e
+  pelo WhatsApp ficam sabendo da aprovação (ou reprovação) do serviço.
 
 ## 3. WhatsApp — API oficial (Meta)
 
@@ -56,6 +63,7 @@ para mandar a outra pessoa ou ao grupo da manutenção:
 | Encaminhado | responsável da manutenção | colaborador (com o link dele) |
 | Serviço concluído | o próprio colaborador, na página do link | gerente da casa |
 | Reprovado | gerente | colaborador |
+| Aprovado | gerente | colaborador |
 | Recusado | responsável da manutenção | gerente da casa |
 | Resumo semanal | quem abre o Relatório | quem está marcado para receber |
 
@@ -68,7 +76,7 @@ Para ligar o envio automático:
 3. Criar um **usuário do sistema** com permissão no app e gerar um **token
    permanente** com `whatsapp_business_messaging` e
    `whatsapp_business_management`.
-4. No Gerenciador do WhatsApp → Modelos de mensagem, criar os 6 modelos
+4. No Gerenciador do WhatsApp → Modelos de mensagem, criar os 7 modelos
    abaixo — categoria **Utilidade**, idioma **Português (BR)**, nome exatamente
    igual. Ao cadastrar, a Meta pede um exemplo de cada variável: use qualquer
    texto plausível.
@@ -134,6 +142,16 @@ Veja os detalhes e registre a correção em: {{4}}
 Grupo Almeria · Manutenção
 ```
 
+### `chamado_aprovado`
+Para o colaborador, quando a casa aprova o serviço.
+
+```
+O serviço do chamado nº {{1}} — {{2}} foi aprovado pela casa e o chamado está finalizado.
+Obrigado pelo atendimento, {{3}}.
+Detalhes: {{4}}
+Grupo Almeria · Manutenção
+```
+
 ### `chamado_recusado`
 Para o gerente da casa, quando a manutenção recusa o chamado.
 
@@ -156,7 +174,6 @@ Maior demanda: {{8}}.
 Relatório completo: {{9}}
 Grupo Almeria · Manutenção
 ```
-
 
 ## Onde está o código
 

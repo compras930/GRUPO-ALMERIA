@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import type { Papel } from "@/lib/constants";
 import { PAPEIS, PAPEL_LABEL } from "@/lib/constants";
-import { podeVerPedidos } from "@/lib/permissions";
+import { podeAbrirChamado, podeVerPedidos, somenteManutencao } from "@/lib/permissions";
 
 /**
  * O menu em três grupos: o que se OLHA (Painel), o que se OPERA todo dia
@@ -43,7 +43,7 @@ const NAV: GrupoNav[] = [
     titulo: "Manutenção",
     itens: [
       { href: "/manutencao", label: "Chamados" },
-      { href: "/manutencao/novo", label: "Abrir chamado" },
+      { href: "/manutencao/novo", label: "Abrir chamado", papeis: PAPEIS.filter(podeAbrirChamado) },
       { href: "/manutencao/relatorio", label: "Relatório", papeis: ["ADMIN", "MANUTENCAO"] },
       { href: "/manutencao/colaboradores", label: "Colaboradores", papeis: ["ADMIN", "MANUTENCAO"] },
       { href: "/manutencao/contatos", label: "WhatsApp da equipe", papeis: ["ADMIN", "MANUTENCAO"] },
@@ -159,7 +159,7 @@ export default function Sidebar({
           depois, e ler de cima para baixo é "nesta casa, neste mês, veja
           isto". Embaixo, pareceriam ajuste da última tela aberta. */}
       {seletor}
-      {NAV.filter((g) => papel !== "MANUTENCAO" || g.titulo === "Manutenção").map((grupo) => {
+      {NAV.filter((g) => !somenteManutencao(papel) || g.titulo === "Manutenção").map((grupo) => {
         const itens = grupo.itens.filter(
           (i) => (!i.papeis || i.papeis.includes(papel)) && (!i.daUnidade || unidadeNome !== null)
         );

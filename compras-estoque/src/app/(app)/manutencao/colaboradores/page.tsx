@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireGestaoManutencao } from "@/lib/manutencao/guarda";
 import { CATEGORIAS_MANUTENCAO, CATEGORIA_LABEL, rotuloCategoria } from "@/lib/manutencao/constantes";
 import { fmtTelefone } from "@/lib/manutencao/regras";
-import { alternarColaborador, salvarColaborador } from "@/actions/manutencao";
+import { alternarColaborador, criarAcessoAgente, redefinirSenhaAgente, salvarColaborador } from "@/actions/manutencao";
 import FormAcao from "@/components/manutencao/FormAcao";
 import ActionButton from "@/components/ActionButton";
 
@@ -62,7 +62,10 @@ function Campos({ c }: { c?: Col }) {
 export default async function ColaboradoresPage() {
   await requireGestaoManutencao();
   const [cols, carga] = await Promise.all([
-    prisma.colaboradorManutencao.findMany({ orderBy: [{ ativo: "desc" }, { nome: "asc" }] }),
+    prisma.colaboradorManutencao.findMany({
+      orderBy: [{ ativo: "desc" }, { nome: "asc" }],
+      include: { usuario: { select: { email: true, ativo: true } } },
+    }),
     prisma.chamadoManutencao.groupBy({
       by: ["colaboradorId"],
       where: { status: { in: ["ENCAMINHADO", "EM_ANDAMENTO"] }, colaboradorId: { not: null } },
@@ -99,6 +102,7 @@ export default async function ColaboradoresPage() {
                 <th>Nome</th>
                 <th>WhatsApp</th>
                 <th>Atende</th>
+                <th>Acesso ao app</th>
                 <th className="num">Em aberto</th>
                 <th>Status</th>
                 <th className="num">Ações</th>
@@ -113,6 +117,46 @@ export default async function ColaboradoresPage() {
                   </td>
                   <td>{fmtTelefone(c.telefone)}</td>
                   <td className="cat">{c.categorias.map(rotuloCategoria).join(", ")}</td>
+                  <td>
+                    {/* Só o agente interno tem login; terceiro atende pelo link do WhatsApp. */}
+                    {!c.interno ? (
+                      <span className="cat">Pelo link do WhatsApp</span>
+                    ) : c.usuario ? (
+                      <>
+                        <div className="cat">{c.usuario.email}</div>
+                        <FormAcao
+                          action={redefinirSenhaAgente.bind(null, c.id)}
+                          abrirCom="Nova senha"
+                          classeAbrir="btn small"
+                          botao="Salvar senha"
+                        >
+                          <div className="field-group">
+                            <label htmlFor={`senha-${c.id}`}>Nova senha</label>
+                            <input id={`senha-${c.id}`} name="senha" type="text" minLength={6} required />
+                          </div>
+                        </FormAcao>
+                      </>
+                    ) : (
+                      <FormAcao
+                        action={criarAcessoAgente.bind(null, c.id)}
+                        abrirCom="Criar acesso"
+                        classeAbrir="btn small primary"
+                        botao="Criar acesso"
+                      >
+                        <p className="hint" style={{ marginBottom: 8 }}>
+                          Ele entra no app e vê só os chamados encaminhados a ele.
+                        </p>
+                        <div className="field-group" style={{ marginBottom: 8 }}>
+                          <label htmlFor={`email-${c.id}`}>E-mail (login)</label>
+                          <input id={`email-${c.id}`} name="email" type="email" required />
+                        </div>
+                        <div className="field-group">
+                          <label htmlFor={`senhan-${c.id}`}>Senha provisória</label>
+                          <input id={`senhan-${c.id}`} name="senha" type="text" minLength={6} required />
+                        </div>
+                      </FormAcao>
+                    )}
+                  </td>
                   <td className="num">{emAberto.get(c.id) ?? 0}</td>
                   <td>
                     <span className={`tag ${c.ativo ? "ok" : "bad"}`}>{c.ativo ? "Ativo" : "Inativo"}</span>

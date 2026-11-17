@@ -62,7 +62,7 @@ export default async function RelatorioManutencao({
   const { deIso, ateIso, de, ate } = periodoDosParametros(searchParams);
   const casas = await prisma.unidade.findMany({ where: { ativo: true }, orderBy: { nome: "asc" }, select: { id: true, nome: true } });
   const casa = searchParams.casa || null;
-  const escopo = escopoChamados({ papel: user.papel, unidadeId: user.unidadeId ?? null }, casa);
+  const escopo = escopoChamados({ id: user.id, papel: user.papel, unidadeId: user.unidadeId ?? null }, casa);
   const chamados = await chamadosDoPeriodo(de, ate, escopo);
   const agora = new Date();
   const r = montarRelatorio(chamados, agora);
