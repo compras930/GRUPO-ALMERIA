@@ -6,6 +6,9 @@ import { montarRelatorio, temposDoChamado, type LinhaAgrupada } from "@/lib/manu
 import { estaAtrasado, fmtDataHora, fmtDuracao } from "@/lib/manutencao/regras";
 import { rotuloCategoria } from "@/lib/manutencao/constantes";
 import TagStatus from "@/components/manutencao/TagStatus";
+import EnvioWhatsapp from "@/components/manutencao/EnvioWhatsapp";
+import { resumoSemanalManual } from "@/lib/manutencao/resumo-semanal";
+import { whatsappConfigurado } from "@/lib/manutencao/whatsapp";
 
 function Tabela({ titulo, linhas, rotulo }: { titulo: string; linhas: LinhaAgrupada[]; rotulo: string }) {
   if (linhas.length === 0) return null;
@@ -63,6 +66,9 @@ export default async function RelatorioManutencao({
   const chamados = await chamadosDoPeriodo(de, ate, escopo);
   const agora = new Date();
   const r = montarRelatorio(chamados, agora);
+  // Sem envio automático, a segunda-feira vira um botão: o resumo da semana
+  // fechada, pronto para mandar a quem está marcado para receber.
+  const resumo = whatsappConfigurado() ? null : await resumoSemanalManual(agora);
   const exportar = `/api/manutencao/relatorio?${new URLSearchParams({ de: deIso, ate: ateIso, ...(casa ? { casa } : {}) })}`;
 
   return (
@@ -78,6 +84,14 @@ export default async function RelatorioManutencao({
           Baixar Excel
         </a>
       </div>
+
+      {resumo && (
+        <EnvioWhatsapp
+          titulo={`Resumo da semana passada (${resumo.periodo})`}
+          texto={resumo.texto}
+          destinos={resumo.destinos}
+        />
+      )}
 
       <form className="card filtros" method="get">
         <div className="field-row" style={{ marginBottom: 0, alignItems: "flex-end" }}>

@@ -45,8 +45,19 @@ Se o deploy chegar antes do SQL, só as telas de Manutenção ficam fora do ar.
 
 ## 3. WhatsApp — API oficial (Meta)
 
-Até a API estar ligada o módulo funciona em **modo manual**: cada chamado mostra
-botões "Enviar para …" que abrem o WhatsApp de quem clica com a mensagem pronta.
+Até a API estar ligada o módulo funciona em **modo manual**: em cada etapa,
+quem vive a etapa vê um cartão verde com a mensagem pronta e um botão por
+destinatário (abre o WhatsApp de quem clica), mais "Escolher contato ou grupo"
+para mandar a outra pessoa ou ao grupo da manutenção:
+
+| Etapa | Quem envia | Para quem |
+|---|---|---|
+| Chamado aberto | quem abriu (logo após abrir) | responsável da manutenção |
+| Encaminhado | responsável da manutenção | colaborador (com o link dele) |
+| Serviço concluído | o próprio colaborador, na página do link | gerente da casa |
+| Reprovado | gerente | colaborador |
+| Recusado | responsável da manutenção | gerente da casa |
+| Resumo semanal | quem abre o Relatório | quem está marcado para receber |
 
 Para ligar o envio automático:
 

@@ -1590,3 +1590,7 @@ tr.linha-pedida td {
 .col-problema {
   min-width: 220px;
 }
+.envio-whats.destaque {
+  border-left: 5px solid #25d366;
+  background: #f3fbf5;
+}
