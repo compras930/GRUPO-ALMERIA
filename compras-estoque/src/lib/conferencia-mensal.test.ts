@@ -88,6 +88,25 @@ describe("a conferência mês a mês", () => {
     expect(linha.semanasComFalta).toBe(2);
     expect(linha.semanasConferidas).toBe(3);
     expect(linha.totalEmReais).toBe(-400);
+    // A quantidade é o que quem contou reconhece: 4 kg, não R$ 400.
+    expect(linha.totalQuantidade).toBe(-4);
+  });
+
+  it("soma a compra do mês na unidade do produto", () => {
+    const [linha] = conferenciaMensalPura({
+      ...base,
+      semanas,
+      contagens: [
+        c("carne", 10, "2026-11-09T12:00:00Z"),
+        c("carne", 12, "2026-11-16T12:00:00Z"),
+        c("carne", 9, "2026-11-23T12:00:00Z"),
+      ],
+      movimentos: [
+        { produtoId: "carne", tipo: "ENTRADA_NOTA", quantidade: 6, em: new Date("2026-11-11T10:00:00Z") },
+        { produtoId: "carne", tipo: "ENTRADA_RECEBIMENTO", quantidade: 4, em: new Date("2026-11-18T10:00:00Z") },
+      ],
+    });
+    expect(linha.compradoNoMes).toBe(10);
   });
 
   it("desconta compra e venda do período, não do mês", () => {

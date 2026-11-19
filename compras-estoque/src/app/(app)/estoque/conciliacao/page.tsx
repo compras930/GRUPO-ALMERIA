@@ -328,38 +328,60 @@ export default async function ConciliacaoPage({
           </div>
         ) : (
           <>
+            {/* QUANTIDADE NA FRENTE, VALOR EMBAIXO.
+                Quem conta pensa em caixa, quilo e litro — foi isso que ele
+                pegou na mão. O valor fica na segunda linha porque serve para
+                outra coisa: priorizar. 1 kg de picanha e 1 kg de sal não
+                disputam a mesma atenção, e só o dinheiro diz isso. */}
             <TabelaConferencia
-              ordemInicial={semanas.length + 1}
+              ordemInicial={semanas.length + 2}
               colunas={[
                 { chave: "produto", rotulo: "Produto" },
                 ...semanas.map((sem) => ({ chave: sem, rotulo: rotuloDaSemana(sem), num: true })),
-                { chave: "total", rotulo: "Total do mês", num: true },
+                { chave: "comprado", rotulo: "Comprado no mês", num: true },
+                { chave: "total", rotulo: "Diferença do mês", num: true },
                 { chave: "repete", rotulo: "Semanas com falta", num: true },
               ]}
               linhas={linhasDoMes.map((l) => {
                 const p = nomePorProduto.get(l.produtoId);
+                const un = p?.unidadeMedida ?? "";
+                const preco = precoPorProduto.get(l.produtoId) ?? 0;
                 return {
                   chave: l.produtoId,
                   celulas: [
-                    { valor: p?.nome ?? l.produtoId, texto: p?.nome ?? l.produtoId },
+                    {
+                      valor: p?.nome ?? l.produtoId,
+                      texto: p?.nome ?? l.produtoId,
+                      nota: un,
+                    },
                     ...l.celulas.map((c) =>
                       c === null
                         ? // VAZIO NÃO É ZERO: zero diria "conferido, nada
                           // faltou" sobre uma semana que ninguém conferiu.
                           { valor: 0, texto: "—", classe: "muted", titulo: "sem contagem nas duas pontas" }
                         : {
-                            valor: c.diferencaEmReais,
-                            texto: fmtCurrency(c.diferencaEmReais),
+                            valor: c.diferenca,
+                            texto: `${qtd(c.diferenca)} ${un}`,
                             classe: c.diferencaEmReais < 0 ? "bad" : undefined,
-                            titulo: `${data(c.de)} a ${data(c.ate)} · contado ${qtd(c.saldoInicial)} → ${qtd(
-                              c.saldoContado
-                            )} · comprou ${qtd(c.comprado)} · ficha ${qtd(c.vendido)}`,
+                            nota: c.comprado > 0 ? `compra ${qtd(c.comprado)}` : undefined,
+                            titulo: `${data(c.de)} a ${data(c.ate)} · ${fmtCurrency(
+                              c.diferencaEmReais
+                            )} · contado ${qtd(c.saldoInicial)} → ${qtd(c.saldoContado)} · comprou ${qtd(
+                              c.comprado
+                            )} · ficha ${qtd(c.vendido)}`,
                           }
                     ),
                     {
-                      valor: l.totalEmReais,
-                      texto: fmtCurrency(l.totalEmReais),
+                      valor: l.compradoNoMes,
+                      texto: `${qtd(l.compradoNoMes)} ${un}`,
+                      nota: fmtCurrency(l.compradoNoMes * preco),
+                      titulo: "entradas de nota e recebimento nas semanas conferidas",
+                    },
+                    {
+                      valor: l.totalQuantidade,
+                      texto: `${qtd(l.totalQuantidade)} ${un}`,
                       classe: l.totalEmReais < 0 ? "bad" : undefined,
+                      nota: fmtCurrency(l.totalEmReais),
                     },
                     {
                       valor: l.semanasComFalta,
@@ -372,9 +394,16 @@ export default async function ConciliacaoPage({
               })}
             />
             <p className="hint" style={{ marginTop: 14 }}>
-              Cada célula é a diferença daquela semana, em reais, no período entre duas contagens do
-              produto. <strong>Traço quer dizer que não houve contagem nas duas pontas</strong> — não
-              que a semana fechou sem diferença. Passe o mouse para ver as quantidades.
+              Cada célula é a diferença daquela semana <strong>na unidade do produto</strong>, no
+              período entre duas contagens dele; embaixo, o que entrou de compra naquela semana.{" "}
+              <strong>Traço quer dizer que não houve contagem nas duas pontas</strong> — não que a
+              semana fechou sem diferença. Passe o mouse na célula para ver o valor em reais e as
+              quantidades do período.
+            </p>
+            <p className="hint">
+              Nas duas últimas colunas de número, a linha de cima é quantidade e a de baixo é
+              dinheiro. O valor sai do <strong>preço atual</strong> do insumo — é o mesmo critério
+              do resto do app, e por isso ele muda quando o preço muda.
             </p>
             <p className="hint">
               A coluna <strong>semanas com falta</strong> é o que separa o acaso do padrão: faltar

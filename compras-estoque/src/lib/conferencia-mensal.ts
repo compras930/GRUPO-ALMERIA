@@ -41,6 +41,17 @@ export type LinhaMensal = {
   produtoId: string;
   /** Uma célula por semana do mês; `null` onde não houve período fechado. */
   celulas: (CelulaDaSemana | null)[];
+  /**
+   * Soma das semanas com período fechado, NA UNIDADE DO PRODUTO.
+   *
+   * É o número que quem conta reconhece: ele contou caixa, quilo e litro, não
+   * reais. O valor existe ao lado para priorizar — 1 kg de picanha e 1 kg de
+   * sal não disputam a mesma atenção —, mas quem lê a linha primeiro lê a
+   * quantidade.
+   */
+  totalQuantidade: number;
+  /** Quanto entrou de mercadoria no mês, na unidade do produto. */
+  compradoNoMes: number;
   /** Soma das semanas com período fechado. */
   totalEmReais: number;
   /** Em quantas semanas o produto FALTOU — o padrão que interessa. */
@@ -161,6 +172,8 @@ export function conferenciaMensalPura(entrada: {
     linhas.push({
       produtoId,
       celulas,
+      totalQuantidade: preenchidas.reduce((s, c) => s + c.diferenca, 0),
+      compradoNoMes: preenchidas.reduce((s, c) => s + c.comprado, 0),
       totalEmReais: preenchidas.reduce((s, c) => s + c.diferencaEmReais, 0),
       semanasComFalta: preenchidas.filter((c) => c.diferencaEmReais < 0).length,
       semanasConferidas: preenchidas.length,
