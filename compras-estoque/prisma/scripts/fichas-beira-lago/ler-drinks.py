@@ -78,7 +78,16 @@ for aba in wb.sheetnames:
     if not linhas:
         continue
     topo = [("" if x is None else str(x).strip()) for x in (list(linhas[0]) + [""] * 12)[:12]]
-    nome = topo[3] or aba.strip()
+    # A IDENTIDADE É O NOME DA ABA, não o campo "NOME DO PRODUTO".
+    #
+    # Quatro abas diferentes — MARK TWAIN BLOND LABEL, BLACK LABEL, SINGLETON
+    # e GOLD LABEL — trazem "MARK TWAIN" nesse campo: é a mesma receita com
+    # quatro whiskies, e o campo guarda a família, não o drink. Usar o campo
+    # criaria quatro fichas de nome igual (o banco recusa) ou, pior, uma só,
+    # com o whisky de uma valendo pelas quatro — e a diferença entre Blond e
+    # Macallan é o preço da dose.
+    nome = aba.strip()
+    familia = topo[3]
     # O preço de venda fica na coluna K, mas em algumas abas a linha 1 traz o
     # rótulo "VENDA" e o número desce para a linha 2 — a planilha foi montada
     # à mão, aba por aba. Procura o primeiro número das duas primeiras linhas
@@ -114,6 +123,7 @@ for aba in wb.sheetnames:
         {
             "aba": aba,
             "nome": nome,
+            "familia": familia,
             "chave": norm(aba),
             "precoVenda": preco,
             "ingredientes": ingredientes,
