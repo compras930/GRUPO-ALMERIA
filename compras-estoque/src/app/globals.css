@@ -1673,3 +1673,36 @@ tr.linha-pedida td {
     padding: 9px 10px;
   }
 }
+
+/* Cabeçalho de tabela que ordena ao clique. A seta fica sempre visível, em
+   cinza, porque coluna ordenável que só mostra a seta no hover não é
+   descoberta por quem usa teclado nem por quem está no celular. */
+th.ordenavel {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+th.ordenavel .seta {
+  opacity: 0.45;
+  font-size: 9px;
+}
+th.ordenavel.ativa .seta {
+  opacity: 1;
+}
+/* A data embaixo do número contado — menor e apagada, para o número continuar
+   sendo o que se lê primeiro. */
+.cat.bloco {
+  display: block;
+  font-size: 10.5px;
+  line-height: 1.3;
+  margin-top: 2px;
+}
+.muted {
+  color: var(--muted);
+}
+
+/* Número negativo na tabela. Antes a cor vinha da classe no <td>; com a
+   tabela ordenável a célula é montada no cliente e a cor mora no <span>. */
+span.bad {
+  color: var(--bad);
+}

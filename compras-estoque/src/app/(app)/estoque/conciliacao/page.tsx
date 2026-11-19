@@ -11,6 +11,14 @@ import { faturamentoDaLinhaPura } from "@/lib/faturamento";
 import { ehCategoriaDeEventoPura } from "@/lib/categoria-venda";
 import { quebrarFaltaPura, filaDeFichasPura, type VendaSemFichaResumo } from "@/lib/consumo-sem-ficha";
 import { carregarContexto } from "@/lib/selecao-db";
+import { mesDaChave } from "@/lib/mes";
+import {
+  conferenciaMensalPura,
+  contagensPorSemanaPura,
+  semanasDoMesPuras,
+  segundaPura,
+} from "@/lib/conferencia-mensal";
+import TabelaConferencia from "@/components/TabelaConferencia";
 
 /**
  * A conferência da contagem — ver src/lib/conciliacao.ts para a conta.
@@ -23,12 +31,20 @@ import { carregarContexto } from "@/lib/selecao-db";
  * única de calendário misturaria compra de um produto com contagem de outro.
  */
 const data = (d: Date) => d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
-const qtd = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+/**
+ * DUAS CASAS, e não três.
+ *
+ * A terceira casa é ruído de balança lido como precisão: ninguém conta 2,375 kg
+ * de picanha, e o dígito a mais faz a coluna inteira parecer um número de
+ * laboratório. Quem precisa do valor exato tem a diferença em reais ao lado.
+ */
+const qtd = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+const rotuloDaSemana = (semana: string) => `${semana.slice(8, 10)}/${semana.slice(5, 7)}`;
 
 export default async function ConciliacaoPage({
   searchParams,
 }: {
-  searchParams: { unidadeId?: string };
+  searchParams: { unidadeId?: string; mes?: string; vista?: string };
 }) {
   await requireAdmin();
   // A casa vem do menu lateral; a URL ainda manda quando vem preenchida.
@@ -38,6 +54,13 @@ export default async function ConciliacaoPage({
   const escolhida = ctx.casaId || unidades[0]?.id;
   const unidadeId = escolhida ? await idDaUnidadeFisica(escolhida) : null;
   if (!unidadeId) return <div className="empty">Nenhuma unidade com estoque próprio.</div>;
+  // Duas perguntas, duas vistas: "o que faltou na última contagem" (segunda de
+  // manhã) e "o que falta toda semana" (fim do mês). A segunda só existe
+  // porque uma falta isolada e uma falta repetida pedem conversas diferentes.
+  const vista = searchParams.vista === "mes" ? "mes" : "semana";
+  const mes = mesDaChave(ctx.mes);
+  const q = (extra: Record<string, string>) =>
+    "?" + new URLSearchParams({ ...(escolhida ? { unidadeId: escolhida } : {}), ...extra }).toString();
 
   const [contagens, movimentos, precos, produtos] = await Promise.all([
     prisma.contagemEstoque.findMany({
@@ -105,6 +128,51 @@ export default async function ConciliacaoPage({
 
   const linhas = conciliarPuro(parcelas);
   const totais = totalizarPuro(linhas);
+
+  // ===================================================================
+  // A VISTA DO MÊS e o aviso de casa que não contou.
+  //
+  // As semanas vêm do mês escolhido no menu, e começam na segunda que o mês
+  // toca — inclusive a que começou no mês anterior, porque é a contagem dela
+  // que abre o primeiro período.
+  const semanas = mes ? semanasDoMesPuras(mes.inicio, new Date(mes.fim.getTime() - 1)) : [];
+  const contagensBrutas = contagens.map((c) => ({
+    produtoId: c.produtoId,
+    quantidade: c.quantidadeContada,
+    em: c.criadoEm,
+  }));
+  const porSemana = contagensPorSemanaPura(contagensBrutas, semanas);
+  const linhasDoMes =
+    vista === "mes"
+      ? conferenciaMensalPura({
+          contagens: contagensBrutas,
+          movimentos: movimentos.map((m) => ({
+            produtoId: m.produtoId,
+            tipo: m.tipo,
+            quantidade: m.quantidade,
+            em: m.criadoEm,
+          })),
+          precoPorProduto: precoPorProduto,
+          semanas,
+          tiposDeEntrada: TIPOS_DE_ENTRADA,
+          tiposDePerda: TIPO_PERDA,
+        })
+      : [];
+
+  // SEMANA PASSADA SEM CONTAGEM é o aviso que importa: a semana corrente ainda
+  // está acontecendo, e cobrar contagem na terça de manhã seria cobrar o que
+  // ainda vai ser feito.
+  const hoje = new Date();
+  const semanaCorrente = segundaPura(hoje);
+  // A primeira coluna costuma ser a semana que COMEÇOU no mês anterior — ela
+  // existe porque é a contagem dela que abre o primeiro período. Mas cobrar
+  // contagem dela aqui seria cobrar o mês passado na tela deste mês.
+  const primeiroDiaDoMes = mes ? mes.inicio.toISOString().slice(0, 10) : "";
+  const semanasFechadas = porSemana.filter(
+    (s) => s.semana < semanaCorrente && s.semana >= primeiroDiaDoMes
+  );
+  const semContagem = semanasFechadas.filter((s) => s.produtos === 0);
+  const contouNestaSemana = (porSemana.find((s) => s.semana === semanaCorrente)?.produtos ?? 0) > 0;
 
   // ===================================================================
   // DE ONDE VEM A FALTA — ver src/lib/consumo-sem-ficha.ts.
@@ -193,14 +261,129 @@ export default async function ConciliacaoPage({
         <h1>Conferência da contagem</h1>
       </div>
 
+      <div className="card btn-row" style={{ alignItems: "center" }}>
+        <span className="eyebrow" style={{ margin: 0 }}>Vista</span>
+        <Link href={q({ vista: "semana" })} className={`btn small${vista === "semana" ? " primary" : ""}`}>
+          Última contagem
+        </Link>
+        <Link href={q({ vista: "mes" })} className={`btn small${vista === "mes" ? " primary" : ""}`}>
+          Mês inteiro, semana a semana
+        </Link>
+        <span style={{ flex: 1 }} />
+        <span className="hint">
+          {mes ? mes.rotulo : "escolha o mês no menu"} · {semanas.length} semanas
+        </span>
+      </div>
+
+      {/* O AVISO DE QUEM NÃO CONTOU.
+          Casa que não conta não aparece como falta: aparece como tela vazia, e
+          silêncio parece boa notícia. A semana corrente fica de fora da
+          cobrança — ela ainda está acontecendo. */}
+      {semContagem.length > 0 && (
+        <div className="aviso-diretriz extra">
+          <strong>
+            {semContagem.length === 1
+              ? "Uma semana fechada sem contagem nenhuma"
+              : `${semContagem.length} semanas fechadas sem contagem nenhuma`}
+            :
+          </strong>{" "}
+          {semContagem.map((s) => rotuloDaSemana(s.semana)).join(", ")}. Sem contagem nas duas
+          pontas não há o que conferir — a semana não aparece como "tudo certo", ela simplesmente
+          não existe no relatório.
+        </div>
+      )}
+      {!contouNestaSemana && (
+        <div className="aviso-diretriz">
+          A contagem da semana de {rotuloDaSemana(semanaCorrente)} ainda não foi lançada nesta casa.
+        </div>
+      )}
+
       <p className="hint">
-        Para cada produto contado duas vezes: o que o sistema esperava encontrar
-        (contagem anterior + compras − vendas pela ficha − perdas declaradas) contra o que foi
-        contado. O período é o de cada produto, entre as duas últimas contagens dele.
+        {vista === "mes" ? (
+          <>
+            Uma coluna por semana do mês, e em cada célula a diferença daquela semana: o que o
+            sistema esperava encontrar (contagem anterior + compras − vendas pela ficha − perdas
+            declaradas) contra o que foi contado.
+          </>
+        ) : (
+          <>
+            Para cada produto contado duas vezes: o que o sistema esperava encontrar (contagem
+            anterior + compras − vendas pela ficha − perdas declaradas) contra o que foi contado. O
+            período é o de cada produto, entre as duas últimas contagens dele.
+          </>
+        )}
       </p>
 
 
-      {linhas.length === 0 ? (
+      {vista === "mes" ? (
+        /* O MÊS INTEIRO, SEMANA A SEMANA.
+           Uma falta isolada é porção generosa ou erro de contagem; a MESMA
+           falta quatro semanas seguidas é outra coisa — e só aparece com as
+           semanas lado a lado. A coluna "semanas com falta" é o resumo desse
+           padrão, e dá para ordenar por ela. */
+        linhasDoMes.length === 0 ? (
+          <div className="empty">
+            Nenhum produto com duas contagens dentro de {mes?.rotulo ?? "o mês escolhido"}. A
+            conferência precisa de duas pontas: a primeira contagem é só o marco zero.
+          </div>
+        ) : (
+          <>
+            <TabelaConferencia
+              ordemInicial={semanas.length + 1}
+              colunas={[
+                { chave: "produto", rotulo: "Produto" },
+                ...semanas.map((sem) => ({ chave: sem, rotulo: rotuloDaSemana(sem), num: true })),
+                { chave: "total", rotulo: "Total do mês", num: true },
+                { chave: "repete", rotulo: "Semanas com falta", num: true },
+              ]}
+              linhas={linhasDoMes.map((l) => {
+                const p = nomePorProduto.get(l.produtoId);
+                return {
+                  chave: l.produtoId,
+                  celulas: [
+                    { valor: p?.nome ?? l.produtoId, texto: p?.nome ?? l.produtoId },
+                    ...l.celulas.map((c) =>
+                      c === null
+                        ? // VAZIO NÃO É ZERO: zero diria "conferido, nada
+                          // faltou" sobre uma semana que ninguém conferiu.
+                          { valor: 0, texto: "—", classe: "muted", titulo: "sem contagem nas duas pontas" }
+                        : {
+                            valor: c.diferencaEmReais,
+                            texto: fmtCurrency(c.diferencaEmReais),
+                            classe: c.diferencaEmReais < 0 ? "bad" : undefined,
+                            titulo: `${data(c.de)} a ${data(c.ate)} · contado ${qtd(c.saldoInicial)} → ${qtd(
+                              c.saldoContado
+                            )} · comprou ${qtd(c.comprado)} · ficha ${qtd(c.vendido)}`,
+                          }
+                    ),
+                    {
+                      valor: l.totalEmReais,
+                      texto: fmtCurrency(l.totalEmReais),
+                      classe: l.totalEmReais < 0 ? "bad" : undefined,
+                    },
+                    {
+                      valor: l.semanasComFalta,
+                      texto: `${l.semanasComFalta} de ${l.semanasConferidas}`,
+                      classe: l.semanasComFalta >= 3 ? "bad" : undefined,
+                      titulo: "faltou em quantas das semanas conferidas",
+                    },
+                  ],
+                };
+              })}
+            />
+            <p className="hint" style={{ marginTop: 14 }}>
+              Cada célula é a diferença daquela semana, em reais, no período entre duas contagens do
+              produto. <strong>Traço quer dizer que não houve contagem nas duas pontas</strong> — não
+              que a semana fechou sem diferença. Passe o mouse para ver as quantidades.
+            </p>
+            <p className="hint">
+              A coluna <strong>semanas com falta</strong> é o que separa o acaso do padrão: faltar
+              uma vez pode ser porção, balança ou contagem apressada; faltar toda semana é rotina, e
+              rotina tem causa.
+            </p>
+          </>
+        )
+      ) : linhas.length === 0 ? (
         <div className="empty">
           Nenhum produto foi contado duas vezes ainda. A primeira contagem é o marco zero: ela
           sobrescreve o saldo e não tem com o que ser comparada. Esta tela começa a valer na
@@ -341,51 +524,53 @@ export default async function ConciliacaoPage({
             </div>
           )}
 
-          <table>
-            <thead>
-              <tr>
-                <th>Produto</th>
-                <th>Período</th>
-                <th className="num">Contado antes</th>
-                <th className="num">Comprado</th>
-                <th className="num">Vendido (ficha)</th>
-                <th className="num">Perda</th>
-                <th className="num">Esperado</th>
-                <th className="num">Contado</th>
-                <th className="num">Diferença</th>
-                <th className="num">Em R$</th>
-              </tr>
-            </thead>
-            <tbody>
-              {linhas.map((l) => {
-                const p = nomePorProduto.get(l.produtoId);
-                const j = janela.get(l.produtoId)!;
-                return (
-                  <tr key={l.produtoId}>
-                    <td>
-                      {p?.nome ?? l.produtoId}
-                      {l.alerta === "SEM_FICHA" && <span className="tag"> sem ficha</span>}
-                    </td>
-                    <td className="cat">
-                      {data(j.de)} a {data(j.ate)}
-                    </td>
-                    <td className="num">{qtd(l.saldoInicial)}</td>
-                    <td className="num">{qtd(l.comprado)}</td>
-                    <td className="num">{qtd(l.vendido)}</td>
-                    <td className="num">{qtd(l.perdaDeclarada)}</td>
-                    <td className="num">{qtd(l.esperado)}</td>
-                    <td className="num">{qtd(l.saldoContado)}</td>
-                    <td className="num">
-                      {qtd(l.diferenca)} {p?.unidadeMedida}
-                    </td>
-                    <td className={`num${l.diferencaEmReais < 0 ? " bad" : ""}`}>
-                      {fmtCurrency(l.diferencaEmReais)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          {/* A TABELA ORDENÁVEL — clique no cabeçalho. Abre em "Em R$",
+              crescente, que põe a maior falta no topo: é a pergunta da segunda
+              de manhã. As outras colunas respondem as perguntas seguintes sem
+              ninguém precisar exportar para planilha. */}
+          <TabelaConferencia
+            ordemInicial={8}
+            colunas={[
+              { chave: "produto", rotulo: "Produto" },
+              { chave: "antes", rotulo: "Contado antes", num: true },
+              { chave: "comprado", rotulo: "Comprado", num: true },
+              { chave: "vendido", rotulo: "Vendido (ficha)", num: true },
+              { chave: "perda", rotulo: "Perda", num: true },
+              { chave: "esperado", rotulo: "Esperado", num: true },
+              { chave: "contado", rotulo: "Contado", num: true },
+              { chave: "diferenca", rotulo: "Diferença", num: true },
+              { chave: "reais", rotulo: "Em R$", num: true },
+            ]}
+            linhas={linhas.map((l) => {
+              const p = nomePorProduto.get(l.produtoId);
+              const j = janela.get(l.produtoId)!;
+              return {
+                chave: l.produtoId,
+                celulas: [
+                  {
+                    valor: p?.nome ?? l.produtoId,
+                    texto: p?.nome ?? l.produtoId,
+                    tag: l.alerta === "SEM_FICHA" ? "sem ficha" : undefined,
+                  },
+                  // A DATA VEM JUNTO DO NÚMERO: "contado antes: 12" não diz
+                  // nada sozinho — 12 de quando? Dois produtos da mesma tela
+                  // podem ter sido contados em semanas diferentes.
+                  { valor: l.saldoInicial, texto: qtd(l.saldoInicial), nota: data(j.de) },
+                  { valor: l.comprado, texto: qtd(l.comprado) },
+                  { valor: l.vendido, texto: qtd(l.vendido) },
+                  { valor: l.perdaDeclarada, texto: qtd(l.perdaDeclarada) },
+                  { valor: l.esperado, texto: qtd(l.esperado) },
+                  { valor: l.saldoContado, texto: qtd(l.saldoContado), nota: data(j.ate) },
+                  { valor: l.diferenca, texto: `${qtd(l.diferenca)} ${p?.unidadeMedida ?? ""}` },
+                  {
+                    valor: l.diferencaEmReais,
+                    texto: fmtCurrency(l.diferencaEmReais),
+                    classe: l.diferencaEmReais < 0 ? "bad" : undefined,
+                  },
+                ],
+              };
+            })}
+          />
 
           <p className="hint" style={{ marginTop: 14 }}>
             <strong>Produto marcado &ldquo;sem ficha&rdquo;</strong> não tem receita que o mencione,
