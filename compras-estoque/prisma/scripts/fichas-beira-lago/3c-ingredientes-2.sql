@@ -4,7 +4,8 @@
 BEGIN;
 
 INSERT INTO "IngredienteReceita" ("id", "receitaId", "produtoId", "subReceitaId", "quantidade", "unidadeMedida")
-SELECT v.id, v.receita, pr.id, sub.id, v.quantidade,
+SELECT DISTINCT ON (v.id)
+       v.id, v.receita, pr.id, sub.id, v.quantidade,
        coalesce(pr."unidadeMedida", 'KG')
   FROM (VALUES
     ('ing75b8d5472696dd729754', 'rec6ff9af3a5f35922fb7c9', 'RUCULA BABY', '', 0.02),
@@ -317,6 +318,7 @@ SELECT v.id, v.receita, pr.id, sub.id, v.quantidade,
                          AND sub."unidadeId" = u.id
                          AND upper(regexp_replace(translate(btrim(sub.nome), 'áàâãäéèêëíìîïóòôõöúùûüçÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ', 'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC'), '[^a-zA-Z0-9]+', ' ', 'g')) = v.chave_sub
  WHERE (pr.id IS NOT NULL OR sub.id IS NOT NULL)
-   AND EXISTS (SELECT 1 FROM "Receita" r WHERE r.id = v.receita);
+   AND EXISTS (SELECT 1 FROM "Receita" r WHERE r.id = v.receita)
+ ORDER BY v.id, pr.id, sub.id;
 
 COMMIT;

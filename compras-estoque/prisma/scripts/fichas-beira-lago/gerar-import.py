@@ -162,7 +162,13 @@ for n, bloco in enumerate(blocos, start=1):
         ]
     corpo += [
         'INSERT INTO "IngredienteReceita" ("id", "receitaId", "produtoId", "subReceitaId", "quantidade", "unidadeMedida")',
-        "SELECT v.id, v.receita, pr.id, sub.id, v.quantidade,",
+        # DISTINCT ON: o cadastro tem produto homônimo — "CONHAQUE DOMECQ 1LT"
+        # existe duas vezes, e o mesmo vale para outros oito. Sem isto o join
+        # devolve duas linhas para o mesmo ingrediente e a segunda estoura na
+        # chave primária, derrubando a carga inteira. Fica o de menor id, que é
+        # o mais antigo: é o que as outras telas já referenciam.
+        "SELECT DISTINCT ON (v.id)",
+        "       v.id, v.receita, pr.id, sub.id, v.quantidade,",
         "       coalesce(pr.\"unidadeMedida\", 'KG')",
         "  FROM (VALUES",
         ",\n".join(bloco),
@@ -176,7 +182,8 @@ for n, bloco in enumerate(blocos, start=1):
         '                         AND sub."unidadeId" = u.id',
         "                         AND " + NORM.format(c="sub.nome") + " = v.chave_sub",
         " WHERE (pr.id IS NOT NULL OR sub.id IS NOT NULL)",
-        '   AND EXISTS (SELECT 1 FROM "Receita" r WHERE r.id = v.receita);',
+        '   AND EXISTS (SELECT 1 FROM "Receita" r WHERE r.id = v.receita)',
+        " ORDER BY v.id, pr.id, sub.id;",
         "",
         "COMMIT;",
     ]
