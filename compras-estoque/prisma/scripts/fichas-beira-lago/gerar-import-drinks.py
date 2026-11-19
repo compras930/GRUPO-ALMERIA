@@ -67,6 +67,11 @@ NORM = (
 # que a quantidade do cadastro.
 UNIDADES = "('KG', 'G', 'LT', 'L', 'ML')"
 
+# Resolvidos FORA do 6b, por SQL próprio, porque precisaram de conversão de
+# unidade. Sem esta lista, a conferência os acusa como pendentes — e lista que
+# mente sobre o trabalho já feito faz alguém refazer o que estava pronto.
+CONVERTIDOS = {"ST PIERRE AGUA TONICA"}  # 8-tonica.sql: 0,2 LT = 0,74 lata
+
 pares_path = destino / "pares-drinks.csv"
 apelido = {}
 if pares_path.exists():
@@ -129,6 +134,8 @@ pendentes = []
 for d in drinks:
     for pos, ing in enumerate(d["ingredientes"]):
         alvo = apelido.get(ing["chave"], ing["chave"])
+        if ing["chave"] in CONVERTIDOS:
+            continue
         linhas.append(
             f"    ('{ident('ingdk', CASA, d['chave'], str(pos))}', '{sql(d['chave'])}', "
             f"'{sql(alvo)}', {ing['quantidade']})"
