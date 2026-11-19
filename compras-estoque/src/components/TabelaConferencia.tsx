@@ -20,7 +20,13 @@ import { useMemo, useState } from "react";
  * "Comprado" quer ver o maior, e começar pelo menor custa um clique em toda
  * pergunta que alguém faz.
  */
-export type ColunaTabela = { chave: string; rotulo: string; num?: boolean };
+export type ColunaTabela = {
+  chave: string;
+  rotulo: string;
+  num?: boolean;
+  /** Largura mínima em px — para o nome do produto não ficar espremido. */
+  largura?: number;
+};
 
 export type CelulaTabela = {
   /** O que ordena. */
@@ -31,6 +37,14 @@ export type CelulaTabela = {
   classe?: string;
   /** Segunda linha, menor — a data da contagem, por exemplo. */
   nota?: string;
+  /**
+   * Linhas menores embaixo do número, uma por item.
+   *
+   * É o que permite a célula contar a HISTÓRIA da semana em vez de só o
+   * resultado: contado, comprado e vendido empilhados. Sem isso, uma falta de
+   * 18 kg parece igual numa semana que recebeu 40 e numa que não recebeu nada.
+   */
+  notas?: string[];
   /** Etiqueta ao lado do texto, como "sem ficha". */
   tag?: string;
   /** Texto do title, para o que não cabe na célula. */
@@ -75,6 +89,7 @@ export default function TabelaConferencia({
             return (
               <th
                 key={c.chave}
+                style={c.largura ? { minWidth: c.largura } : undefined}
                 className={`${c.num ? "num " : ""}ordenavel${ativa ? " ativa" : ""}`}
                 onClick={() =>
                   setOrdem((atual) =>
@@ -100,6 +115,11 @@ export default function TabelaConferencia({
                 <span className={c.classe}>{c.texto}</span>
                 {c.tag ? <span className="tag"> {c.tag}</span> : null}
                 {c.nota ? <span className="cat bloco">{c.nota}</span> : null}
+                {c.notas?.map((n, k) => (
+                  <span className="cat bloco" key={k}>
+                    {n}
+                  </span>
+                ))}
               </td>
             ))}
           </tr>

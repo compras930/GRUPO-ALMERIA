@@ -336,8 +336,11 @@ export default async function ConciliacaoPage({
             <TabelaConferencia
               ordemInicial={semanas.length + 2}
               colunas={[
-                { chave: "produto", rotulo: "Produto" },
-                ...semanas.map((sem) => ({ chave: sem, rotulo: rotuloDaSemana(sem), num: true })),
+                // O nome do insumo é a chave de leitura da linha inteira:
+                // "QUEIJO MUSSARELA BÚFALA CEREJA 1KG" quebrado em quatro
+                // linhas obriga a decifrar antes de comparar.
+                { chave: "produto", rotulo: "Produto", largura: 260 },
+                ...semanas.map((sem) => ({ chave: sem, rotulo: rotuloDaSemana(sem), num: true, largura: 110 })),
                 { chave: "comprado", rotulo: "Comprado no mês", num: true },
                 { chave: "total", rotulo: "Diferença do mês", num: true },
                 { chave: "repete", rotulo: "Semanas com falta", num: true },
@@ -363,12 +366,19 @@ export default async function ConciliacaoPage({
                             valor: c.diferenca,
                             texto: `${qtd(c.diferenca)} ${un}`,
                             classe: c.diferencaEmReais < 0 ? "bad" : undefined,
-                            nota: c.comprado > 0 ? `compra ${qtd(c.comprado)}` : undefined,
+                            // A SEMANA INTEIRA NA CÉLULA: o que foi contado, o
+                            // que entrou e o que a ficha baixou. É a diferença
+                            // entre ver um número e entender de onde ele veio —
+                            // falta de 18 kg numa semana que recebeu 40 é outra
+                            // conversa que a mesma falta numa semana sem compra.
+                            notas: [
+                              `contado ${qtd(c.saldoContado)}`,
+                              `compra ${qtd(c.comprado)}`,
+                              `venda ${qtd(c.vendido)}`,
+                            ],
                             titulo: `${data(c.de)} a ${data(c.ate)} · ${fmtCurrency(
                               c.diferencaEmReais
-                            )} · contado ${qtd(c.saldoInicial)} → ${qtd(c.saldoContado)} · comprou ${qtd(
-                              c.comprado
-                            )} · ficha ${qtd(c.vendido)}`,
+                            )} · contado ${qtd(c.saldoInicial)} → ${qtd(c.saldoContado)}`,
                           }
                     ),
                     {
@@ -395,7 +405,9 @@ export default async function ConciliacaoPage({
             />
             <p className="hint" style={{ marginTop: 14 }}>
               Cada célula é a diferença daquela semana <strong>na unidade do produto</strong>, no
-              período entre duas contagens dele; embaixo, o que entrou de compra naquela semana.{" "}
+              período entre duas contagens dele; embaixo, a semana inteira — quanto foi{" "}
+              <strong>contado</strong> no fim dela, quanto entrou de <strong>compra</strong> e quanto
+              a ficha técnica baixou de <strong>venda</strong>.{" "}
               <strong>Traço quer dizer que não houve contagem nas duas pontas</strong> — não que a
               semana fechou sem diferença. Passe o mouse na célula para ver o valor em reais e as
               quantidades do período.
