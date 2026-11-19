@@ -74,11 +74,22 @@ for aba in wb.sheetnames:
         elif c[1] and c[1] not in ("Ingredientes", "TOTAL:") and not c[1].startswith("1 kg"):
             if c[2]:
                 ingredientes.append({"nome": c[1], "quantidade": float(c[2].replace(",", "."))})
+    # A IDENTIDADE É O NOME DA ABA, não o campo "Item:".
+    #
+    # Em 17 fichas o "Item:" ficou com o nome de outra ficha: alguém duplicou
+    # a aba e não trocou o campo. "LULA RECHEADA" está escrita como
+    # "BABAGANOUSH", "MASSA FRESCA" como "ROSSINI". Usar o "Item:" criaria
+    # receita com nome errado e faria a sub-receita apontar para o prato
+    # errado — silenciosamente, e com custo plausível.
+    #
+    # O nome da aba é único por construção no Excel e foi digitado uma vez só.
     fichas.append(
         {
             "aba": aba,
             "item": item or aba,
-            "chave": norm(item or aba),
+            "nome": aba.strip(),
+            "chave": norm(aba),
+            "itemDivergente": bool(item) and norm(item) != norm(aba),
             "rendimento": float(rendimento.replace(",", ".")) if rendimento else None,
             "unidade": unidade or "Kg",
             "ingredientes": ingredientes,
@@ -92,7 +103,13 @@ for aba in wb.sheetnames:
 # nome da aba e o campo "Item:", cada um com e sem o prefixo de tipo.
 porChave: dict[str, dict] = {}
 for f in fichas:
-    for k in {norm(f["aba"]), norm(f["item"]), sem_prefixo(f["aba"]), sem_prefixo(f["item"])}:
+    # A aba manda; o "Item:" entra como apelido, porque outras fichas citam a
+    # sub-receita por ele. `setdefault` garante que, havendo conflito, quem
+    # vence é a ficha cuja ABA tem aquele nome.
+    for k in {norm(f["aba"]), sem_prefixo(f["aba"])}:
+        porChave.setdefault(k, f)
+for f in fichas:
+    for k in {norm(f["item"]), sem_prefixo(f["item"])}:
         porChave.setdefault(k, f)
 
 for f in fichas:
