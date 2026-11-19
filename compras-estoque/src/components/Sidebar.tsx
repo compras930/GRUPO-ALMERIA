@@ -66,6 +66,9 @@ const NAV: GrupoNav[] = [
       { href: "/estoque", label: "Saldos" },
       { href: "/estoque/compras", label: "Compras por período" },
       { href: "/cmv", label: "Fichas técnicas", papeis: ["ADMIN"] },
+      // Item que se vende como se compra — sem isto, a venda dele não baixa
+      // estoque e a conferência acusa sumiço onde houve venda.
+      { href: "/cmv/revenda", label: "Revenda direta", papeis: ["ADMIN"] },
       { href: "/receitas", label: "Sub-receitas", papeis: ["ADMIN"] },
       // Derivado do helper, não repetido à mão: a regra de quem vê pedido mora
       // em um lugar só, e o menu segue ela.

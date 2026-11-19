@@ -1741,3 +1741,9 @@ span.bad {
 td:first-child {
   vertical-align: middle;
 }
+
+/* O motivo da sugestão, embaixo do seletor de produto. Em laranja quando o
+   casamento é só parecido: é um aviso de "confira", não um rótulo neutro. */
+.cat.bloco.aviso {
+  color: var(--warn);
+}
