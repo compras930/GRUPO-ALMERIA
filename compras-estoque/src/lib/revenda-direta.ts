@@ -24,22 +24,11 @@
 //
 // Núcleo puro: sem Prisma, sem I/O.
 
-import { chaveComparacao } from "@/lib/nome-normalizado";
-
-/**
- * Chave de comparação SEM ACENTO, só para esta tela.
- *
- * `chaveComparacao` baixa a caixa e não mexe no acento — e está certo assim no
- * resto do app, onde ela decide casamento que vira gravação. Aqui os dois
- * lados vêm de cadastros digitados por gente diferente: o cardápio escreve
- * "Água Prata Retornável", a nota do Teknisa escreve "AGUA PRATA RETORNAVEL".
- * Como o resultado é sugestão, e não gravação, tirar o acento compra muitos
- * casamentos certos e custa, no pior caso, um clique.
- */
-const chaveSemAcento = (nome: string) =>
-  chaveComparacao(nome)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
+// A COMPARAÇÃO POR NOME MORA EM casamento-por-nome.ts, e de propósito: esta
+// tela e a do vínculo de ficha fazem a mesma pergunta — "qual destes é o
+// mesmo?". Duas réguas para a mesma pergunta significam que uma casa o que a
+// outra recusa, e ninguém sabe qual está valendo.
+import { sugerirPorNomePuro, casamentosSegurosPuros } from "@/lib/casamento-por-nome";
 
 export type ItemParaVincular = {
   itemVendaId: string;
@@ -74,65 +63,35 @@ export type Sugestao = {
  * uma razão específica: o resultado não é gravado em silêncio, ele vira uma
  * SUGESTÃO que uma pessoa confirma. O risco de casar errado por texto é
  * grande; o risco de sugerir errado é um clique.
+ *
+ * A quantidade sai sempre 1: só a pessoa sabe se a casa compra fardo e vende
+ * lata. Chutar aqui seria o único lugar desta tela onde o erro não dá na
+ * vista.
  */
 export function sugerirVinculosPuros(
   itens: ItemParaVincular[],
   produtos: ProdutoCandidato[]
 ): Sugestao[] {
-  const porChave = new Map<string, ProdutoCandidato[]>();
-  for (const p of produtos) {
-    const k = chaveSemAcento(p.nome);
-    if (!porChave.has(k)) porChave.set(k, []);
-    porChave.get(k)!.push(p);
-  }
-
-  return itens.map((item) => {
-    const chave = chaveSemAcento(item.nome);
-    const exatos = porChave.get(chave) ?? [];
-    if (exatos.length === 1) {
-      return {
-        itemVendaId: item.itemVendaId,
-        produtoId: exatos[0].produtoId,
-        confianca: "EXATA",
-        quantidade: 1,
-        motivo: "nome idêntico ao do produto",
-      };
-    }
-    // Mais de um produto com o mesmo nome: não dá para escolher sozinho — e
-    // escolher o primeiro seria decidir no escuro por quem vai conferir.
-    if (exatos.length > 1) {
-      return {
-        itemVendaId: item.itemVendaId,
-        produtoId: null,
-        confianca: "NENHUMA",
-        quantidade: 1,
-        motivo: `${exatos.length} produtos com esse mesmo nome`,
-      };
-    }
-
-    const parciais = produtos.filter((p) => {
-      const k = chaveSemAcento(p.nome);
-      return k.length > 6 && chave.length > 6 && (k.startsWith(chave) || chave.startsWith(k));
-    });
-    if (parciais.length === 1) {
-      return {
-        itemVendaId: item.itemVendaId,
-        produtoId: parciais[0].produtoId,
-        confianca: "PARCIAL",
-        quantidade: 1,
-        motivo: "nome parecido — confira antes",
-      };
-    }
-    return {
-      itemVendaId: item.itemVendaId,
-      produtoId: null,
-      confianca: "NENHUMA",
-      quantidade: 1,
-      motivo: parciais.length > 1 ? `${parciais.length} nomes parecidos` : "nenhum produto parecido",
-    };
-  });
+  const casamentos = sugerirPorNomePuro(
+    itens.map((i) => ({ id: i.itemVendaId, nome: i.nome })),
+    produtos.map((p) => ({ id: p.produtoId, nome: p.nome }))
+  );
+  return casamentos.map((c) => ({
+    itemVendaId: c.alvoId,
+    produtoId: c.candidatoId,
+    confianca: c.confianca,
+    quantidade: 1,
+    // A tela desta funcionalidade diz "produto"; o núcleo compartilhado não
+    // sabe de produto nenhum, então a palavra entra aqui.
+    motivo:
+      c.motivo === "nome idêntico"
+        ? "nome idêntico ao do produto"
+        : c.motivo.replace(/^(\d+) com esse mesmo nome$/, "$1 produtos com esse mesmo nome"),
+  }));
 }
 
 /** Os que podem ser aplicados de uma vez, sem ninguém olhar linha a linha. */
 export const sugestoesSegurasPuras = (s: Sugestao[]) =>
   s.filter((x) => x.confianca === "EXATA" && x.produtoId);
+
+export { casamentosSegurosPuros };

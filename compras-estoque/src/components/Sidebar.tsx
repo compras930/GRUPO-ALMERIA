@@ -69,6 +69,9 @@ const NAV: GrupoNav[] = [
       // Item que se vende como se compra — sem isto, a venda dele não baixa
       // estoque e a conferência acusa sumiço onde houve venda.
       { href: "/cmv/revenda", label: "Revenda direta", papeis: ["ADMIN"] },
+      // O elo entre a planilha do chef e o CMV teórico: ficha que existe mas
+      // não está ligada a nenhum prato não baixa estoque nem custa nada.
+      { href: "/cmv/vincular", label: "Ligar prato à ficha", papeis: ["ADMIN"] },
       { href: "/receitas", label: "Sub-receitas", papeis: ["ADMIN"] },
       // Derivado do helper, não repetido à mão: a regra de quem vê pedido mora
       // em um lugar só, e o menu segue ela.
