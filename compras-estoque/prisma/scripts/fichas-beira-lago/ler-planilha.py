@@ -46,6 +46,17 @@ def norm(s) -> str:
     return re.sub(r"[^A-Z0-9]+", " ", s).strip()
 
 
+def sem_prefixo(s: str) -> str:
+    """Tira "SB" e "MONTAGEM" do começo.
+
+    A planilha usa os dois como marcação de tipo, não como parte do nome: a
+    aba "SB- BECHAMEL" é citada como "BECHAMEL" dentro de outra ficha. Sem
+    tirar o prefixo, 20 preparos viravam "insumo que não existe no cadastro" —
+    e alguém iria procurar bechamel na lista de compras.
+    """
+    return norm(re.sub(r"^(SB|MONTAGEM)\b[\s\-]*", "", norm(s))).strip()
+
+
 wb = openpyxl.load_workbook(sys.argv[1], data_only=True)
 fichas = []
 for aba in wb.sheetnames:
@@ -77,10 +88,21 @@ for aba in wb.sheetnames:
 # SUB-RECEITA É INGREDIENTE QUE É OUTRA FICHA. Resolver isso aqui, e não no
 # banco, é o que permite o SQL do import ser burro: ele só grava o que já foi
 # decidido. A régua é o nome normalizado do campo "Item:" das outras abas.
-porChave = {f["chave"]: f for f in fichas}
+# O índice aceita as quatro grafias que a planilha usa para a mesma ficha: o
+# nome da aba e o campo "Item:", cada um com e sem o prefixo de tipo.
+porChave: dict[str, dict] = {}
+for f in fichas:
+    for k in {norm(f["aba"]), norm(f["item"]), sem_prefixo(f["aba"]), sem_prefixo(f["item"])}:
+        porChave.setdefault(k, f)
+
 for f in fichas:
     for ing in f["ingredientes"]:
         ing["chave"] = norm(ing["nome"])
-        ing["tipo"] = "SUBRECEITA" if ing["chave"] in porChave else "INSUMO"
+        alvo = porChave.get(ing["chave"]) or porChave.get(sem_prefixo(ing["nome"]))
+        ing["tipo"] = "SUBRECEITA" if alvo else "INSUMO"
+        if alvo:
+            # Guarda a ficha de destino resolvida: o SQL do import não
+            # adivinha nada, ele só grava o que foi decidido aqui.
+            ing["subreceita"] = alvo["chave"]
 
 json.dump({"fichas": fichas}, sys.stdout, ensure_ascii=False, indent=1)
