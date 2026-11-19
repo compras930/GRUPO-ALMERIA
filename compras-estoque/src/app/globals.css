@@ -1706,3 +1706,38 @@ th.ordenavel.ativa .seta {
 span.bad {
   color: var(--bad);
 }
+
+/* A célula-ficha da conferência mensal: rótulo à esquerda, número à direita.
+   Desenho do setor de compras — com cinco linhas por célula, número solto
+   obriga a lembrar de cabeça o que é cada uma. */
+.ficha-celula {
+  display: block;
+  text-align: right;
+}
+.ficha-linha {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.ficha-rotulo {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+/* O resultado fecha a conta, então ganha régua e peso — é a linha que se lê
+   primeiro quando se percorre a tabela de cima a baixo. */
+.ficha-linha.destaque {
+  border-top: 1px solid var(--line);
+  margin-top: 3px;
+  padding-top: 3px;
+  font-weight: 600;
+}
+/* Nome do produto centrado na vertical: a célula ao lado tem cinco linhas, e
+   o nome colado no topo parece pertencer só à primeira delas. */
+td:first-child {
+  vertical-align: middle;
+}

@@ -365,20 +365,26 @@ export default async function ConciliacaoPage({
                         : {
                             valor: c.diferenca,
                             texto: `${qtd(c.diferenca)} ${un}`,
-                            classe: c.diferencaEmReais < 0 ? "bad" : undefined,
-                            // A SEMANA INTEIRA NA CÉLULA: o que foi contado, o
-                            // que entrou e o que a ficha baixou. É a diferença
-                            // entre ver um número e entender de onde ele veio —
-                            // falta de 18 kg numa semana que recebeu 40 é outra
-                            // conversa que a mesma falta numa semana sem compra.
-                            notas: [
-                              `contado ${qtd(c.saldoContado)}`,
-                              `compra ${qtd(c.comprado)}`,
-                              `venda ${qtd(c.vendido)}`,
+                            // A CONTA INTEIRA NA CÉLULA, com rótulo em cada
+                            // linha: saldo inicial, contado, comprado, vendido
+                            // e o resultado. É a diferença entre ver um número
+                            // e poder conferi-lo — e com cinco linhas por
+                            // célula, número sem rótulo não se lê.
+                            detalhes: [
+                              { rotulo: "saldo inicial", valor: qtd(c.saldoInicial) },
+                              { rotulo: "contado", valor: qtd(c.saldoContado) },
+                              { rotulo: "comprado", valor: qtd(c.comprado) },
+                              { rotulo: "vendido", valor: qtd(c.vendido) },
+                              {
+                                rotulo: "resultado",
+                                valor: qtd(c.diferenca),
+                                classe: c.diferencaEmReais < 0 ? "bad" : undefined,
+                                destaque: true,
+                              },
                             ],
                             titulo: `${data(c.de)} a ${data(c.ate)} · ${fmtCurrency(
                               c.diferencaEmReais
-                            )} · contado ${qtd(c.saldoInicial)} → ${qtd(c.saldoContado)}`,
+                            )}${c.perdaDeclarada > 0 ? ` · perda declarada ${qtd(c.perdaDeclarada)}` : ""}`,
                           }
                     ),
                     {
@@ -405,9 +411,9 @@ export default async function ConciliacaoPage({
             />
             <p className="hint" style={{ marginTop: 14 }}>
               Cada célula é a diferença daquela semana <strong>na unidade do produto</strong>, no
-              período entre duas contagens dele; embaixo, a semana inteira — quanto foi{" "}
-              <strong>contado</strong> no fim dela, quanto entrou de <strong>compra</strong> e quanto
-              a ficha técnica baixou de <strong>venda</strong>.{" "}
+              período entre duas contagens dele, com a conta aberta: saldo inicial, o que foi{" "}
+              <strong>contado</strong> no fim da semana, o que entrou de <strong>compra</strong>, o
+              que a ficha técnica baixou de <strong>venda</strong> e o <strong>resultado</strong>.{" "}
               <strong>Traço quer dizer que não houve contagem nas duas pontas</strong> — não que a
               semana fechou sem diferença. Passe o mouse na célula para ver o valor em reais e as
               quantidades do período.

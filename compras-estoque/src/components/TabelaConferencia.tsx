@@ -45,6 +45,15 @@ export type CelulaTabela = {
    * 18 kg parece igual numa semana que recebeu 40 e numa que não recebeu nada.
    */
   notas?: string[];
+  /**
+   * A célula como uma pequena ficha: rótulo à esquerda, número à direita.
+   *
+   * Desenho proposto pelo setor de compras em 19/11/2026, e melhor que o que
+   * estava: número solto obriga quem lê a lembrar de cabeça o que é cada
+   * linha, e com cinco linhas por célula ninguém lembra. Com rótulo, a conta
+   * fica visível — saldo inicial, contado, comprado, vendido, resultado.
+   */
+  detalhes?: { rotulo: string; valor: string; classe?: string; destaque?: boolean }[];
   /** Etiqueta ao lado do texto, como "sem ficha". */
   tag?: string;
   /** Texto do title, para o que não cabe na célula. */
@@ -112,7 +121,18 @@ export default function TabelaConferencia({
           <tr key={l.chave}>
             {l.celulas.map((c, i) => (
               <td key={colunas[i]?.chave ?? i} className={colunas[i]?.num ? "num" : undefined} title={c.titulo}>
-                <span className={c.classe}>{c.texto}</span>
+                {c.detalhes ? (
+                  <span className="ficha-celula">
+                    {c.detalhes.map((d, k) => (
+                      <span key={k} className={`ficha-linha${d.destaque ? " destaque" : ""}`}>
+                        <span className="ficha-rotulo">{d.rotulo}</span>
+                        <span className={d.classe}>{d.valor}</span>
+                      </span>
+                    ))}
+                  </span>
+                ) : (
+                  <span className={c.classe}>{c.texto}</span>
+                )}
                 {c.tag ? <span className="tag"> {c.tag}</span> : null}
                 {c.nota ? <span className="cat bloco">{c.nota}</span> : null}
                 {c.notas?.map((n, k) => (
