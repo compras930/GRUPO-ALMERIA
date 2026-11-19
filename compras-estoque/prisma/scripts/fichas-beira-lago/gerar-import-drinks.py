@@ -72,6 +72,14 @@ UNIDADES = "('KG', 'G', 'LT', 'L', 'ML')"
 # mente sobre o trabalho já feito faz alguém refazer o que estava pronto.
 CONVERTIDOS = {"ST PIERRE AGUA TONICA"}  # 8-tonica.sql: 0,2 LT = 0,74 lata
 
+# Produção do bar: não se compra, é FICHA. O ingrediente do drink aponta para
+# a receita, e aí o preço do limão atravessa 22 drinks sozinho — que é o
+# motivo de custo nunca ser coluna gravada neste app.
+SUBRECEITAS = {
+    "SUMO LIMAO": "SUMO DE LIMAO",      # 15-producoes-bar.sql
+    "XAROPE SIMPLES": "XAROPE SIMPLES",
+}
+
 pares_path = destino / "pares-drinks.csv"
 apelido = {}
 if pares_path.exists():
@@ -133,14 +141,16 @@ linhas = []
 pendentes = []
 for d in drinks:
     for pos, ing in enumerate(d["ingredientes"]):
-        alvo = apelido.get(ing["chave"], ing["chave"])
         if ing["chave"] in CONVERTIDOS:
             continue
+        sub = SUBRECEITAS.get(ing["chave"], "")
+        alvo = "" if sub else apelido.get(ing["chave"], ing["chave"])
         linhas.append(
             f"    ('{ident('ingdk', CASA, d['chave'], str(pos))}', '{sql(d['chave'])}', "
-            f"'{sql(alvo)}', {ing['quantidade']})"
+            f"'{sql(alvo)}', '{sql(sub)}', {ing['quantidade']})"
         )
-        pendentes.append((d["nome"], ing["nome"], alvo, ing["quantidade"]))
+        if not sub:
+            pendentes.append((d["nome"], ing["nome"], alvo, ing["quantidade"]))
 
 (destino / "6b-ingredientes-drinks.sql").write_text(
     f"""-- Fichas de DRINK do Beira Lago — os ingredientes. {len(linhas)} linhas.
@@ -158,19 +168,23 @@ BEGIN;
 
 INSERT INTO "IngredienteReceita" ("id", "receitaId", "produtoId", "subReceitaId", "quantidade", "unidadeMedida")
 SELECT DISTINCT ON (v.id)
-       v.id, r.id, pr.id, NULL, v.quantidade, pr."unidadeMedida"
+       v.id, r.id, pr.id, sub.id, v.quantidade, coalesce(pr."unidadeMedida", 'LT')
   FROM (VALUES
 {",".join(chr(10) + l for l in linhas)}
-  ) AS v(id, chave_drink, chave_produto, quantidade)
+  ) AS v(id, chave_drink, chave_produto, chave_sub, quantidade)
   JOIN "Unidade" u ON u.nome = '{CASA}'
   JOIN "Receita" r ON r."unidadeId" = u.id AND {NORM.format(c='r.nome')} = v.chave_drink
-  JOIN "Produto" pr ON pr.ativo
-                   AND {NORM.format(c='pr.nome')} = v.chave_produto
-                   AND upper(btrim(pr."unidadeMedida")) IN {UNIDADES}
- ORDER BY v.id, pr.id
+  LEFT JOIN "Produto" pr ON v.chave_produto <> '' AND pr.ativo
+                        AND {NORM.format(c='pr.nome')} = v.chave_produto
+                        AND upper(btrim(pr."unidadeMedida")) IN {UNIDADES}
+  LEFT JOIN "Receita" sub ON v.chave_sub <> '' AND sub."unidadeId" = u.id
+                         AND {NORM.format(c='sub.nome')} = v.chave_sub
+ WHERE pr.id IS NOT NULL OR sub.id IS NOT NULL
+ ORDER BY v.id, pr.id, sub.id
 ON CONFLICT ("id") DO UPDATE
    SET "receitaId"     = EXCLUDED."receitaId",
        "produtoId"     = EXCLUDED."produtoId",
+       "subReceitaId"  = EXCLUDED."subReceitaId",
        "quantidade"    = EXCLUDED."quantidade",
        "unidadeMedida" = EXCLUDED."unidadeMedida";
 
