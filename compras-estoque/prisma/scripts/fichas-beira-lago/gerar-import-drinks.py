@@ -75,6 +75,12 @@ CONVERTIDOS = {"ST PIERRE AGUA TONICA"}  # 8-tonica.sql: 0,2 LT = 0,74 lata
 # Produção do bar: não se compra, é FICHA. O ingrediente do drink aponta para
 # a receita, e aí o preço do limão atravessa 22 drinks sozinho — que é o
 # motivo de custo nunca ser coluna gravada neste app.
+# FORA DO CUSTO POR DECISÃO DA CASA. O gelo não entra no custo do drink.
+# Não basta deixar de gravar: ele precisa sair também do ESPERADO, senão
+# todo drink com gelo fica eternamente "incompleto" e a conferência nunca
+# fecha — medindo uma falta que ninguém quer preencher.
+EXCLUIDOS = {"GELO APTK", "GELO YETI"}
+
 SUBRECEITAS = {
     "SUMO LIMAO": "SUMO DE LIMAO",      # 15-producoes-bar.sql
     "XAROPE SIMPLES": "XAROPE SIMPLES",
@@ -141,7 +147,7 @@ linhas = []
 pendentes = []
 for d in drinks:
     for pos, ing in enumerate(d["ingredientes"]):
-        if ing["chave"] in CONVERTIDOS:
+        if ing["chave"] in CONVERTIDOS or ing["chave"] in EXCLUIDOS:
             continue
         sub = SUBRECEITAS.get(ing["chave"], "")
         alvo = "" if sub else apelido.get(ing["chave"], ing["chave"])
@@ -196,7 +202,8 @@ COMMIT;
 # ------------------------------------------------------------- a conferência
 esperado = {}
 for d in drinks:
-    esperado[d["chave"]] = (d["nome"], len(d["ingredientes"]))
+    conta = len([i for i in d["ingredientes"] if i["chave"] not in EXCLUIDOS])
+    esperado[d["chave"]] = (d["nome"], conta)
 
 (destino / "6z-conferencia-drinks.sql").write_text(
     f"""-- Drinks do Beira Lago — conferência. SÓ LEITURA, rodar por último.
