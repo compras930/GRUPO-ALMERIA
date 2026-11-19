@@ -46,6 +46,23 @@ def norm(s) -> str:
     return re.sub(r"[^A-Z0-9]+", " ", s).strip()
 
 
+# Palavras que não distinguem uma ficha de outra: ligam, não nomeiam.
+LIGACAO = {"DE", "DA", "DO", "DAS", "DOS", "E", "A", "O", "AO", "COM", "EM", "AL", "AO"}
+
+
+def conjunto(s: str) -> str:
+    """Assinatura por CONJUNTO DE PALAVRAS, sem ligação e sem ordem.
+
+    A planilha cita a mesma ficha com uma palavra a mais ou a menos: a aba
+    "SB - MASSA BOLINHO BACALHAU" é citada como "SB MASSA BOLINHO DE
+    BACALHAU". Comparação exata perde isso, e o preparo vira "insumo que não
+    existe" — foi o que aconteceu com oito sub-receitas na primeira leitura.
+    Ordenar as palavras também cobre "MOLHO DE TOMATE" contra "TOMATE MOLHO".
+    """
+    palavras = [p for p in sem_prefixo(s).split() if p not in LIGACAO]
+    return " ".join(sorted(palavras))
+
+
 def sem_prefixo(s: str) -> str:
     """Tira "SB" e "MONTAGEM" do começo.
 
@@ -106,16 +123,20 @@ for f in fichas:
     # A aba manda; o "Item:" entra como apelido, porque outras fichas citam a
     # sub-receita por ele. `setdefault` garante que, havendo conflito, quem
     # vence é a ficha cuja ABA tem aquele nome.
-    for k in {norm(f["aba"]), sem_prefixo(f["aba"])}:
+    for k in {norm(f["aba"]), sem_prefixo(f["aba"]), conjunto(f["aba"])}:
         porChave.setdefault(k, f)
 for f in fichas:
-    for k in {norm(f["item"]), sem_prefixo(f["item"])}:
+    for k in {norm(f["item"]), sem_prefixo(f["item"]), conjunto(f["item"])}:
         porChave.setdefault(k, f)
 
 for f in fichas:
     for ing in f["ingredientes"]:
         ing["chave"] = norm(ing["nome"])
-        alvo = porChave.get(ing["chave"]) or porChave.get(sem_prefixo(ing["nome"]))
+        alvo = (
+            porChave.get(ing["chave"])
+            or porChave.get(sem_prefixo(ing["nome"]))
+            or porChave.get(conjunto(ing["nome"]))
+        )
         ing["tipo"] = "SUBRECEITA" if alvo else "INSUMO"
         if alvo:
             # Guarda a ficha de destino resolvida: o SQL do import não
