@@ -146,7 +146,8 @@ blocos = [todas_linhas[i : i + POR_PARTE] for i in range(0, len(todas_linhas), P
 for n, bloco in enumerate(blocos, start=1):
     corpo = [
         f"-- Fichas do Beira Lago — ingredientes, parte {n} de {len(blocos)}.",
-        "-- Rodar DEPOIS de 3a-fichas.sql, na ordem dos arquivos.",
+        "-- Rodar depois de 3a-fichas.sql. Pode rodar na ordem que for, e",
+        "-- pode repetir qualquer parte: cada linha é gravada por id próprio.",
         "",
         "BEGIN;",
         "",
@@ -183,7 +184,20 @@ for n, bloco in enumerate(blocos, start=1):
         "                         AND " + NORM.format(c="sub.nome") + " = v.chave_sub",
         " WHERE (pr.id IS NOT NULL OR sub.id IS NOT NULL)",
         '   AND EXISTS (SELECT 1 FROM "Receita" r WHERE r.id = v.receita)',
-        " ORDER BY v.id, pr.id, sub.id;",
+        " ORDER BY v.id, pr.id, sub.id",
+        # CADA PARTE É IDEMPOTENTE SOZINHA.
+        #
+        # Antes só a parte 1 era: ela tinha o DELETE. Rodar a parte 4 duas
+        # vezes — o que acontece quando alguém perde a conta no meio de seis
+        # arquivos — estourava na chave primária e derrubava a carga.
+        # Protocolo que só funciona se executado na ordem exata, sem repetir
+        # nenhum passo, é protocolo que vai falhar.
+        'ON CONFLICT ("id") DO UPDATE',
+        '   SET "receitaId" = EXCLUDED."receitaId",',
+        '       "produtoId" = EXCLUDED."produtoId",',
+        '       "subReceitaId" = EXCLUDED."subReceitaId",',
+        '       "quantidade" = EXCLUDED."quantidade",',
+        '       "unidadeMedida" = EXCLUDED."unidadeMedida";',
         "",
         "COMMIT;",
     ]

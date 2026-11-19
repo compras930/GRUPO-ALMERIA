@@ -1,5 +1,6 @@
 -- Fichas do Beira Lago — ingredientes, parte 1 de 4.
--- Rodar DEPOIS de 3a-fichas.sql, na ordem dos arquivos.
+-- Rodar depois de 3a-fichas.sql. Pode rodar na ordem que for, e
+-- pode repetir qualquer parte: cada linha é gravada por id próprio.
 
 BEGIN;
 
@@ -525,6 +526,12 @@ SELECT DISTINCT ON (v.id)
                          AND upper(regexp_replace(translate(btrim(sub.nome), 'áàâãäéèêëíìîïóòôõöúùûüçÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ', 'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC'), '[^a-zA-Z0-9]+', ' ', 'g')) = v.chave_sub
  WHERE (pr.id IS NOT NULL OR sub.id IS NOT NULL)
    AND EXISTS (SELECT 1 FROM "Receita" r WHERE r.id = v.receita)
- ORDER BY v.id, pr.id, sub.id;
+ ORDER BY v.id, pr.id, sub.id
+ON CONFLICT ("id") DO UPDATE
+   SET "receitaId" = EXCLUDED."receitaId",
+       "produtoId" = EXCLUDED."produtoId",
+       "subReceitaId" = EXCLUDED."subReceitaId",
+       "quantidade" = EXCLUDED."quantidade",
+       "unidadeMedida" = EXCLUDED."unidadeMedida";
 
 COMMIT;
