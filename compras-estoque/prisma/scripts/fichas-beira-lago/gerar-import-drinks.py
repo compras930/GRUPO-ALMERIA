@@ -70,7 +70,10 @@ UNIDADES = "('KG', 'G', 'LT', 'L', 'ML')"
 # Resolvidos FORA do 6b, por SQL próprio, porque precisaram de conversão de
 # unidade. Sem esta lista, a conferência os acusa como pendentes — e lista que
 # mente sobre o trabalho já feito faz alguém refazer o que estava pronto.
-CONVERTIDOS = {"ST PIERRE AGUA TONICA"}  # 8-tonica.sql: 0,2 LT = 0,74 lata
+CONVERTIDOS = {
+    "ST PIERRE AGUA TONICA",  # 8-tonica.sql:    0,2 LT  = 0,74 lata de 270 ml
+    "AGUA COM GAS PRATA",     # 17-agua-prata.sql: 0,12 LT = 0,09 garrafa de 1,27 L
+}
 
 # Produção do bar: não se compra, é FICHA. O ingrediente do drink aponta para
 # a receita, e aí o preço do limão atravessa 22 drinks sozinho — que é o
